@@ -1,0 +1,8 @@
+- Install frontend deps: pnpm install
+- Run frontend/Tauri dev app: pnpm tauri dev
+- Frontend dev server only: pnpm dev
+- Frontend build: pnpm build
+- Rust check (current environment workaround if sccache blocks): cargo check --config 'build.rustc-wrapper=""'
+- Git status: git status --short
+- Search code: rg -n "pattern" src src-tauri
+- Note: this Windows environment currently lacks node_modules for pnpm build and cargo check also requires MSVC linker (link.exe).

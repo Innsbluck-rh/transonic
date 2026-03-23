@@ -1,0 +1,4 @@
+- If test files are changed, always run the relevant tests.
+- For general code changes, at minimum run the most relevant build/check commands that exist.
+- Current repo has no dedicated lint/test scripts configured yet.
+- Environment caveats observed on 2026-03-22: pnpm build fails until dependencies are installed; cargo check can bypass configured sccache with --config build.rustc-wrapper="", but compilation still needs MSVC linker (link.exe).
