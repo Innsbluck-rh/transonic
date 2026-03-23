@@ -1,0 +1,99 @@
+---
+title: "NowPlayingEntry"
+linkTitle: "NowPlayingEntry"
+description: >
+  NowPlayingEntry.
+---
+
+{{< tabpane persist=false >}}
+{{< tab header="**Example**:" disabled=true />}}
+{{< tab header="OpenSubsonic" lang="json">}}
+{
+  "id": "300115266",
+  "parent": "200147046",
+  "title": "Take the Home",
+  "isDir": false,
+  "isVideo": false,
+  "type": "music",
+  "albumId": "200147046",
+  "album": "How I Learned to Love Our Robot Overlords",
+  "artistId": "100002619",
+  "artist": "Raggedy Angry",
+  "coverArt": "300115266",
+  "duration": 227,
+  "bitRate": 222,
+  "bitDepth": 16,
+  "samplingRate": 44100,
+  "channelCount": 2,
+  "userRating": 3,
+  "track": 7,
+  "year": 2010,
+  "genre": "Industrial",
+  "size": 6341039,
+  "discNumber": 1,
+  "suffix": "mp3",
+  "contentType": "audio/mpeg",
+  "path": "Raggedy Angry/(2010) How I Learned to Love Our Robot Overlords/1-07 - Take the Home.mp3",
+  "username": "user",
+  "minutesAgo": 0,
+  "playerId": 0,
+  "state": "playing",
+  "positionMs": 120000,
+  "playbackRate": 1.0,
+}
+{{< /tab >}}
+{{< tab header="Subsonic" lang="json" >}}
+{
+  "id": "300115266",
+  "parent": "200147046",
+  "title": "Take the Home",
+  "isDir": false,
+  "isVideo": false,
+  "type": "music",
+  "albumId": "200147046",
+  "album": "How I Learned to Love Our Robot Overlords",
+  "artistId": "100002619",
+  "artist": "Raggedy Angry",
+  "coverArt": "300115266",
+  "duration": 227,
+  "bitRate": 222,
+  "bitDepth": 16,
+  "samplingRate": 44100,
+  "channelCount": 2,
+  "userRating": 3,
+  "track": 7,
+  "year": 2010,
+  "genre": "Industrial",
+  "size": 6341039,
+  "discNumber": 1,
+  "suffix": "mp3",
+  "contentType": "audio/mpeg",
+  "path": "Raggedy Angry/(2010) How I Learned to Love Our Robot Overlords/1-07 - Take the Home.mp3",
+  "username": "user",
+  "minutesAgo": 0,
+  "playerId": 0
+}
+{{< /tab >}}
+{{< /tabpane >}}
+
+{{< alert color="primary" title="OpenSubsonic" >}}
+`NowPlayingEntry` extends [`Child`](../child) (See [`Child`](../child) documentation for the corresponding fields)
+{{< /alert >}}
+
+| Field |  Type | Req. | OpenS. | Details |
+| --- | --- | --- | --- | --- |
+| `username` | `string` | **Yes** |     | The username |
+| `minutesAgo` | `integer` | **Yes** |     | Last update |
+| `playerId` | `integer` | **Yes** |     | Player Id |
+| `playerName` | `string` | No |     | Player name |
+| `state` | `string` | No | **Yes** | Playback state: `starting`, `playing`, `paused`, or `stopped` |
+| `positionMs` | `integer` | No | **Yes** | Current playback position in milliseconds (Calculated by the server from the last playbackReport call received) |
+| `playbackRate` | `number` | No | **Yes** | Playback speed multiplier |
+
+{{< alert color="warning" title="OpenSubsonic" >}}
+When the server supports extension `playbackReport`, these fields can be returned:
+
+- `state`
+- `positionMs`
+- `playbackRate`
+{{< /alert >}}
