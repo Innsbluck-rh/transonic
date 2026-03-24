@@ -1,0 +1,16 @@
+[package]
+name = "opensubsonic-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+async-trait = { workspace = true }
+md5 = { workspace = true }
+rand = { workspace = true }
+reqwest = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+mockito = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

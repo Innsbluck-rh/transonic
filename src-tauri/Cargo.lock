@@ -2642,6 +2642,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "opensubsonic-client"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "md5",
+ "mockito",
+ "rand 0.8.5",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4811,9 +4825,8 @@ version = "0.0.1"
 dependencies = [
  "async-trait",
  "keyring",
- "md5",
  "mockito",
- "rand 0.8.5",
+ "opensubsonic-client",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

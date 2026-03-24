@@ -7,6 +7,7 @@ use std::{
 use uuid::Uuid;
 
 use crate::{
+    connection::{ConnectedServer, ConnectionApi},
     models::{
         ActiveSession, AppBootstrap, AuthInput, ConnectServerProfileRequest,
         ConnectServerProfileResult, LastConnectionState, RestoreStatus,
@@ -16,8 +17,9 @@ use crate::{
         StoredServerInfo,
     },
     secrets::SecretStore,
-    subsonic_client::{ConnectFailure, ConnectedServer, SubsonicApi},
 };
+
+use opensubsonic_client::OpenSubsonicClient;
 
 pub struct SessionService<S, A> {
     metadata_path: PathBuf,
@@ -29,7 +31,7 @@ pub struct SessionService<S, A> {
 impl<S, A> SessionService<S, A>
 where
     S: SecretStore,
-    A: SubsonicApi,
+    A: ConnectionApi,
 {
     pub fn new(config_dir: PathBuf, secret_service_name: String, secret_store: S, api: A) -> Self {
         Self {
@@ -101,8 +103,7 @@ where
             });
         };
 
-        let auth =
-            AuthInput::with_secret(profile.auth_kind.clone(), profile.username.clone(), secret);
+        let auth = AuthInput::restored(profile.auth_kind.clone(), profile.username.clone(), secret);
         match self
             .api
             .connect(&profile.normalized_server_url, &auth)
@@ -209,91 +210,6 @@ where
         }
     }
 
-    pub async fn activate_server_profile(
-        &self,
-        active_session_state: &Mutex<Option<ActiveSession>>,
-        profile_id: &str,
-    ) -> Result<ConnectServerProfileResult, String> {
-        let mut profiles = self.load_profiles()?;
-        let Some(profile) = profiles.find_profile(profile_id).cloned() else {
-            return Err("The selected server profile no longer exists.".to_string());
-        };
-
-        let Some(secret) = self
-            .secret_store
-            .load_secret(&self.secret_service_name, profile_id)?
-        else {
-            update_profile_failure(
-                &mut profiles,
-                profile_id,
-                LastConnectionState::ReauthRequired,
-                true,
-            );
-            self.save_profiles(&profiles)?;
-            set_active_session(active_session_state, None);
-            return Ok(ConnectFailure::Auth {
-                message:
-                    "Stored credentials are missing. Re-enter the credentials for this profile."
-                        .to_string(),
-                code: None,
-                help_url: None,
-            }
-            .into_public_result(profiles.summaries(), None));
-        };
-
-        let auth =
-            AuthInput::with_secret(profile.auth_kind.clone(), profile.username.clone(), secret);
-        match self
-            .api
-            .connect(&profile.normalized_server_url, &auth)
-            .await
-        {
-            Ok(connection) => {
-                let active_session = store_connected_profile(
-                    &mut profiles,
-                    profile.profile_id.clone(),
-                    Some(profile.display_name),
-                    connection,
-                );
-                self.save_profiles(&profiles)?;
-                set_active_session(active_session_state, Some(active_session.clone()));
-
-                Ok(ConnectServerProfileResult::Connected {
-                    active_session,
-                    profiles: profiles.summaries(),
-                })
-            }
-            Err(failure) => {
-                update_profile_failure(
-                    &mut profiles,
-                    profile_id,
-                    failure.last_connection_state(),
-                    true,
-                );
-                self.save_profiles(&profiles)?;
-                set_active_session(active_session_state, None);
-                Ok(failure.into_public_result(profiles.summaries(), None))
-            }
-        }
-    }
-
-    pub fn disconnect_active_profile(
-        &self,
-        active_session_state: &Mutex<Option<ActiveSession>>,
-    ) -> Result<AppBootstrap, String> {
-        let mut profiles = self.load_profiles()?;
-        profiles.set_last_active(None);
-        self.save_profiles(&profiles)?;
-        set_active_session(active_session_state, None);
-
-        Ok(AppBootstrap {
-            profiles: profiles.summaries(),
-            active_session: None,
-            restore_status: RestoreStatus::None,
-            message: Some("Disconnected the active server profile.".to_string()),
-        })
-    }
-
     pub fn delete_server_profile(
         &self,
         active_session_state: &Mutex<Option<ActiveSession>>,
@@ -323,6 +239,28 @@ where
             restore_status: RestoreStatus::None,
             message: Some("Deleted the selected server profile.".to_string()),
         })
+    }
+
+    #[allow(dead_code)]
+    pub fn build_active_client(
+        &self,
+        active_session_state: &Mutex<Option<ActiveSession>>,
+    ) -> Result<OpenSubsonicClient, String> {
+        let Some(session) = current_active_session(active_session_state) else {
+            return Err("No active session is available.".to_string());
+        };
+
+        let Some(secret) = self
+            .secret_store
+            .load_secret(&self.secret_service_name, &session.profile_id)?
+        else {
+            return Err(
+                "Stored credentials are missing. Re-enter the credentials for the active profile."
+                    .to_string(),
+            );
+        };
+
+        self.api.build_client_from_active_session(&session, &secret)
     }
 
     fn load_profiles(&self) -> Result<ProfilesFile, String> {
@@ -433,12 +371,14 @@ mod tests {
     use super::SessionService;
     use crate::{
         models::{
-            AuthInput, AuthKind, CapabilityMatrix, ConnectServerProfileRequest,
+            ActiveSession, AuthInput, AuthKind, CapabilityMatrix, ConnectServerProfileRequest,
             ConnectServerProfileResult, LastConnectionState, RestoreStatus,
         },
         secrets::{InMemorySecretStore, SecretStore},
-        subsonic_client::{ConnectFailure, ConnectedServer, SubsonicApi},
+        connection::{ConnectFailure, ConnectedServer, ConnectionApi},
     };
+
+    use opensubsonic_client::OpenSubsonicClient;
 
     #[derive(Clone, Default)]
     struct MockSubsonicApi {
@@ -452,7 +392,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl SubsonicApi for MockSubsonicApi {
+    impl ConnectionApi for MockSubsonicApi {
         async fn connect(
             &self,
             _server_url: &str,
@@ -463,6 +403,28 @@ mod tests {
                 .unwrap()
                 .pop_front()
                 .expect("mock response missing")
+        }
+
+        fn build_client_from_active_session(
+            &self,
+            session: &ActiveSession,
+            secret: &str,
+        ) -> Result<OpenSubsonicClient, String> {
+            opensubsonic_client::OpenSubsonicClient::new(opensubsonic_client::ClientConfig::new(
+                opensubsonic_client::normalize_base_url(&session.normalized_server_url)
+                    .map_err(|error| format!("{error:?}"))?,
+                match session.auth_kind {
+                    AuthKind::Password => opensubsonic_client::Auth::Token {
+                        username: session.username.clone(),
+                        password: secret.to_string(),
+                    },
+                    AuthKind::ApiKey => opensubsonic_client::Auth::ApiKey {
+                        api_key: secret.to_string(),
+                    },
+                },
+                "transonic",
+            ))
+            .map_err(|error| format!("{error:?}"))
         }
     }
 
@@ -515,6 +477,56 @@ mod tests {
             } => {
                 assert_eq!(profiles.len(), 1);
                 assert_eq!(active_session.username, "demo");
+                assert!(secret_store
+                    .load_secret("transonic", &active_session.profile_id)
+                    .unwrap()
+                    .is_some());
+            }
+            other => panic!("expected connected result, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn connect_accepts_api_key_profiles_without_username_input() {
+        let temp_dir = tempdir().unwrap();
+        let secret_store = InMemorySecretStore::default();
+        let api = MockSubsonicApi::default();
+        api.push_response(Ok(ConnectedServer {
+            normalized_server_url: "https://demo.example/rest".to_string(),
+            username: "resolved-api-user".to_string(),
+            auth_kind: AuthKind::ApiKey,
+            api_version: "1.16.1".to_string(),
+            server_type: Some("Navidrome".to_string()),
+            server_version: Some("0.54.0".to_string()),
+            capability_matrix: CapabilityMatrix::empty(),
+        }));
+        let service = SessionService::new(
+            temp_dir.path().to_path_buf(),
+            "transonic".to_string(),
+            secret_store.clone(),
+            api,
+        );
+        let active_session_state = Mutex::new(None);
+
+        let result = service
+            .connect_server_profile(
+                &active_session_state,
+                ConnectServerProfileRequest {
+                    profile_id: None,
+                    display_name: Some("API Key Demo".to_string()),
+                    server_url: "https://demo.example".to_string(),
+                    auth: AuthInput::ApiKey {
+                        api_key: "secret-key".to_string(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        match result {
+            ConnectServerProfileResult::Connected { active_session, .. } => {
+                assert_eq!(active_session.username, "resolved-api-user");
+                assert_eq!(active_session.auth_kind, AuthKind::ApiKey);
                 assert!(secret_store
                     .load_secret("transonic", &active_session.profile_id)
                     .unwrap()
@@ -762,5 +774,44 @@ mod tests {
             .load_secret("transonic", &profile_id)
             .unwrap()
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn build_active_client_uses_the_active_session_secret() {
+        let temp_dir = tempdir().unwrap();
+        let secret_store = InMemorySecretStore::default();
+        let api = MockSubsonicApi::default();
+        api.push_response(Ok(connected_server()));
+        let service = SessionService::new(
+            temp_dir.path().to_path_buf(),
+            "transonic".to_string(),
+            secret_store,
+            api,
+        );
+        let active_session_state = Mutex::new(None);
+
+        let result = service
+            .connect_server_profile(
+                &active_session_state,
+                ConnectServerProfileRequest {
+                    profile_id: None,
+                    display_name: Some("Demo".to_string()),
+                    server_url: "https://demo.example".to_string(),
+                    auth: AuthInput::Password {
+                        username: "demo".to_string(),
+                        password: "sesame".to_string(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        match result {
+            ConnectServerProfileResult::Connected { .. } => {
+                let client = service.build_active_client(&active_session_state).unwrap();
+                assert_eq!(client.config().base_url.as_str(), "https://demo.example/rest");
+            }
+            other => panic!("expected connected result, got {other:?}"),
+        }
     }
 }

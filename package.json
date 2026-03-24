@@ -16,24 +16,27 @@
   },
   "license": "MIT",
   "dependencies": {
-    "solid-js": "^1.9.3",
+    "@solidjs/meta": "^0.29.4",
+    "@solidjs/router": "^0.16.1",
     "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2"
+    "@tauri-apps/plugin-opener": "^2",
+    "solid-js": "^1.9.3"
   },
   "devDependencies": {
+    "@chromatic-com/storybook": "^5.0.2",
+    "@storybook/addon-a11y": "^10.3.1",
+    "@storybook/addon-docs": "^10.3.1",
+    "@storybook/addon-vitest": "^10.3.1",
+    "@tauri-apps/cli": "^2",
+    "@types/node": "^25.5.0",
+    "@vitest/browser-playwright": "^4.1.0",
+    "@vitest/coverage-v8": "^4.1.0",
+    "playwright": "^1.58.2",
+    "storybook": "^10.3.1",
+    "storybook-solidjs-vite": "^10.0.11",
     "typescript": "~5.6.2",
     "vite": "^6.0.3",
     "vite-plugin-solid": "^2.11.0",
-    "@tauri-apps/cli": "^2",
-    "storybook": "^10.3.1",
-    "storybook-solidjs-vite": "^10.0.11",
-    "@chromatic-com/storybook": "^5.0.2",
-    "@storybook/addon-vitest": "^10.3.1",
-    "@storybook/addon-a11y": "^10.3.1",
-    "@storybook/addon-docs": "^10.3.1",
-    "vitest": "^4.1.0",
-    "playwright": "^1.58.2",
-    "@vitest/browser-playwright": "^4.1.0",
-    "@vitest/coverage-v8": "^4.1.0"
+    "vitest": "^4.1.0"
   }
 }

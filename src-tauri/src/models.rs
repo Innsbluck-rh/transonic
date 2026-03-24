@@ -15,7 +15,6 @@ pub enum AuthInput {
         password: String,
     },
     ApiKey {
-        username: String,
         #[serde(rename = "apiKey")]
         api_key: String,
     },
@@ -29,29 +28,20 @@ impl AuthInput {
         }
     }
 
-    pub fn username(&self) -> &str {
-        match self {
-            Self::Password { username, .. } | Self::ApiKey { username, .. } => username,
-        }
-    }
-
     pub fn secret(&self) -> &str {
         match self {
             Self::Password { password, .. } => password,
-            Self::ApiKey { api_key, .. } => api_key,
+            Self::ApiKey { api_key } => api_key,
         }
     }
 
-    pub fn with_secret(auth_kind: AuthKind, username: String, secret: String) -> Self {
+    pub fn restored(auth_kind: AuthKind, username: String, secret: String) -> Self {
         match auth_kind {
             AuthKind::Password => Self::Password {
                 username,
                 password: secret,
             },
-            AuthKind::ApiKey => Self::ApiKey {
-                username,
-                api_key: secret,
-            },
+            AuthKind::ApiKey => Self::ApiKey { api_key: secret },
         }
     }
 }
@@ -119,11 +109,6 @@ impl CapabilityMatrix {
         matrix.song_lyrics = has_extension(&raw_extensions, "songLyrics");
         matrix.raw_extensions = raw_extensions;
         matrix
-    }
-
-    pub fn merge_open_subsonic(mut self, open_subsonic: bool) -> Self {
-        self.open_subsonic = self.open_subsonic || open_subsonic;
-        self
     }
 }
 

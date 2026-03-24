@@ -1,9 +1,9 @@
 mod commands;
+mod connection;
 mod models;
 mod profiles;
 mod secrets;
 mod session;
-mod subsonic_client;
 
 use std::sync::Mutex;
 
@@ -25,8 +25,6 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap_app_state,
             commands::connect_server_profile,
-            commands::activate_server_profile,
-            commands::disconnect_active_profile,
             commands::delete_server_profile
         ])
         .run(tauri::generate_context!())
