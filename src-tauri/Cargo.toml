@@ -38,6 +38,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 async-trait = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4"] }
+base64 = "0.22"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }

@@ -370,12 +370,12 @@ mod tests {
 
     use super::SessionService;
     use crate::{
+        connection::{ConnectFailure, ConnectedServer, ConnectionApi},
         models::{
             ActiveSession, AuthInput, AuthKind, CapabilityMatrix, ConnectServerProfileRequest,
             ConnectServerProfileResult, LastConnectionState, RestoreStatus,
         },
         secrets::{InMemorySecretStore, SecretStore},
-        connection::{ConnectFailure, ConnectedServer, ConnectionApi},
     };
 
     use opensubsonic_client::OpenSubsonicClient;
@@ -809,7 +809,10 @@ mod tests {
         match result {
             ConnectServerProfileResult::Connected { .. } => {
                 let client = service.build_active_client(&active_session_state).unwrap();
-                assert_eq!(client.config().base_url.as_str(), "https://demo.example/rest");
+                assert_eq!(
+                    client.config().base_url.as_str(),
+                    "https://demo.example/rest"
+                );
             }
             other => panic!("expected connected result, got {other:?}"),
         }

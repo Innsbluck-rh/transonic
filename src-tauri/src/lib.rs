@@ -25,7 +25,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap_app_state,
             commands::connect_server_profile,
-            commands::delete_server_profile
+            commands::delete_server_profile,
+            commands::get_album_list,
+            commands::get_cover_art
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

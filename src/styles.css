@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+.archivo-black {
+  font-family: 'Archivo Black', sans-serif;
+  font-weight: 400;
+}
+
+.public-sans-500 {
+  font-family: 'Public Sans', sans-serif;
+  /* font-optical-sizing: auto; */
+  font-weight: 500;
+  font-style: normal;
+}
+
+@layer base {
+  html,
+  body {
+    font-family: 'Public Sans', sans-serif;
+    line-height: 1;
+    width: 100vw;
+    overflow-x: hidden;
+  }
+
+  div {
+    @apply box-border;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: 'Archivo Black', sans-serif;
+  }
+
+  p,
+  span,
+  input,
+  label {
+    @apply text-sm;
+  }
+
+  select {
+    @apply text-sm px-0 py-0 border border-zinc-600 rounded-sm;
+  }
+  input {
+    @apply text-sm px-0 py-0 border-b border-zinc-600;
+  }
+
+  button {
+    @apply text-sm font-bold px-1.5 py-0.5 border border-zinc-600 rounded-sm hover:bg-zinc-200;
+  }
+}

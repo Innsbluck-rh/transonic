@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 use opensubsonic_client::{
-    api::system::SystemApi, normalize_base_url, ApiError, Auth, ClientConfig,
-    OpenSubsonicClient, ServerFeatures, ServerProbe,
+    api::system::SystemApi, normalize_base_url, ApiError, Auth, ClientConfig, OpenSubsonicClient,
+    ServerFeatures, ServerProbe,
 };
 use reqwest::StatusCode;
 
@@ -186,7 +186,8 @@ impl ConnectionApi for ConnectionService {
             .await
             .map_err(map_api_error)?;
 
-        if matches!(auth, AuthInput::ApiKey { .. }) && !features.has_extension("apiKeyAuthentication")
+        if matches!(auth, AuthInput::ApiKey { .. })
+            && !features.has_extension("apiKeyAuthentication")
         {
             return Err(ConnectFailure::UnsupportedAuth {
                 message: "This server does not advertise OpenSubsonic API key authentication."
@@ -202,16 +203,19 @@ impl ConnectionApi for ConnectionService {
         .map_err(map_api_error)?;
 
         let ping = client.ping().await.map_err(map_api_error)?;
-        let capability_matrix = map_capabilities(&features, ping.meta.open_subsonic.unwrap_or(false));
+        let capability_matrix =
+            map_capabilities(&features, ping.meta.open_subsonic.unwrap_or(false));
         let resolved_username = match auth {
             AuthInput::Password { username, .. } => username.trim().to_string(),
-            AuthInput::ApiKey { .. } => client
-                .token_info()
-                .await
-                .map_err(map_api_error)?
-                .payload
-                .token_info
-                .username,
+            AuthInput::ApiKey { .. } => {
+                client
+                    .token_info()
+                    .await
+                    .map_err(map_api_error)?
+                    .payload
+                    .token_info
+                    .username
+            }
         };
 
         Ok(ConnectedServer {
@@ -314,13 +318,15 @@ fn map_api_error(error: ApiError) -> ConnectFailure {
             ..
         } => match code {
             40 | 44 => ConnectFailure::Auth {
-                message: message.unwrap_or_else(|| "The server rejected the credentials.".to_string()),
+                message: message
+                    .unwrap_or_else(|| "The server rejected the credentials.".to_string()),
                 code: Some(code),
                 help_url,
             },
             41 | 42 => ConnectFailure::UnsupportedAuth {
-                message: message
-                    .unwrap_or_else(|| "The selected authentication mechanism is not supported.".to_string()),
+                message: message.unwrap_or_else(|| {
+                    "The selected authentication mechanism is not supported.".to_string()
+                }),
             },
             43 => ConnectFailure::Server {
                 message: message.unwrap_or_else(|| {
@@ -336,7 +342,9 @@ fn map_api_error(error: ApiError) -> ConnectFailure {
             },
         },
         ApiError::UnsupportedExtension { extension } => ConnectFailure::Server {
-            message: format!("The server is missing the required OpenSubsonic extension: {extension}."),
+            message: format!(
+                "The server is missing the required OpenSubsonic extension: {extension}."
+            ),
             code: None,
             help_url: None,
         },
@@ -399,10 +407,10 @@ fn format_connection_error(error: &ApiError) -> String {
         ApiError::Transport(error) => error.to_string(),
         ApiError::HttpStatus { status, .. } => format!("HTTP {}", status.as_u16()),
         ApiError::Decode { message, .. } => message.clone(),
-        ApiError::Api {
-            code, message, ..
-        } => {
-            let detail = message.clone().unwrap_or_else(|| "Unknown API error".to_string());
+        ApiError::Api { code, message, .. } => {
+            let detail = message
+                .clone()
+                .unwrap_or_else(|| "Unknown API error".to_string());
             format!("API {code}: {detail}")
         }
         ApiError::UnsupportedExtension { extension } => {
