@@ -6,11 +6,12 @@ use serde_json::{json, Value};
 use crate::{
     api::{
         annotation::{AnnotationApi, ReportPlaybackRequest},
+        browsing::{BrowsingApi, GetIndexesRequest, GetMusicDirectoryRequest},
         system::SystemApi,
         transcoding::{GetTranscodeDecisionRequest, GetTranscodeStreamRequest, TranscodingApi},
     },
     auth::build_token,
-    normalize_base_url, Auth, ClientConfig, ClientInfo, MediaType, OpenSubsonicClient,
+    normalize_base_url, ApiError, Auth, ClientConfig, ClientInfo, MediaType, OpenSubsonicClient,
     PlaybackState, ServerProbe,
 };
 
@@ -49,7 +50,9 @@ fn api_key_query_contains_only_api_key_authentication() {
     .to_query_pairs();
 
     assert!(query.contains(&("apiKey".to_string(), "secret-key".to_string())));
-    assert!(!query.iter().any(|(key, _)| matches!(key.as_str(), "u" | "p" | "t" | "s")));
+    assert!(!query
+        .iter()
+        .any(|(key, _)| matches!(key.as_str(), "u" | "p" | "t" | "s")));
 }
 
 #[tokio::test]
@@ -213,7 +216,10 @@ fn get_transcode_stream_reuses_server_transcode_params() {
         .unwrap();
 
     let query: BTreeMap<_, _> = prepared.url.query_pairs().into_owned().collect();
-    assert_eq!(query.get("transcodeParams"), Some(&"0001-0005-004".to_string()));
+    assert_eq!(
+        query.get("transcodeParams"),
+        Some(&"0001-0005-004".to_string())
+    );
     assert_eq!(query.get("mediaId"), Some(&"song-1".to_string()));
 }
 
@@ -264,4 +270,106 @@ async fn report_playback_sends_expected_query() {
         })
         .await
         .unwrap();
+}
+
+#[tokio::test]
+async fn get_indexes_includes_music_folder_id_when_requested() {
+    let mut server = Server::new_async().await;
+    let body = r#"{
+      "subsonic-response": {
+        "status": "ok",
+        "version": "1.16.1",
+        "openSubsonic": true,
+        "indexes": {
+          "index": []
+        }
+      }
+    }"#;
+
+    server
+        .mock("GET", "/rest/getIndexes.view")
+        .match_query(Matcher::AllOf(vec![
+            Matcher::UrlEncoded("u".into(), "demo".into()),
+            Matcher::UrlEncoded("v".into(), "1.13.0".into()),
+            Matcher::UrlEncoded("c".into(), "transonic".into()),
+            Matcher::UrlEncoded("f".into(), "json".into()),
+            Matcher::UrlEncoded("musicFolderId".into(), "1".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create_async()
+        .await;
+
+    let client = build_client(
+        &server.url(),
+        Auth::Token {
+            username: "demo".to_string(),
+            password: "sesame".to_string(),
+        },
+    );
+
+    client
+        .get_indexes(GetIndexesRequest {
+            music_folder_id: Some("1".to_string()),
+            if_modified_since: None,
+        })
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn get_music_directory_surfaces_api_failures_without_payload_fields() {
+    let mut server = Server::new_async().await;
+    let body = r#"{
+      "subsonic-response": {
+        "status": "failed",
+        "version": "1.16.1",
+        "type": "navidrome",
+        "serverVersion": "0.60.3",
+        "openSubsonic": true,
+        "error": {
+          "code": 70,
+          "message": "Directory not found"
+        }
+      }
+    }"#;
+
+    server
+        .mock("GET", "/rest/getMusicDirectory.view")
+        .match_query(Matcher::AllOf(vec![
+            Matcher::UrlEncoded("u".into(), "demo".into()),
+            Matcher::UrlEncoded("v".into(), "1.13.0".into()),
+            Matcher::UrlEncoded("c".into(), "transonic".into()),
+            Matcher::UrlEncoded("f".into(), "json".into()),
+            Matcher::UrlEncoded("id".into(), "1".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create_async()
+        .await;
+
+    let client = build_client(
+        &server.url(),
+        Auth::Token {
+            username: "demo".to_string(),
+            password: "sesame".to_string(),
+        },
+    );
+
+    let error = client
+        .get_music_directory(GetMusicDirectoryRequest {
+            id: "1".to_string(),
+        })
+        .await
+        .unwrap_err();
+
+    match error {
+        ApiError::Api { code, message, .. } => {
+            assert_eq!(code, 70);
+            assert_eq!(message.as_deref(), Some("Directory not found"));
+        }
+        other => panic!("unexpected error: {other:?}"),
+    }
 }

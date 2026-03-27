@@ -1,13 +1,8 @@
-import { useNavigate } from '@solidjs/router';
-import { invoke } from '@tauri-apps/api/core';
 import { createSignal, For, onMount, Show } from 'solid-js';
 import Heading1 from '~/components/common/Heading1';
-import Header from '~/components/header/Header';
 import AlbumHorizontalList from '~/components/list/AlbumHorizontalList';
 import { fetchAlbumList } from '~/features/albums/service';
-import { loadBootstrapToStore } from '~/features/session/service';
 import { AlbumListContext, AlbumListItem } from '~/models/album';
-import { AppBootstrap } from '~/models/bootstrap';
 import { sessionStore } from '~/stores/session/SessionStore';
 
 type HomeAlbumSection = {
@@ -22,7 +17,6 @@ const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> 
 ];
 
 function Home() {
-  const navigate = useNavigate();
   const [albumSections, setAlbumSections] = createSignal<HomeAlbumSection[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = createSignal(false);
   const [albumError, setAlbumError] = createSignal<string | null>(null);
@@ -57,32 +51,7 @@ function Home() {
   }
 
   onMount(async () => {
-    try {
-      const bootstrap = await invoke<AppBootstrap>('bootstrap_app_state');
-      loadBootstrapToStore(bootstrap);
-
-      switch (bootstrap.restoreStatus) {
-        case 'restored':
-          break;
-        case 'none':
-          if (!bootstrap.activeSession) {
-            navigate('/init_login');
-            return;
-          }
-          break;
-        case 'offline':
-        case 'reauth_required':
-          navigate('/init_login');
-          return;
-      }
-
-      if (bootstrap.activeSession) {
-        await loadHomeAlbumSections();
-      }
-    } catch (invokeError) {
-      console.error(invokeError);
-      setAlbumError('Failed to load the active session.');
-    }
+    await loadHomeAlbumSections();
   });
 
   return (
@@ -94,23 +63,19 @@ function Home() {
         </div>
       }
     >
-      <div class='flex flex-col gap-1.5'>
-        <Header shouldShowProfiles={true} />
+      <div class='flex flex-col gap-4 p-3 w-full h-full bg-zinc-100 overflow-x-hidden overflow-y-auto'>
+        <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
-        <div class='flex flex-col gap-4 p-3'>
-          <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
-
-          <Show when={!isLoadingAlbums()} fallback={<p class='text-sm text-zinc-400'>Loading album lists...</p>}>
-            <For each={albumSections()}>
-              {(section) => (
-                <section class='flex flex-col gap-1.5'>
-                  <Heading1>{section.heading}</Heading1>
-                  <AlbumHorizontalList albums={section.albums} emptyMessage={`No albums returned for ${section.heading}.`} />
-                </section>
-              )}
-            </For>
-          </Show>
-        </div>
+        <Show when={!isLoadingAlbums()} fallback={<p class='text-sm text-zinc-400'>Loading album lists...</p>}>
+          <For each={albumSections()}>
+            {(section) => (
+              <div class='flex flex-col gap-1.5 w-full overflow-x-hidden'>
+                <Heading1>{section.heading}</Heading1>
+                <AlbumHorizontalList albums={section.albums} emptyMessage={`No albums returned for ${section.heading}.`} />
+              </div>
+            )}
+          </For>
+        </Show>
       </div>
     </Show>
   );

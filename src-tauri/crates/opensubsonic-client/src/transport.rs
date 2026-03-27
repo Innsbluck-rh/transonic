@@ -133,8 +133,21 @@ where
     let http_status = response.status();
     let body = response.text().await.map_err(ApiError::Transport)?;
 
-    match serde_json::from_str::<RawEnvelope<P>>(&body) {
-        Ok(envelope) => envelope.into_envelope(),
+    match serde_json::from_str::<RawEnvelope<Value>>(&body) {
+        Ok(envelope) => {
+            let envelope = envelope.into_envelope()?;
+            let payload = serde_json::from_value::<P>(envelope.payload).map_err(|error| {
+                ApiError::Decode {
+                    message: error.to_string(),
+                    body_preview: Some(preview_body(&body)),
+                }
+            })?;
+
+            Ok(Envelope {
+                meta: envelope.meta,
+                payload,
+            })
+        }
         Err(_error) if !http_status.is_success() => Err(ApiError::HttpStatus {
             status: http_status,
             body_preview: Some(preview_body(&body)),
@@ -172,9 +185,9 @@ where
     pairs.push(("v".to_string(), api_version.as_str().to_string()));
     pairs.push(("c".to_string(), client_name.to_string()));
     pairs.push(("f".to_string(), "json".to_string()));
-    pairs.extend(value_to_query_pairs(serde_json::to_value(query).map_err(|error| {
-        ApiError::Protocol(format!("Failed to serialize query parameters: {error}"))
-    })?));
+    pairs.extend(value_to_query_pairs(serde_json::to_value(query).map_err(
+        |error| ApiError::Protocol(format!("Failed to serialize query parameters: {error}")),
+    )?));
     Ok(pairs)
 }
 

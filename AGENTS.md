@@ -3,6 +3,7 @@
 - This is a music player app project compatible with the subsonic API.
 - Written in Tauri v2 and Solid, most of the communication and processing will be implemented on the backend side with Rust or a native Shim using Kotlin/Swing plugins. This means the frontend's responsibilities are expected to be limited to displaying that backend data.
 - Please be sure to refer to the latest (open)subsonic API documentation regarding API compatibility.
+- When you creating ADR file, you MUST refer `adr/README.md` to understand what is preferred and what isn't.
 
 # instructions
 

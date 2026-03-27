@@ -3,11 +3,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::{
-    client::OpenSubsonicClient,
-    envelope::Envelope,
-    error::ApiError,
-    probe::GetOpenSubsonicExtensionsResponse,
-    types::common::EmptyPayload,
+    client::OpenSubsonicClient, envelope::Envelope, error::ApiError,
+    probe::GetOpenSubsonicExtensionsResponse, types::common::EmptyPayload,
 };
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]

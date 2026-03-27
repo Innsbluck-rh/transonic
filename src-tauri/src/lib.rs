@@ -26,6 +26,9 @@ pub fn run() {
             commands::bootstrap_app_state,
             commands::connect_server_profile,
             commands::delete_server_profile,
+            commands::get_music_folders,
+            commands::get_artist_indexes,
+            commands::get_music_directory,
             commands::get_album_list,
             commands::get_cover_art
         ])

@@ -80,10 +80,7 @@ pub trait AnnotationApi {
         &self,
         req: SetRatingRequest,
     ) -> Result<Envelope<SetRatingResponse>, ApiError>;
-    async fn scrobble(
-        &self,
-        req: ScrobbleRequest,
-    ) -> Result<Envelope<ScrobbleResponse>, ApiError>;
+    async fn scrobble(&self, req: ScrobbleRequest) -> Result<Envelope<ScrobbleResponse>, ApiError>;
     async fn report_playback(
         &self,
         req: ReportPlaybackRequest,
@@ -107,10 +104,7 @@ impl AnnotationApi for OpenSubsonicClient {
         self.json_get("setRating", &req).await
     }
 
-    async fn scrobble(
-        &self,
-        req: ScrobbleRequest,
-    ) -> Result<Envelope<ScrobbleResponse>, ApiError> {
+    async fn scrobble(&self, req: ScrobbleRequest) -> Result<Envelope<ScrobbleResponse>, ApiError> {
         self.json_get("scrobble", &req).await
     }
 

@@ -11,7 +11,9 @@ export default defineConfig(async () => ({
   plugins: [
     solid(),
     tailwindcss(),
-    webfontDownload(['https://fonts.googleapis.com/css2?family=Archivo+Black&family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap']),
+    webfontDownload([
+      'https://fonts.googleapis.com/css2?family=Archivo+Black&family=DotGothic16&family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap',
+    ]),
   ],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`

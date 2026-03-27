@@ -143,6 +143,63 @@ pub struct AlbumListResponse {
     pub albums: Vec<AlbumListItem>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicFolderSummary {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicFoldersResponse {
+    pub music_folders: Vec<MusicFolderSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistIndexItem {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistIndexesResponse {
+    pub artists: Vec<ArtistIndexItem>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistIndexesRequest {
+    pub music_folder_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicDirectoryRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicDirectoryChild {
+    pub id: String,
+    pub name: String,
+    pub artist: Option<String>,
+    pub cover_art_id: Option<String>,
+    pub year: Option<u32>,
+    pub is_directory: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct MusicDirectoryResponse {
+    pub id: String,
+    pub name: String,
+    pub children: Vec<MusicDirectoryChild>,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CoverArtRequest {

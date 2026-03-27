@@ -98,7 +98,7 @@ const AuthForm: Component<AuthFormProps> = (props) => {
       </label>
 
       <div class='flex flex-row gap-1'>
-        <button type='submit' disabled={props.busy}>
+        <button class='disabled:text-zinc-400' type='submit' disabled={props.busy}>
           {props.busy ? 'Connecting...' : 'Connect'}
         </button>
         <button type='button' disabled={props.busy} onClick={() => setFormData(DEFAULT_FORM_DATA)}>

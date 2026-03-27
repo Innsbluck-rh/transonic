@@ -53,9 +53,7 @@ impl ClientConfig {
 pub fn normalize_base_url(server_url: &str) -> Result<Url, ApiError> {
     let trimmed = server_url.trim();
     if trimmed.is_empty() {
-        return Err(ApiError::InvalidUrl(
-            "Server URL is required.".to_string(),
-        ));
+        return Err(ApiError::InvalidUrl("Server URL is required.".to_string()));
     }
 
     let mut url = Url::parse(trimmed).map_err(|_| {

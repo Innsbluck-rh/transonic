@@ -231,10 +231,8 @@ pub trait BrowsingApi {
         &self,
         req: GetArtistRequest,
     ) -> Result<Envelope<GetArtistResponse>, ApiError>;
-    async fn get_album(
-        &self,
-        req: GetAlbumRequest,
-    ) -> Result<Envelope<GetAlbumResponse>, ApiError>;
+    async fn get_album(&self, req: GetAlbumRequest)
+        -> Result<Envelope<GetAlbumResponse>, ApiError>;
     async fn get_song(&self, req: GetSongRequest) -> Result<Envelope<GetSongResponse>, ApiError>;
     async fn get_artist_info(
         &self,
