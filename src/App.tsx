@@ -6,7 +6,7 @@ import Index from './routes';
 import BrowseAlbumArtists from './routes/browse/album_artists';
 import BrowseArtistAlbums from './routes/browse/artist_albums';
 import BrowseArtists from './routes/browse/artists';
-import BrowseFolderDirectory from './routes/browse/folder_directory';
+import BrowseFolderStructure from './routes/browse/folder_structure';
 import BrowseFolders from './routes/browse/folders';
 import Home from './routes/home';
 import HomeLayout from './routes/homeLayout';
@@ -28,7 +28,8 @@ export default function App() {
       <Route component={HomeLayout}>
         <Route path='/home' component={Home} />
         <Route path='/browse/folders' component={BrowseFolders} />
-        <Route path='/browse/folders/:id' component={BrowseFolderDirectory} />
+        <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
+        <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
         <Route path='/browse/artists' component={BrowseArtists} />
         <Route path='/browse/artists/:id' component={BrowseArtistAlbums} />
         <Route path='/browse/album-artists' component={BrowseAlbumArtists} />

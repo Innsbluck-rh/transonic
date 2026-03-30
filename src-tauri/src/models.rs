@@ -1,14 +1,14 @@
 use opensubsonic_client::{api::lists::GetAlbumList2Request, AlbumListType};
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum AuthKind {
     Password,
     ApiKey,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum AuthInput {
     Password {
@@ -47,7 +47,7 @@ impl AuthInput {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectServerProfileRequest {
     pub profile_id: Option<String>,
@@ -56,13 +56,13 @@ pub struct ConnectServerProfileRequest {
     pub auth: AuthInput,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ProfileIdRequest {
     pub profile_id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum AlbumListContext {
     Random,
@@ -92,7 +92,7 @@ impl AlbumListContext {
     }
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumListRequest {
     pub context: AlbumListContext,
@@ -126,7 +126,7 @@ impl AlbumListRequest {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumListItem {
     pub id: String,
@@ -136,63 +136,126 @@ pub struct AlbumListItem {
     pub year: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumListResponse {
     pub context: AlbumListContext,
     pub albums: Vec<AlbumListItem>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicFolderSummary {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicFoldersResponse {
     pub music_folders: Vec<MusicFolderSummary>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderStructureRootsRequest {
+    pub library_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum FolderStructureSource {
+    Directory,
+    Indexes,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderStructureRootNode {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderStructureRootsResponse {
+    pub library_id: String,
+    pub library_name: String,
+    pub source: FolderStructureSource,
+    pub root_nodes: Vec<FolderStructureRootNode>,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderStructureAlbumsRequest {
+    pub library_id: String,
+    pub node_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderStructureAlbumItem {
+    pub id: String,
+    pub name: String,
+    pub artist: Option<String>,
+    pub cover_art_id: Option<String>,
+    pub year: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderStructureAlbumsResponse {
+    pub library_id: String,
+    pub node_id: String,
+    pub node_name: String,
+    pub albums: Vec<FolderStructureAlbumItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistIndexItem {
     pub id: String,
     pub name: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistIndexesResponse {
     pub artists: Vec<ArtistIndexItem>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ArtistIndexesRequest {
     pub music_folder_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicDirectoryRequest {
     pub id: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicDirectoryChild {
     pub id: String,
-    pub name: String,
+    pub parent_id: Option<String>,
+    pub path: Option<String>,
+    pub title: String,
+    pub album: Option<String>,
+    pub album_id: Option<String>,
     pub artist: Option<String>,
+    pub artist_id: Option<String>,
     pub cover_art_id: Option<String>,
+    pub track: Option<u32>,
+    pub disc_number: Option<u32>,
     pub year: Option<u32>,
     pub is_directory: bool,
+    pub media_type: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct MusicDirectoryResponse {
     pub id: String,
@@ -200,27 +263,27 @@ pub struct MusicDirectoryResponse {
     pub children: Vec<MusicDirectoryChild>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CoverArtRequest {
     pub cover_art_id: String,
     pub size: Option<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CoverArtResponse {
     pub data_url: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct OpenSubsonicExtension {
     pub name: String,
     pub versions: Vec<u32>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CapabilityMatrix {
     pub open_subsonic: bool,
@@ -270,7 +333,7 @@ fn has_extension(extensions: &[OpenSubsonicExtension], expected_name: &str) -> b
         .any(|extension| extension.name == expected_name)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum LastConnectionState {
     Never,
@@ -279,7 +342,7 @@ pub enum LastConnectionState {
     ReauthRequired,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedProfileSummary {
     pub profile_id: String,
@@ -291,7 +354,7 @@ pub struct SavedProfileSummary {
     pub is_active: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ActiveSession {
     pub profile_id: String,
@@ -304,7 +367,7 @@ pub struct ActiveSession {
     pub capability_matrix: CapabilityMatrix,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RestoreStatus {
     None,
@@ -313,7 +376,7 @@ pub enum RestoreStatus {
     ReauthRequired,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AppBootstrap {
     pub profiles: Vec<SavedProfileSummary>,
@@ -322,7 +385,7 @@ pub struct AppBootstrap {
     pub message: Option<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(tag = "status", rename_all = "snake_case")]
 pub enum ConnectServerProfileResult {
     Connected {

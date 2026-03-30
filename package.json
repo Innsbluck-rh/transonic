@@ -12,7 +12,8 @@
     "serve": "vite preview",
     "tauri": "tauri",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "prettier": "prettier --write . --config .prettierrc"
   },
   "license": "MIT",
   "dependencies": {

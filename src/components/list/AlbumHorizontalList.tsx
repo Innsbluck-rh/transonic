@@ -1,5 +1,5 @@
 import { Component, For, Show } from 'solid-js';
-import { AlbumListItem } from '~/models/album';
+import type { AlbumListItem } from '~/bindings';
 import AlbumGridItem from './item/album/AlbumGridItem';
 
 interface AlbumHorizontalListProps {

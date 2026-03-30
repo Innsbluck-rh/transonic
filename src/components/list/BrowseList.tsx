@@ -11,6 +11,7 @@ interface BrowseListProps {
   isLoading: boolean;
   error: string | null;
   emptyMessage: string;
+  selectedId?: string | null;
   onClickItem?: (item: BrowseListItem) => void;
 }
 
@@ -25,7 +26,9 @@ const BrowseList: Component<BrowseListProps> = (props) => {
         <Match when={props.error}>{(message) => <p class='px-3 py-2 text-xs text-red-500'>{message()}</p>}</Match>
 
         <Match when={props.items.length > 0}>
-          <For each={props.items}>{(item) => <BrowseListRow label={item.name} onClick={() => props.onClickItem?.(item)} />}</For>
+          <For each={props.items}>
+            {(item) => <BrowseListRow label={item.name} selected={props.selectedId === item.id} onClick={() => props.onClickItem?.(item)} />}
+          </For>
         </Match>
 
         <Match when={true}>

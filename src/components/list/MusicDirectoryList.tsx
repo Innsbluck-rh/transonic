@@ -1,5 +1,5 @@
 import { Component, For, Show } from 'solid-js';
-import { MusicDirectoryChild } from '~/models/browse';
+import type { MusicDirectoryChild } from '~/bindings';
 
 interface MusicDirectoryListProps {
   items: MusicDirectoryChild[];
@@ -34,8 +34,8 @@ const MusicDirectoryList: Component<MusicDirectoryListProps> = (props) => {
                 }}
               >
                 <div class='flex items-center justify-between gap-3'>
-                  <p class='truncate text-sm text-zinc-800' title={item.name}>
-                    {item.name}
+                  <p class='truncate text-sm text-zinc-800' title={item.title}>
+                    {item.title}
                   </p>
                   <span class='shrink-0 text-[10px] uppercase tracking-[0.2em] text-zinc-400'>{item.isDirectory ? 'dir' : 'file'}</span>
                 </div>

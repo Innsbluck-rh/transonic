@@ -1,22 +1,35 @@
-import { invoke } from '@tauri-apps/api/core';
-import { ArtistIndexesRequest, ArtistIndexesResponse, MusicDirectoryRequest, MusicDirectoryResponse, MusicFoldersResponse } from '~/models/browse';
+import {
+  commands,
+  type ArtistIndexesRequest,
+  type ArtistIndexesResponse,
+  type MusicDirectoryRequest,
+  type MusicDirectoryResponse,
+  type MusicFoldersResponse,
+} from '~/bindings';
 
-export async function fetchMusicFolders() {
-  return invoke<MusicFoldersResponse>('get_music_folders');
-}
-
-export async function fetchArtistIndexes(payload?: ArtistIndexesRequest) {
-  if (!payload) {
-    return invoke<ArtistIndexesResponse>('get_artist_indexes');
+export async function fetchMusicFolders(): Promise<MusicFoldersResponse> {
+  const result = await commands.getMusicFolders();
+  if (result.status === 'error') {
+    throw new Error(result.error);
   }
 
-  return invoke<ArtistIndexesResponse>('get_artist_indexes', {
-    payload,
-  });
+  return result.data;
 }
 
-export async function fetchMusicDirectory(payload: MusicDirectoryRequest) {
-  return invoke<MusicDirectoryResponse>('get_music_directory', {
-    payload,
-  });
+export async function fetchArtistIndexes(payload: ArtistIndexesRequest | null = null): Promise<ArtistIndexesResponse> {
+  const result = await commands.getArtistIndexes(payload);
+  if (result.status === 'error') {
+    throw new Error(result.error);
+  }
+
+  return result.data;
+}
+
+export async function fetchMusicDirectory(payload: MusicDirectoryRequest): Promise<MusicDirectoryResponse> {
+  const result = await commands.getMusicDirectory(payload);
+  if (result.status === 'error') {
+    throw new Error(result.error);
+  }
+
+  return result.data;
 }

@@ -1,10 +1,9 @@
 import { useParams } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
+import type { AlbumListItem, MusicDirectoryResponse } from '~/bindings';
 import Heading2 from '~/components/common/Heading2';
 import AlbumGrid from '~/components/list/AlbumGrid';
 import { fetchMusicDirectory } from '~/features/browse/service';
-import { AlbumListItem } from '~/models/album';
-import { MusicDirectoryResponse } from '~/models/browse';
 import { sessionStore } from '~/stores/session/SessionStore';
 
 function BrowseArtistAlbums() {
@@ -19,7 +18,7 @@ function BrowseArtistAlbums() {
       .filter((child) => child.isDirectory)
       .map((child) => ({
         id: child.id,
-        name: child.name,
+        name: child.title,
         artist: child.artist,
         coverArtId: child.coverArtId,
         year: child.year,

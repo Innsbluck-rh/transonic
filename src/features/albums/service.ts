@@ -1,12 +1,14 @@
-import { invoke } from '@tauri-apps/api/core';
-import { AlbumListRequest, AlbumListResponse, CoverArtRequest, CoverArtResponse } from '~/models/album';
+import { commands, type AlbumListRequest, type AlbumListResponse, type CoverArtRequest } from '~/bindings';
 
 const coverArtCache = new Map<string, Promise<string | null>>();
 
-export async function fetchAlbumList(payload: AlbumListRequest) {
-  return invoke<AlbumListResponse>('get_album_list', {
-    payload,
-  });
+export async function fetchAlbumList(payload: AlbumListRequest): Promise<AlbumListResponse> {
+  const result = await commands.getAlbumList(payload);
+  if (result.status === 'error') {
+    throw new Error(result.error);
+  }
+
+  return result.data;
 }
 
 function coverArtCacheKey(payload: CoverArtRequest) {
@@ -20,10 +22,15 @@ export function fetchCoverArtDataUrl(payload: CoverArtRequest) {
     return cached;
   }
 
-  const pending = invoke<CoverArtResponse>('get_cover_art', {
-    payload,
-  })
-    .then((response) => response.dataUrl)
+  const pending = commands
+    .getCoverArt(payload)
+    .then((response) => {
+      if (response.status === 'error') {
+        throw new Error(response.error);
+      }
+
+      return response.data.dataUrl;
+    })
     .catch((invokeError) => {
       console.error(invokeError);
       coverArtCache.delete(cacheKey);

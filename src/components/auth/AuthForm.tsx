@@ -1,6 +1,6 @@
 import { Component, Show } from 'solid-js';
 import { createStore } from 'solid-js/store';
-import { AuthKind } from '~/models/session';
+import type { AuthKind } from '~/bindings';
 
 export interface AuthFormData {
   displayName: string;

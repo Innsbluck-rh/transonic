@@ -1,12 +1,10 @@
 import { useNavigate } from '@solidjs/router';
-import { invoke } from '@tauri-apps/api/core';
 import { createSignal, onMount, ParentComponent, Show } from 'solid-js';
 import ErrorMsg from '~/components/common/ErrorMsg';
 import Header from '~/components/header/Header';
 import NavigationSideBar from '~/components/navigation/NavigationSideBar';
 import PlayerBar from '~/components/player/PlayerBar';
-import { loadBootstrapToStore } from '~/features/session/service';
-import { AppBootstrap } from '~/models/bootstrap';
+import { fetchBootstrapAppState, loadBootstrapToStore } from '~/features/session/service';
 import { sessionStore } from '~/stores/session/SessionStore';
 
 const HomeLayout: ParentComponent = (props) => {
@@ -15,7 +13,7 @@ const HomeLayout: ParentComponent = (props) => {
   const [loaded, setLoaded] = createSignal(false);
   const loadBootStrap = async (): Promise<boolean> => {
     try {
-      const bootstrap = await invoke<AppBootstrap>('bootstrap_app_state');
+      const bootstrap = await fetchBootstrapAppState();
       loadBootstrapToStore(bootstrap);
 
       switch (bootstrap.restoreStatus) {

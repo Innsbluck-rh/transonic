@@ -1,87 +1,27 @@
 import { useNavigate } from '@solidjs/router';
-import { invoke } from '@tauri-apps/api/core';
 import { createSignal, Show } from 'solid-js';
+import { commands, type ConnectServerProfileRequest, type ConnectServerProfileResult } from '~/bindings';
 import AuthForm, { AuthFormData } from '~/components/auth/AuthForm';
 import ErrorMsg from '~/components/common/ErrorMsg';
 import Heading2 from '~/components/common/Heading2';
 import Header from '~/components/header/Header';
-import { ActiveSession, SavedProfileSummary } from '~/models/session';
+import { syncFolderStructureSession } from '~/features/browse/folderStructureService';
 import { setSessionStore } from '~/stores/session/SessionStore';
 
-type ConnectServerProfileRequest = {
-  profileId?: string;
-  displayName?: string;
-  serverUrl: string;
-  auth:
-    | {
-        kind: 'password';
-        username: string;
-        password: string;
-      }
-    | {
-        kind: 'api_key';
-        apiKey: string;
-      };
-};
-
-type ConnectedResult = {
-  status: 'connected';
-  activeSession: ActiveSession;
-  profiles: SavedProfileSummary[];
-};
-
-type ConnectionFailure =
-  | {
-      status: 'auth_error';
-      message: string;
-      code?: number | null;
-      helpUrl?: string | null;
-      activeSession?: ActiveSession | null;
-      profiles: SavedProfileSummary[];
-    }
-  | {
-      status: 'network_error';
-      message: string;
-      activeSession?: ActiveSession | null;
-      profiles: SavedProfileSummary[];
-    }
-  | {
-      status: 'server_error';
-      message: string;
-      code?: number | null;
-      helpUrl?: string | null;
-      activeSession?: ActiveSession | null;
-      profiles: SavedProfileSummary[];
-    }
-  | {
-      status: 'unsupported_auth';
-      message: string;
-      activeSession?: ActiveSession | null;
-      profiles: SavedProfileSummary[];
-    };
-
-function formatFailureMsg(failure: ConnectionFailure) {
-  let status = 'Unknown';
-  switch (failure.status) {
+function formatFailureMsg(result: ConnectServerProfileResult) {
+  switch (result.status) {
     case 'auth_error':
-      status = 'Auth Error';
-      break;
+      return `Auth Error: ${result.message}`;
     case 'network_error':
-      status = 'Network Error';
-      break;
+      return `Network Error: ${result.message}`;
     case 'server_error':
-      status = 'Server Error';
-      break;
+      return `Server Error: ${result.message}`;
     case 'unsupported_auth':
-      status = 'Unsupported Error';
-      break;
-    default:
-      break;
+      return `Unsupported Error: ${result.message}`;
+    case 'connected':
+      return 'Connected';
   }
-  return `${status}: ${failure.message}`;
 }
-
-export type ConnectServerProfileResult = ConnectedResult | ConnectionFailure;
 
 function InitLogin() {
   const navigate = useNavigate();
@@ -96,7 +36,9 @@ function InitLogin() {
 
     try {
       const payload: ConnectServerProfileRequest = {
-        serverUrl: serverUrl,
+        profileId: null,
+        displayName: null,
+        serverUrl,
         auth:
           authKind === 'password'
             ? {
@@ -115,9 +57,12 @@ function InitLogin() {
         payload.displayName = nextDisplayName;
       }
 
-      const result = await invoke<ConnectServerProfileResult>('connect_server_profile', {
-        payload,
-      });
+      const commandResult = await commands.connectServerProfile(payload);
+      if (commandResult.status === 'error') {
+        throw new Error(commandResult.error);
+      }
+
+      const result = commandResult.data;
 
       setSessionStore('profiles', result.profiles);
       switch (result.status) {
@@ -125,8 +70,10 @@ function InitLogin() {
         case 'server_error':
         case 'unsupported_auth':
         case 'auth_error':
-          throw new Error(formatFailureMsg(result as ConnectionFailure));
+          setSubmitError(formatFailureMsg(result));
+          return;
         case 'connected':
+          syncFolderStructureSession(result.activeSession.profileId);
           setSessionStore('activeSession', result.activeSession);
           navigate('/home');
           break;

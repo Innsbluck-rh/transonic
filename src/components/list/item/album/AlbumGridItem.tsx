@@ -1,5 +1,5 @@
 import { Component } from 'solid-js';
-import { AlbumListItem } from '~/models/album';
+import type { AlbumListItem } from '~/bindings';
 import AlbumCover from './AlbumCover';
 
 interface AlbumGridItemProps {

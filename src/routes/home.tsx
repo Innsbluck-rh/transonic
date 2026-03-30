@@ -1,8 +1,8 @@
 import { createSignal, For, onMount, Show } from 'solid-js';
+import type { AlbumListContext, AlbumListItem } from '~/bindings';
 import Heading1 from '~/components/common/Heading1';
 import AlbumHorizontalList from '~/components/list/AlbumHorizontalList';
 import { fetchAlbumList } from '~/features/albums/service';
-import { AlbumListContext, AlbumListItem } from '~/models/album';
 import { sessionStore } from '~/stores/session/SessionStore';
 
 type HomeAlbumSection = {
@@ -31,6 +31,11 @@ function Home() {
           const response = await fetchAlbumList({
             context: section.context,
             size: 8,
+            offset: null,
+            fromYear: null,
+            toYear: null,
+            genre: null,
+            musicFolderId: null,
           });
 
           return {

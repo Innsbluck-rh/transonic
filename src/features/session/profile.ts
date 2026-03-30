@@ -1,6 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import { getProfileById, loadBootstrapToStore } from "./service";
-import { AppBootstrap } from "~/models/bootstrap";
+import { commands } from '~/bindings';
+import { getProfileById, loadBootstrapToStore } from './service';
 
 export async function deleteProfile(profileId: string) {
   const profile = getProfileById(profileId);
@@ -12,12 +11,14 @@ export async function deleteProfile(profileId: string) {
     return;
   }
   try {
-    const bootstrap = await invoke<AppBootstrap>('delete_server_profile', {
-      payload: {
-        profileId,
-      },
+    const result = await commands.deleteServerProfile({
+      profileId,
     });
-    loadBootstrapToStore(bootstrap);
+    if (result.status === 'error') {
+      throw new Error(result.error);
+    }
+
+    loadBootstrapToStore(result.data);
   } catch (invokeError) {
     console.error(invokeError);
   }

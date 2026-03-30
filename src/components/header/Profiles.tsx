@@ -1,7 +1,7 @@
 import { DropdownMenu } from '@kobalte/core/dropdown-menu';
 import { Component, createMemo } from 'solid-js';
+import type { SavedProfileSummary } from '~/bindings';
 import { deleteProfile } from '~/features/session/profile';
-import { SavedProfileSummary } from '~/models/session';
 
 interface ProfilesProps {
   profiles: SavedProfileSummary[];
