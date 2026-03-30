@@ -24,9 +24,6 @@ impl Default for ActiveSessionState {
 pub fn run() {
     let specta_builder = bindings::builder();
 
-    #[cfg(debug_assertions)]
-    bindings::export_typescript_bindings().expect("failed to export TypeScript bindings");
-
     tauri::Builder::default()
         .manage(ActiveSessionState::default())
         .plugin(tauri_plugin_opener::init())

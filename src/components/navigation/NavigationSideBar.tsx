@@ -1,4 +1,3 @@
-import { Select } from '@kobalte/core/select';
 import { useLocation, useNavigate } from '@solidjs/router';
 import { Component, createEffect, createMemo, createSignal, Show } from 'solid-js';
 import type { ArtistIndexItem, FolderStructureRootNode, FolderStructureSource, MusicFolderSummary } from '~/bindings';
@@ -7,24 +6,25 @@ import { fetchArtistIndexes, fetchMusicFolders } from '~/features/browse/service
 import { folderStructureStore } from '~/stores/browse/FolderStructureStore';
 import { sessionStore } from '~/stores/session/SessionStore';
 import BrowseList from '../list/BrowseList';
+import NavigationTypeSelect from './select/NavigationTypeSelect';
 
-type BrowseMode = 'Folder Structure' | 'Artist' | 'Album Artist';
+export type BrowseMode = 'Folder Structures' | 'Artists' | 'Album Artists';
 
-const BROWSE_MODES: BrowseMode[] = ['Folder Structure', 'Artist', 'Album Artist'];
+export const BROWSE_MODE_URLS: Record<BrowseMode, string> = {
+  'Folder Structures': '/browse/folders',
+  Artists: '/browse/artists',
+  'Album Artists': '/browse/album-artists',
+};
+
+export function resolveBrowseMode(pathname: string): BrowseMode {
+  const foundIndex = Object.values(BROWSE_MODE_URLS).findIndex((url) => pathname.startsWith(url));
+  if (foundIndex < 0) return 'Folder Structures';
+
+  const found = Object.keys(BROWSE_MODE_URLS)[foundIndex] as BrowseMode;
+  return found;
+}
 
 type SidebarBrowseItem = ArtistIndexItem | FolderStructureRootNode;
-
-function resolveBrowseMode(pathname: string): BrowseMode {
-  if (pathname.startsWith('/browse/artists')) {
-    return 'Artist';
-  }
-
-  if (pathname.startsWith('/browse/album-artists')) {
-    return 'Album Artist';
-  }
-
-  return 'Folder Structure';
-}
 
 function decodePathParam(value?: string) {
   if (!value) {
@@ -81,7 +81,7 @@ const NavigationSideBar: Component = () => {
   const [isLoading, setIsLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
 
-  const viewMode = createMemo(() => resolveBrowseMode(location.pathname));
+  const [browseMode, setBrowseMode] = createSignal<BrowseMode>(resolveBrowseMode(location.pathname));
   const folderRoute = createMemo(() => resolveFolderStructureRoute(location.pathname));
   const artistRouteId = createMemo(() => resolveArtistRouteId(location.pathname));
   const effectiveFolderLibraryId = createMemo(() => {
@@ -102,22 +102,22 @@ const NavigationSideBar: Component = () => {
     return null;
   });
   const selectedItemId = createMemo(() => {
-    if (viewMode() === 'Artist') {
+    if (browseMode() === 'Artists') {
       return artistRouteId();
     }
 
-    if (viewMode() === 'Folder Structure') {
+    if (browseMode() === 'Folder Structures') {
       return folderRoute().nodeId;
     }
 
     return null;
   });
-  const showLibrarySelector = createMemo(() => viewMode() === 'Folder Structure' && musicFolders().length > 1);
+  const showLibrarySelector = createMemo(() => browseMode() === 'Folder Structures' && musicFolders().length > 1);
   const emptyMessage = createMemo(() => {
-    switch (viewMode()) {
-      case 'Artist':
+    switch (browseMode()) {
+      case 'Artists':
         return 'No artists available.';
-      case 'Album Artist':
+      case 'Album Artists':
         return 'Album artist browse is not implemented yet.';
       default:
         if (musicFolders().length === 0 && !isLoading()) {
@@ -186,10 +186,10 @@ const NavigationSideBar: Component = () => {
 
   function navigateToMode(mode: BrowseMode) {
     switch (mode) {
-      case 'Artist':
+      case 'Artists':
         navigate('/browse/artists');
         break;
-      case 'Album Artist':
+      case 'Album Artists':
         navigate('/browse/album-artists');
         break;
       default: {
@@ -217,11 +217,11 @@ const NavigationSideBar: Component = () => {
       return;
     }
 
-    switch (viewMode()) {
-      case 'Artist':
+    switch (browseMode()) {
+      case 'Artists':
         void loadArtistItems();
         return;
-      case 'Album Artist':
+      case 'Album Artists':
         setItems([]);
         setMusicFolders([]);
         setFolderStructureSource(null);
@@ -236,33 +236,13 @@ const NavigationSideBar: Component = () => {
 
   return (
     <div class='flex flex-col min-w-40 w-56 border-r border-zinc-600 resize-x overflow-auto'>
-      <Select
-        class='m-2'
-        options={BROWSE_MODES}
-        value={viewMode()}
-        onChange={(mode) => {
-          if (mode) {
-            navigateToMode(mode);
-          }
+      <NavigationTypeSelect
+        defaultMode={browseMode()}
+        onSelect={(mode) => {
+          setBrowseMode(mode);
+          navigateToMode(mode);
         }}
-        itemComponent={(props) => {
-          if (props.item.rawValue === viewMode()) return <></>;
-          return (
-            <Select.Item item={props.item} class='p-0.5 text-sm select-none cursor-pointer hover:bg-zinc-200'>
-              <Select.ItemLabel>{props.item.rawValue}</Select.ItemLabel>
-            </Select.Item>
-          );
-        }}
-      >
-        <Select.Trigger class='w-full text-start line-clamp-1'>
-          <Select.Value<string>>{(state) => state.selectedOption()}</Select.Value>
-        </Select.Trigger>
-        <Select.Portal>
-          <Select.Content class='bg-zinc-50 border border-zinc-800 rounded-md m-0 p-0'>
-            <Select.Listbox class='m-0 p-0' />
-          </Select.Content>
-        </Select.Portal>
-      </Select>
+      />
 
       <Show when={showLibrarySelector()}>
         <div class='px-2 pb-2'>
@@ -289,10 +269,6 @@ const NavigationSideBar: Component = () => {
         </div>
       </Show>
 
-      <Show when={viewMode() === 'Folder Structure' && folderStructureSource() === 'indexes'}>
-        <p class='px-3 pb-2 text-xs text-zinc-500'>This server provides a folder-like browse tree.</p>
-      </Show>
-
       <div class='flex-1 overflow-y-auto'>
         <BrowseList
           items={items()}
@@ -301,13 +277,13 @@ const NavigationSideBar: Component = () => {
           emptyMessage={emptyMessage()}
           selectedId={selectedItemId()}
           onClickItem={(item) => {
-            if (viewMode() === 'Artist') {
+            if (browseMode() === 'Artists') {
               navigate(`/browse/artists/${encodeURIComponent(item.id)}`);
               return;
             }
 
             const libraryId = effectiveFolderLibraryId();
-            if (viewMode() === 'Folder Structure' && libraryId) {
+            if (browseMode() === 'Folder Structures' && libraryId) {
               navigate(`/browse/folders/${encodeURIComponent(libraryId)}/${encodeURIComponent(item.id)}`);
             }
           }}

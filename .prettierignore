@@ -4,8 +4,10 @@ pkg
 dist
 build
 target
+src-tauri/gen
 
 *.txt
 *.md
 
 pnpm-lock.yaml
+src/bindings.ts

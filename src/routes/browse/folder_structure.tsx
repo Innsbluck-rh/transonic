@@ -110,10 +110,6 @@ function BrowseFolderStructure() {
     <div class='flex flex-col gap-4 p-3 h-full w-full overflow-x-hidden overflow-y-auto bg-zinc-100'>
       <Heading2>{heading()}</Heading2>
 
-      <Show when={rootsResponse()?.source === 'indexes'}>
-        <p class='text-sm text-zinc-500'>This server provides a folder-like browse tree.</p>
-      </Show>
-
       <Show when={error()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
       <Show when={!isLoading()} fallback={<p class='text-sm text-zinc-400'>Loading folder structure...</p>}>

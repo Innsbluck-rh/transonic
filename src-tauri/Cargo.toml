@@ -13,7 +13,6 @@ reqwest = { version = "0.12", default-features = false, features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 specta = "2.0.0-rc.21"
-specta-serde = "0.0.9"
 specta-typescript = "0.0.9"
 tauri-specta = { version = "2.0.0-rc.21", features = ["derive", "typescript"] }
 
@@ -23,6 +22,7 @@ version = "0.0.1"
 description = "multi-platform music player for subsonic servers"
 authors = ["innsbluck"]
 edition = "2021"
+default-run = "transonic"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -47,7 +47,6 @@ async-trait = { workspace = true }
 uuid = { version = "1", features = ["serde", "v4"] }
 base64 = "0.22"
 specta = { workspace = true }
-specta-serde = { workspace = true }
 specta-typescript = { workspace = true }
 tauri-specta = { workspace = true }
 

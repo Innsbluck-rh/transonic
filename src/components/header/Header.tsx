@@ -2,7 +2,7 @@ import { useNavigate } from '@solidjs/router';
 import { Component, Show } from 'solid-js';
 import { sessionStore } from '~/stores/session/SessionStore';
 import Title from '../common/Title';
-import Profiles from './Profiles';
+import ProfilesNew from './Profiles';
 
 interface HeaderProps {
   title?: string;
@@ -19,7 +19,7 @@ const Header: Component<HeaderProps> = (props) => {
       </Title>
       <div class='flex-1' />
       <Show when={props.shouldShowProfiles}>
-        <Profiles profiles={sessionStore.profiles} />
+        <ProfilesNew profiles={sessionStore.profiles} />
       </Show>
     </div>
   );

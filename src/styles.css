@@ -4,16 +4,16 @@
   font-family: 'Archivo Black', sans-serif;
   font-weight: 400;
 }
-
+.archivo {
+  font-family: 'Archivo', sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
+  font-variation-settings: 'wdth' 100;
+}
 .public-sans-500 {
   font-family: 'Public Sans', sans-serif;
   /* font-optical-sizing: auto; */
   font-weight: 500;
-  font-style: normal;
-}
-.dotgothic16-regular {
-  font-family: 'DotGothic16', sans-serif;
-  font-weight: 400;
   font-style: normal;
 }
 

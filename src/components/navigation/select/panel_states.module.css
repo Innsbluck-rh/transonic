@@ -1,0 +1,38 @@
+.panel {
+  grid-template-rows: 0fr;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    grid-template-rows 220ms ease,
+    opacity 180ms ease;
+}
+
+.panel.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.panel-inner {
+  min-height: 0;
+  transform: translateY(-0.75rem);
+  opacity: 0;
+  transition:
+    transform 220ms,
+    opacity 180ms ease;
+}
+
+.panel.is-open .panel-inner {
+  transform: translateY(0);
+  opacity: 1;
+}
+
+.toggle.is-open {
+  rotate: 180deg;
+  transition: rotate 220ms ease;
+}
+.toggle {
+  rotate: 0;
+  transition: rotate 220ms ease;
+}
