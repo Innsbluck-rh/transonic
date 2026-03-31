@@ -61,7 +61,7 @@ const HomeLayout: ParentComponent = (props) => {
           }
         >
           <div class='flex flex-col h-full'>
-            <Header shouldShowProfiles={true} />
+            <Header shouldShowProfiles={true} titleHref='/home' />
 
             <div class='flex flex-row w-full h-full overflow-hidden'>
               <IndexSideBar />

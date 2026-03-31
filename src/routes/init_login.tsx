@@ -3,7 +3,6 @@ import { createSignal, Show } from 'solid-js';
 import { commands, type ConnectServerProfileRequest, type ConnectServerProfileResult } from '~/bindings';
 import AuthForm, { AuthFormData } from '~/components/auth/AuthForm';
 import ErrorMsg from '~/components/common/ErrorMsg';
-import Heading2 from '~/components/common/Heading2';
 import Header from '~/components/header/Header';
 import { setSessionStore } from '~/stores/SessionStore';
 
@@ -86,16 +85,16 @@ function InitLogin() {
   }
 
   return (
-    <div class='flex flex-col gap-1.5'>
+    <div class='flex flex-col w-dvw h-dvh'>
       <Header title='Login to server' shouldShowProfiles={false} />
+      <div class='flex flex-col w-full h-full items-center justify-center bg-zinc-200'>
+        <div class='flex flex-col p-7 gap-3 bg-zinc-50 border border-zinc-600 rounded-md'>
+          <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
 
-      <div class='flex flex-col p-3 m-3 gap-3  rounded-lg border border-zinc-700 '>
-        <Heading2>Navidrome</Heading2>
-        <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
-
-        <Show when={submitError()}>
-          <ErrorMsg>{submitError()}</ErrorMsg>
-        </Show>
+          <Show when={submitError()}>
+            <ErrorMsg>{submitError()}</ErrorMsg>
+          </Show>
+        </div>
       </div>
     </div>
   );

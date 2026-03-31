@@ -6,6 +6,7 @@ import ProfilesNew from './Profiles';
 
 interface HeaderProps {
   title?: string;
+  titleHref?: string;
   shouldShowProfiles?: boolean;
 }
 
@@ -14,10 +15,12 @@ const Header: Component<HeaderProps> = (props) => {
   const navigate = useNavigate();
 
   return (
-    <div class='flex flex-row items-center h-14 border-b border-zinc-400 px-2.5'>
-      <Title class='cursor-pointer' onClick={() => navigate('/home')}>
-        {props.title ?? 'Transonic'}
-      </Title>
+    <div class='flex flex-row items-center h-12 bg-zinc-50 border-b border-zinc-400 px-2.5'>
+      <Show when={props.titleHref} fallback={<Title>{props.title ?? 'Transonic'}</Title>}>
+        <Title class='cursor-pointer' onClick={() => navigate(props.titleHref!)}>
+          {props.title ?? 'Transonic'}
+        </Title>
+      </Show>
       <div class='flex-1' />
       <p class='text-xs opacity-25 mr-3'>{location.pathname}</p>
       <Show when={props.shouldShowProfiles}>
