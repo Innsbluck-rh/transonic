@@ -95,7 +95,7 @@ where
             return Ok(AppBootstrap {
                 profiles: profiles.summaries(),
                 active_session: None,
-                restore_status: RestoreStatus::ReauthRequired,
+                restore_status: RestoreStatus::ConnectionError,
                 message: Some(
                     "Stored credentials are missing. Re-enter the credentials for the active profile."
                         .to_string(),
@@ -162,6 +162,17 @@ where
 
         match self.api.connect(&payload.server_url, &payload.auth).await {
             Ok(connection) => {
+                if has_duplicate_profile_identity(
+                    &profiles,
+                    payload.profile_id.as_deref(),
+                    &connection.normalized_server_url,
+                    &connection.username,
+                ) {
+                    return Err(
+                        "A server profile for this server and username already exists.".to_string(),
+                    );
+                }
+
                 let profile_id = payload
                     .profile_id
                     .unwrap_or_else(|| Uuid::new_v4().to_string());
@@ -336,6 +347,19 @@ fn choose_display_name(
     }
 
     fallback_url.to_string()
+}
+
+fn has_duplicate_profile_identity(
+    profiles: &ProfilesFile,
+    current_profile_id: Option<&str>,
+    normalized_server_url: &str,
+    username: &str,
+) -> bool {
+    profiles.profiles.iter().any(|profile| {
+        profile.normalized_server_url == normalized_server_url
+            && profile.username == username
+            && Some(profile.profile_id.as_str()) != current_profile_id
+    })
 }
 
 fn current_timestamp_millis() -> u64 {
@@ -613,7 +637,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bootstrap_returns_offline_when_reconnect_fails_with_network_error() {
+    async fn bootstrap_returns_network_error_when_reconnect_fails_with_network_error() {
         let temp_dir = tempdir().unwrap();
         let secret_store = InMemorySecretStore::default();
         let connect_api = MockSubsonicApi::default();
@@ -645,6 +669,7 @@ mod tests {
         let restore_api = MockSubsonicApi::default();
         restore_api.push_response(Err(ConnectFailure::Network {
             message: "offline".to_string(),
+            is_no_network: true,
         }));
         let restore_service = SessionService::new(
             temp_dir.path().to_path_buf(),
@@ -658,7 +683,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(matches!(bootstrap.restore_status, RestoreStatus::Offline));
+        assert!(matches!(
+            bootstrap.restore_status,
+            RestoreStatus::NetworkError
+        ));
         assert!(bootstrap.active_session.is_none());
         assert_eq!(
             bootstrap.profiles[0].last_connection_state,
@@ -667,7 +695,66 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn bootstrap_returns_reauth_required_when_secret_is_missing() {
+    async fn bootstrap_returns_connection_error_when_reconnect_fails_with_server_error() {
+        let temp_dir = tempdir().unwrap();
+        let secret_store = InMemorySecretStore::default();
+        let connect_api = MockSubsonicApi::default();
+        connect_api.push_response(Ok(connected_server()));
+        let connect_service = SessionService::new(
+            temp_dir.path().to_path_buf(),
+            "transonic".to_string(),
+            secret_store.clone(),
+            connect_api,
+        );
+        let active_session_state = Mutex::new(None);
+
+        connect_service
+            .connect_server_profile(
+                &active_session_state,
+                ConnectServerProfileRequest {
+                    profile_id: None,
+                    display_name: Some("Demo".to_string()),
+                    server_url: "https://demo.example".to_string(),
+                    auth: AuthInput::Password {
+                        username: "demo".to_string(),
+                        password: "sesame".to_string(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let restore_api = MockSubsonicApi::default();
+        restore_api.push_response(Err(ConnectFailure::Server {
+            message: "server exploded".to_string(),
+            code: None,
+            help_url: None,
+        }));
+        let restore_service = SessionService::new(
+            temp_dir.path().to_path_buf(),
+            "transonic".to_string(),
+            secret_store,
+            restore_api,
+        );
+        let active_session_state = Mutex::new(None);
+        let bootstrap = restore_service
+            .bootstrap_app_state(&active_session_state)
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            bootstrap.restore_status,
+            RestoreStatus::ConnectionError
+        ));
+        assert!(bootstrap.active_session.is_none());
+        assert_eq!(
+            bootstrap.profiles[0].last_connection_state,
+            LastConnectionState::Offline
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_returns_connection_error_when_secret_is_missing() {
         let temp_dir = tempdir().unwrap();
         let secret_store = InMemorySecretStore::default();
         let connect_api = MockSubsonicApi::default();
@@ -720,11 +807,68 @@ mod tests {
 
         assert!(matches!(
             bootstrap.restore_status,
-            RestoreStatus::ReauthRequired
+            RestoreStatus::ConnectionError
         ));
         assert_eq!(
             bootstrap.profiles[0].last_connection_state,
             LastConnectionState::ReauthRequired
+        );
+    }
+
+    #[tokio::test]
+    async fn bootstrap_returns_connection_error_for_non_network_transport_failures() {
+        let temp_dir = tempdir().unwrap();
+        let secret_store = InMemorySecretStore::default();
+        let connect_api = MockSubsonicApi::default();
+        connect_api.push_response(Ok(connected_server()));
+        let connect_service = SessionService::new(
+            temp_dir.path().to_path_buf(),
+            "transonic".to_string(),
+            secret_store.clone(),
+            connect_api,
+        );
+        let active_session_state = Mutex::new(None);
+
+        connect_service
+            .connect_server_profile(
+                &active_session_state,
+                ConnectServerProfileRequest {
+                    profile_id: None,
+                    display_name: Some("Demo".to_string()),
+                    server_url: "https://demo.example".to_string(),
+                    auth: AuthInput::Password {
+                        username: "demo".to_string(),
+                        password: "sesame".to_string(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let restore_api = MockSubsonicApi::default();
+        restore_api.push_response(Err(ConnectFailure::Network {
+            message: "The connection attempt timed out.".to_string(),
+            is_no_network: false,
+        }));
+        let restore_service = SessionService::new(
+            temp_dir.path().to_path_buf(),
+            "transonic".to_string(),
+            secret_store,
+            restore_api,
+        );
+        let active_session_state = Mutex::new(None);
+        let bootstrap = restore_service
+            .bootstrap_app_state(&active_session_state)
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            bootstrap.restore_status,
+            RestoreStatus::ConnectionError
+        ));
+        assert_eq!(
+            bootstrap.profiles[0].last_connection_state,
+            LastConnectionState::Offline
         );
     }
 
@@ -774,6 +918,60 @@ mod tests {
             .load_secret("transonic", &profile_id)
             .unwrap()
             .is_none());
+    }
+
+    #[tokio::test]
+    async fn connect_rejects_duplicate_server_and_username_profiles() {
+        let temp_dir = tempdir().unwrap();
+        let secret_store = InMemorySecretStore::default();
+        let api = MockSubsonicApi::default();
+        api.push_response(Ok(connected_server()));
+        api.push_response(Ok(connected_server()));
+        let service = SessionService::new(
+            temp_dir.path().to_path_buf(),
+            "transonic".to_string(),
+            secret_store,
+            api,
+        );
+        let active_session_state = Mutex::new(None);
+
+        service
+            .connect_server_profile(
+                &active_session_state,
+                ConnectServerProfileRequest {
+                    profile_id: None,
+                    display_name: Some("Demo".to_string()),
+                    server_url: "https://demo.example".to_string(),
+                    auth: AuthInput::Password {
+                        username: "demo".to_string(),
+                        password: "sesame".to_string(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+
+        let error = service
+            .connect_server_profile(
+                &active_session_state,
+                ConnectServerProfileRequest {
+                    profile_id: None,
+                    display_name: Some("Demo Duplicate".to_string()),
+                    server_url: "https://demo.example".to_string(),
+                    auth: AuthInput::Password {
+                        username: "demo".to_string(),
+                        password: "sesame".to_string(),
+                    },
+                },
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error,
+            "A server profile for this server and username already exists."
+        );
+        assert_eq!(service.load_profiles().unwrap().profiles.len(), 1);
     }
 
     #[tokio::test]

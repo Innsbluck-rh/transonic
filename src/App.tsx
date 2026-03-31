@@ -7,7 +7,7 @@ import BrowseArtistAlbums from './routes/browse/artist_albums';
 import BrowseFolderStructure from './routes/browse/folder_structure';
 import Home from './routes/home';
 import HomeConnectionError from './routes/home_errors/connection_error';
-import HomeNetworkError from './routes/home_errors/network_error';
+import HomeNoNetwork from './routes/home_errors/no_network';
 import HomeLayout from './routes/homeLayout';
 import InitLogin from './routes/init_login';
 import NotFound from './routes/notFound';
@@ -27,7 +27,7 @@ export default function App() {
       <Route path='/' component={Index} />
       <Route component={HomeLayout}>
         <Route path='/home' component={Home} />
-        <Route path='/home/network_error' component={HomeNetworkError} />
+        <Route path='/home/no_network' component={HomeNoNetwork} />
         <Route path='/home/connection_error' component={HomeConnectionError} />
         <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
         <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />

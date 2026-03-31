@@ -1,3 +1,5 @@
+use std::error::Error as StdError;
+
 use async_trait::async_trait;
 use opensubsonic_client::{
     api::system::SystemApi, normalize_base_url, ApiError, Auth, ClientConfig, OpenSubsonicClient,
@@ -45,6 +47,7 @@ pub enum ConnectFailure {
     },
     Network {
         message: String,
+        is_no_network: bool,
     },
     Server {
         message: String,
@@ -66,15 +69,24 @@ impl ConnectFailure {
 
     pub fn restore_status(&self) -> RestoreStatus {
         match self {
-            Self::Auth { .. } | Self::UnsupportedAuth { .. } => RestoreStatus::ReauthRequired,
-            Self::Network { .. } | Self::Server { .. } => RestoreStatus::Offline,
+            Self::Network {
+                is_no_network: true,
+                ..
+            } => RestoreStatus::NetworkError,
+            Self::Auth { .. }
+            | Self::UnsupportedAuth { .. }
+            | Self::Network {
+                is_no_network: false,
+                ..
+            }
+            | Self::Server { .. } => RestoreStatus::ConnectionError,
         }
     }
 
     pub fn message(&self) -> &str {
         match self {
             Self::Auth { message, .. }
-            | Self::Network { message }
+            | Self::Network { message, .. }
             | Self::Server { message, .. }
             | Self::UnsupportedAuth { message } => message,
         }
@@ -97,7 +109,7 @@ impl ConnectFailure {
                 active_session,
                 profiles,
             },
-            Self::Network { message } => ConnectServerProfileResult::NetworkError {
+            Self::Network { message, .. } => ConnectServerProfileResult::NetworkError {
                 message,
                 active_session,
                 profiles,
@@ -279,12 +291,18 @@ fn map_capabilities(features: &ServerFeatures, ping_open_subsonic: bool) -> Capa
 
 fn map_api_error(error: ApiError) -> ConnectFailure {
     match error {
-        ApiError::InvalidUrl(message) | ApiError::ClientBuild(message) => {
-            ConnectFailure::Network { message }
-        }
-        ApiError::Transport(error) => ConnectFailure::Network {
-            message: describe_transport_error(error),
+        ApiError::InvalidUrl(message) | ApiError::ClientBuild(message) => ConnectFailure::Network {
+            message,
+            is_no_network: false,
         },
+        ApiError::Transport(error) => {
+            let is_no_network = is_no_network_transport_error(&error);
+
+            ConnectFailure::Network {
+                message: describe_transport_error(&error, is_no_network),
+                is_no_network,
+            }
+        }
         ApiError::HttpStatus {
             status,
             body_preview,
@@ -356,7 +374,11 @@ fn map_api_error(error: ApiError) -> ConnectFailure {
     }
 }
 
-fn describe_transport_error(error: reqwest::Error) -> String {
+fn describe_transport_error(error: &reqwest::Error, is_no_network: bool) -> String {
+    if is_no_network {
+        return "No internet connection detected.".to_string();
+    }
+
     if error.is_timeout() {
         return "The connection attempt timed out.".to_string();
     }
@@ -370,6 +392,41 @@ fn describe_transport_error(error: reqwest::Error) -> String {
     }
 
     format!("The connection attempt failed: {error}")
+}
+
+fn is_no_network_transport_error(error: &reqwest::Error) -> bool {
+    let details = flatten_error_chain(error);
+    const NO_NETWORK_MARKERS: &[&str] = &[
+        "dns error",
+        "failed to lookup address information",
+        "name or service not known",
+        "temporary failure in name resolution",
+        "no such host",
+        "network is unreachable",
+        "unreachable network",
+        "no route to host",
+        "network name cannot be found",
+        "remote name could not be resolved",
+        "host not found",
+        "nodename nor servname provided",
+    ];
+
+    NO_NETWORK_MARKERS
+        .iter()
+        .any(|marker| details.contains(marker))
+}
+
+fn flatten_error_chain(error: &reqwest::Error) -> String {
+    let mut details = error.to_string().to_ascii_lowercase();
+    let mut source = error.source();
+
+    while let Some(error) = source {
+        details.push_str(" | ");
+        details.push_str(&error.to_string().to_ascii_lowercase());
+        source = error.source();
+    }
+
+    details
 }
 
 fn format_http_status_message(status: StatusCode, body_preview: Option<&str>) -> String {

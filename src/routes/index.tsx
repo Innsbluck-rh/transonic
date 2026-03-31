@@ -1,6 +1,7 @@
 import { useNavigate } from '@solidjs/router';
 import { onMount } from 'solid-js';
 import { commands } from '~/bindings';
+import { resolveBootstrapRoute } from '~/features/session/bootstrap';
 import { loadBootstrapToStore } from '~/features/session/service';
 
 function Index() {
@@ -17,16 +18,7 @@ function Index() {
 
       const bootstrap = result.data;
       loadBootstrapToStore(bootstrap);
-      switch (bootstrap.restoreStatus) {
-        case 'restored':
-          navigate('/home');
-          break;
-        case 'none':
-        case 'offline': // !! temporally assume logouted
-        case 'reauth_required': // !! temporally assume logouted
-          navigate('/init_login');
-          break;
-      }
+      navigate(resolveBootstrapRoute(bootstrap));
     } catch (invokeError) {
       console.error(invokeError);
       navigate('/init_login');

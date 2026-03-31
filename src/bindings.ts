@@ -128,7 +128,7 @@ export type MusicFolderSummary = { id: string; name: string }
 export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
 export type ProfileIdRequest = { profileId: string }
-export type RestoreStatus = "none" | "restored" | "offline" | "reauth_required"
+export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"
 export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }
 
 /** tauri-specta globals **/

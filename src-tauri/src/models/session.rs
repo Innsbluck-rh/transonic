@@ -113,7 +113,8 @@ pub struct ActiveSession {
 pub enum RestoreStatus {
     None,
     Restored,
-    Offline,
+    NetworkError,
+    ConnectionError,
     ReauthRequired,
 }
 

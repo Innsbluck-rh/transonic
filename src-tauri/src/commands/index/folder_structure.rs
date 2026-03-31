@@ -183,8 +183,8 @@ fn parse_folders(payload: Value) -> Result<Vec<MusicFolderSummary>, String> {
 }
 
 fn parse_root_indexes(payload: Value) -> Result<Vec<FolderStructureRootNode>, String> {
-    let payload: RawIndexes =
-        value_as(payload).map_err(|error| format!("Failed to parse the indexes payload: {error}"))?;
+    let payload: RawIndexes = value_as(payload)
+        .map_err(|error| format!("Failed to parse the indexes payload: {error}"))?;
 
     Ok(payload
         .index

@@ -103,7 +103,11 @@ fn parse_directory(payload: Value) -> Result<MusicDirectoryResponse, String> {
     Ok(MusicDirectoryResponse {
         id: payload.id,
         name: payload.name,
-        children: payload.child.into_iter().map(MusicDirectoryChild::from).collect(),
+        children: payload
+            .child
+            .into_iter()
+            .map(MusicDirectoryChild::from)
+            .collect(),
     })
 }
 
@@ -148,7 +152,10 @@ mod tests {
         assert_eq!(response.name, "Artist One");
         assert_eq!(response.children.len(), 2);
         assert_eq!(response.children[0].title, "Album One");
-        assert_eq!(response.children[0].cover_art_id.as_deref(), Some("cover-1"));
+        assert_eq!(
+            response.children[0].cover_art_id.as_deref(),
+            Some("cover-1")
+        );
         assert_eq!(response.children[0].year, Some(2024));
         assert!(response.children[0].is_directory);
         assert_eq!(response.children[1].title, "Song One");

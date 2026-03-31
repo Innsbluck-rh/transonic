@@ -67,8 +67,8 @@ pub async fn get_artist_indexes(
 }
 
 fn parse_indexes(payload: Value) -> Result<Vec<ArtistIndexItem>, String> {
-    let payload: RawIndexes =
-        value_as(payload).map_err(|error| format!("Failed to parse the indexes payload: {error}"))?;
+    let payload: RawIndexes = value_as(payload)
+        .map_err(|error| format!("Failed to parse the indexes payload: {error}"))?;
 
     Ok(payload
         .index
