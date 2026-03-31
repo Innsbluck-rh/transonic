@@ -1,3 +1,4 @@
+import { Icon } from '@iconify-icon/solid';
 import { Component } from 'solid-js';
 
 type PlayerIconTypes = 'play' | 'pause' | 'next' | 'prev';
@@ -8,28 +9,22 @@ interface PlayerIconProps {
 
 const PlayerIcon: Component<PlayerIconProps> = (props) => {
   return (
-    <div class='flex items-center justify-center w-12 h-12'>
-      <img
-        class='scale-200 cursor-pointer'
-        src={getIconSrc(props.type)}
-        style={{
-          'image-rendering': 'pixelated',
-        }}
-      />
+    <div class='flex items-center justify-center p-2 cursor-pointer rounded-full hover:bg-zinc-200'>
+      <Icon icon={`${getIconForType(props.type)}`} class='text-zinc-700 scale-150' />
     </div>
   );
 };
 
-function getIconSrc(type: PlayerIconTypes) {
+function getIconForType(type: PlayerIconTypes) {
   switch (type) {
     case 'play':
-      return '/play.webp';
+      return 'pixelarticons:play';
     case 'pause':
-      return '/pause.webp';
+      return 'pixelarticons:pause';
     case 'next':
-      return '/play_next.webp';
+      return 'pixelarticons:next';
     case 'prev':
-      return '/play_prev.webp';
+      return 'pixelarticons:prev';
   }
 }
 

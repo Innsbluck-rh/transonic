@@ -1,24 +1,14 @@
 import { Component, createSignal, Match, Switch } from 'solid-js';
-import AlbumArtistList from './list/AlbumArtistList';
 import ArtistList from './list/ArtistList';
 import FolderList from './list/FolderList';
 import IndexModeSelect from './select/IndexModeSelect';
 
-export type BrowseMode = 'Folder Structures' | 'Artists' | 'Album Artists';
+export type BrowseMode = 'Folder Structures' | 'Artists';
 
 export const BROWSE_MODE_URLS: Record<BrowseMode, string> = {
   'Folder Structures': '/browse/folders',
   Artists: '/browse/artists',
-  'Album Artists': '/browse/album-artists',
 };
-
-export function resolveBrowseMode(pathname: string): BrowseMode {
-  const foundIndex = Object.values(BROWSE_MODE_URLS).findIndex((url) => pathname.startsWith(url));
-  if (foundIndex < 0) return 'Folder Structures';
-
-  const found = Object.keys(BROWSE_MODE_URLS)[foundIndex] as BrowseMode;
-  return found;
-}
 
 const IndexSideBar: Component = () => {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Folder Structures');
@@ -34,9 +24,6 @@ const IndexSideBar: Component = () => {
 
       <div class='flex-1 overflow-y-auto'>
         <Switch>
-          <Match when={browseMode() === 'Album Artists'}>
-            <AlbumArtistList />
-          </Match>
           <Match when={browseMode() === 'Artists'}>
             <ArtistList />
           </Match>

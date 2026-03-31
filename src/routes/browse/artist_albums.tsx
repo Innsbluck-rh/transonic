@@ -1,10 +1,10 @@
 import { useParams } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
-import type { AlbumListItem, MusicDirectoryResponse } from '~/bindings';
+import { commands, type AlbumListItem, type MusicDirectoryResponse } from '~/bindings';
 import Heading2 from '~/components/common/Heading2';
+import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/list/AlbumGrid';
-import { fetchMusicDirectory } from '~/features/browse/service';
-import { sessionStore } from '~/stores/session/SessionStore';
+import { sessionStore } from '~/stores/SessionStore';
 
 function BrowseArtistAlbums() {
   const params = useParams();
@@ -54,8 +54,14 @@ function BrowseArtistAlbums() {
     setError(null);
 
     try {
-      const response = await fetchMusicDirectory({ id: artistId });
-      setDirectory(response);
+      const result = await commands.getMusicDirectory({ id: artistId });
+      if (result.status === 'error') {
+        setDirectory(null);
+        setError(result.error);
+        return;
+      }
+
+      setDirectory(result.data);
     } catch (invokeError) {
       console.error(invokeError);
       setDirectory(null);
@@ -76,7 +82,7 @@ function BrowseArtistAlbums() {
 
       <Show when={error()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
-      <Show when={!isLoading()} fallback={<p class='text-sm text-zinc-400'>Loading artist albums...</p>}>
+      <Show when={!isLoading()} fallback={<LoadCircle class='self-center justify-self-center' />}>
         <AlbumGrid albums={albums()} emptyMessage={emptyMessage()} />
       </Show>
     </div>

@@ -1,11 +1,12 @@
 import { useNavigate } from '@solidjs/router';
 import { createSignal, onMount, ParentComponent, Show } from 'solid-js';
+import { commands } from '~/bindings';
 import ErrorMsg from '~/components/common/ErrorMsg';
 import Header from '~/components/header/Header';
 import IndexSideBar from '~/components/index/IndexSideBar';
 import PlayerBar from '~/components/player/PlayerBar';
-import { fetchBootstrapAppState, loadBootstrapToStore } from '~/features/session/service';
-import { sessionStore } from '~/stores/session/SessionStore';
+import { loadBootstrapToStore } from '~/features/session/service';
+import { sessionStore } from '~/stores/SessionStore';
 
 const HomeLayout: ParentComponent = (props) => {
   const navigate = useNavigate();
@@ -13,7 +14,13 @@ const HomeLayout: ParentComponent = (props) => {
   const [loaded, setLoaded] = createSignal(false);
   const loadBootStrap = async (): Promise<boolean> => {
     try {
-      const bootstrap = await fetchBootstrapAppState();
+      const result = await commands.bootstrapAppState();
+      if (result.status === 'error') {
+        console.error(result.error);
+        return false;
+      }
+
+      const bootstrap = result.data;
       loadBootstrapToStore(bootstrap);
 
       switch (bootstrap.restoreStatus) {

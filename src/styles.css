@@ -7,7 +7,6 @@
 .archivo {
   font-family: 'Archivo', sans-serif;
   font-optical-sizing: auto;
-  font-style: normal;
   font-variation-settings: 'wdth' 100;
 }
 .public-sans-500 {
@@ -20,6 +19,7 @@
 @layer base {
   html,
   body {
+    @apply text-zinc-800;
     font-family: 'Public Sans', sans-serif;
     line-height: 1;
     width: 100vw;
@@ -68,6 +68,10 @@
   }
 
   button {
-    @apply text-sm font-bold px-1.5 py-0.5 border border-zinc-600 rounded-sm hover:bg-zinc-200;
+    @apply text-sm font-bold px-1.5 py-0.5 border border-zinc-600 rounded-sm cursor-pointer hover:bg-zinc-200;
+
+    &:disabled {
+      @apply cursor-none;
+    }
   }
 }

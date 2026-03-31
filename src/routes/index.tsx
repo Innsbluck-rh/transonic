@@ -1,22 +1,35 @@
 import { useNavigate } from '@solidjs/router';
 import { onMount } from 'solid-js';
-import { fetchBootstrapAppState, loadBootstrapToStore } from '~/features/session/service';
+import { commands } from '~/bindings';
+import { loadBootstrapToStore } from '~/features/session/service';
 
 function Index() {
   const navigate = useNavigate();
   // load bootstrap and redirect
   onMount(async () => {
-    const bootstrap = await fetchBootstrapAppState();
-    loadBootstrapToStore(bootstrap);
-    switch (bootstrap.restoreStatus) {
-      case 'restored':
-        navigate('/home');
-        break;
-      case 'none':
-      case 'offline': // !! temporally assume logouted
-      case 'reauth_required': // !! temporally assume logouted
+    try {
+      const result = await commands.bootstrapAppState();
+      if (result.status === 'error') {
+        console.error(result.error);
         navigate('/init_login');
-        break;
+        return;
+      }
+
+      const bootstrap = result.data;
+      loadBootstrapToStore(bootstrap);
+      switch (bootstrap.restoreStatus) {
+        case 'restored':
+          navigate('/home');
+          break;
+        case 'none':
+        case 'offline': // !! temporally assume logouted
+        case 'reauth_required': // !! temporally assume logouted
+          navigate('/init_login');
+          break;
+      }
+    } catch (invokeError) {
+      console.error(invokeError);
+      navigate('/init_login');
     }
   });
 

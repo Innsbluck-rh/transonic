@@ -48,7 +48,7 @@ pub fn bindings_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("..")
         .join("src")
-        .join("bindings.gen.ts")
+        .join("bindings.ts")
 }
 
 fn export_typescript_bindings_to(path: &Path) -> Result<(), specta_typescript::ExportError> {

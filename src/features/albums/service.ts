@@ -1,15 +1,6 @@
-import { commands, type AlbumListRequest, type AlbumListResponse, type CoverArtRequest } from '~/bindings';
+import { commands, type CoverArtRequest } from '~/bindings';
 
 const coverArtCache = new Map<string, Promise<string | null>>();
-
-export async function fetchAlbumList(payload: AlbumListRequest): Promise<AlbumListResponse> {
-  const result = await commands.getAlbumList(payload);
-  if (result.status === 'error') {
-    throw new Error(result.error);
-  }
-
-  return result.data;
-}
 
 function coverArtCacheKey(payload: CoverArtRequest) {
   return `${payload.coverArtId}:${payload.size ?? 'full'}`;

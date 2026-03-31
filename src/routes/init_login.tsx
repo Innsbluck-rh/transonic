@@ -5,8 +5,7 @@ import AuthForm, { AuthFormData } from '~/components/auth/AuthForm';
 import ErrorMsg from '~/components/common/ErrorMsg';
 import Heading2 from '~/components/common/Heading2';
 import Header from '~/components/header/Header';
-import { syncFolderStructureSession } from '~/features/browse/folderStructureService';
-import { setSessionStore } from '~/stores/session/SessionStore';
+import { setSessionStore } from '~/stores/SessionStore';
 
 function formatFailureMsg(result: ConnectServerProfileResult) {
   switch (result.status) {
@@ -73,7 +72,6 @@ function InitLogin() {
           setSubmitError(formatFailureMsg(result));
           return;
         case 'connected':
-          syncFolderStructureSession(result.activeSession.profileId);
           setSessionStore('activeSession', result.activeSession);
           navigate('/home');
           break;

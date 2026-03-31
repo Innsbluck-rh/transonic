@@ -1,6 +1,6 @@
 import { useNavigate } from '@solidjs/router';
 import { Component, Show } from 'solid-js';
-import { sessionStore } from '~/stores/session/SessionStore';
+import { sessionStore } from '~/stores/SessionStore';
 import Title from '../common/Title';
 import ProfilesNew from './Profiles';
 

@@ -1,10 +1,10 @@
 import { useParams } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
-import type { AlbumListItem, FolderStructureAlbumsResponse, FolderStructureRootsResponse } from '~/bindings';
+import { commands, type AlbumListItem, type FolderStructureAlbumsResponse, type FolderStructureRootsResponse } from '~/bindings';
 import Heading2 from '~/components/common/Heading2';
+import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/list/AlbumGrid';
-import { fetchFolderStructureAlbums, fetchFolderStructureRoots, setFolderStructureSelectedLibraryId } from '~/features/browse/folderStructureService';
-import { sessionStore } from '~/stores/session/SessionStore';
+import { sessionStore } from '~/stores/SessionStore';
 
 function decodePathParam(value?: string) {
   if (!value) {
@@ -70,30 +70,46 @@ function BrowseFolderStructure() {
       return;
     }
 
-    setFolderStructureSelectedLibraryId(nextLibraryId);
     setIsLoading(true);
     setError(null);
 
     try {
-      const nextRootsResponse = await fetchFolderStructureRoots({ libraryId: nextLibraryId });
-      setRootsResponse(nextRootsResponse);
-
       const nextNodeId = nodeId();
       if (!nextNodeId) {
+        const nextFsrResult = await commands.getFolderStructureRoots({ libraryId: nextLibraryId });
+        if (nextFsrResult.status === 'error') {
+          throw new Error(nextFsrResult.error);
+        }
+
+        setRootsResponse(nextFsrResult.data);
         setAlbumsResponse(null);
+        setIsLoading(false);
         return;
       }
 
-      const nextAlbumsResponse = await fetchFolderStructureAlbums({
-        libraryId: nextLibraryId,
-        nodeId: nextNodeId,
-      });
-      setAlbumsResponse(nextAlbumsResponse);
+      const [nextFsrResult, nextFsaResult] = await Promise.all([
+        commands.getFolderStructureRoots({ libraryId: nextLibraryId }),
+        commands.getFolderStructureAlbums({
+          libraryId: nextLibraryId,
+          nodeId: nextNodeId,
+        }),
+      ]);
+
+      if (nextFsrResult.status === 'error') {
+        throw new Error(nextFsrResult.error);
+      }
+      if (nextFsaResult.status === 'error') {
+        throw new Error(nextFsaResult.error);
+      }
+
+      setRootsResponse(nextFsrResult.data);
+      setAlbumsResponse(nextFsaResult.data);
     } catch (invokeError) {
       console.error(invokeError);
       setRootsResponse(null);
       setAlbumsResponse(null);
       setError(readInvokeErrorMessage(invokeError));
+      setIsLoading(false);
     } finally {
       setIsLoading(false);
     }
@@ -108,11 +124,10 @@ function BrowseFolderStructure() {
 
   return (
     <div class='flex flex-col gap-4 p-3 h-full w-full overflow-x-hidden overflow-y-auto bg-zinc-100'>
-      <Heading2>{heading()}</Heading2>
-
       <Show when={error()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
-      <Show when={!isLoading()} fallback={<p class='text-sm text-zinc-400'>Loading folder structure...</p>}>
+      <Show when={!isLoading()} fallback={<LoadCircle class='self-center justify-self-center' />}>
+        <Heading2>{heading()}</Heading2>
         <Show when={nodeId()} fallback={<p class='text-sm text-zinc-500'>Select a folder.</p>}>
           <AlbumGrid albums={albums()} emptyMessage='No albums available in this folder.' />
         </Show>

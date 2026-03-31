@@ -1,7 +1,7 @@
 import { Component, createMemo, createSignal, onCleanup, onMount, Show } from 'solid-js';
 import type { SavedProfileSummary } from '~/bindings';
 import { deleteProfile } from '~/features/session/profile';
-import { sessionStore } from '~/stores/session/SessionStore';
+import { sessionStore } from '~/stores/SessionStore';
 
 interface ProfilesProps {
   profiles: SavedProfileSummary[];

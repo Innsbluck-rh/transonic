@@ -1,9 +1,8 @@
 import { createSignal, For, onMount, Show } from 'solid-js';
-import type { AlbumListContext, AlbumListItem } from '~/bindings';
+import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
 import Heading1 from '~/components/common/Heading1';
 import AlbumHorizontalList from '~/components/list/AlbumHorizontalList';
-import { fetchAlbumList } from '~/features/albums/service';
-import { sessionStore } from '~/stores/session/SessionStore';
+import { sessionStore } from '~/stores/SessionStore';
 
 type HomeAlbumSection = {
   heading: string;
@@ -26,9 +25,9 @@ function Home() {
     setAlbumError(null);
 
     try {
-      const sections = await Promise.all(
+      const sectionResults = await Promise.all(
         HOME_ALBUM_CONTEXTS.map(async (section) => {
-          const response = await fetchAlbumList({
+          const result = await commands.getAlbumList({
             context: section.context,
             size: 8,
             offset: null,
@@ -38,12 +37,30 @@ function Home() {
             musicFolderId: null,
           });
 
-          return {
-            ...section,
-            albums: response.albums,
-          };
+          return { section, result };
         })
       );
+
+      const failed = sectionResults.find(({ result }) => result.status === 'error');
+      if (failed && failed.result.status === 'error') {
+        setAlbumError(failed.result.error);
+        setAlbumSections([]);
+        return;
+      }
+
+      const sections = sectionResults.map(({ section, result }) => {
+        if (result.status === 'error') {
+          return {
+            ...section,
+            albums: [],
+          };
+        }
+
+        return {
+          ...section,
+          albums: result.data.albums,
+        };
+      });
 
       setAlbumSections(sections);
     } catch (invokeError) {
