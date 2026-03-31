@@ -1,4 +1,4 @@
-import { useNavigate } from '@solidjs/router';
+import { useLocation, useNavigate } from '@solidjs/router';
 import { Component, For, Match, Show, Switch } from 'solid-js';
 import BrowseListRow from './item/browse/BrowseListRow';
 
@@ -21,6 +21,7 @@ interface BrowseListProps {
  * @description Indexなどのための汎用リスト
  */
 const BrowseList: Component<BrowseListProps> = (props) => {
+  const location = useLocation();
   const navigate = useNavigate();
   return (
     <div class='flex flex-col'>
@@ -36,6 +37,7 @@ const BrowseList: Component<BrowseListProps> = (props) => {
             {(item) => (
               <BrowseListRow
                 label={item.name}
+                active={item.href ? location.pathname.startsWith(item.href) : false}
                 selected={props.selectedId === item.id}
                 onClick={() => {
                   props.onClickItem?.(item);

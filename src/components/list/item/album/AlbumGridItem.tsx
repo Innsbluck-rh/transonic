@@ -8,7 +8,7 @@ interface AlbumGridItemProps {
 
 const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
   return (
-    <div class='flex w-28 shrink-0 flex-col gap-1'>
+    <div class='flex w-28 shrink-0 flex-col gap-0.5'>
       <AlbumCover albumName={props.album.name} coverArtId={props.album.coverArtId} year={props.album.year} />
       <div class='flex flex-col gap-0 px-1'>
         <p class='truncate text-sm text-zinc-800' title={props.album.name}>

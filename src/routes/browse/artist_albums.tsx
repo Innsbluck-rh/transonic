@@ -78,11 +78,10 @@ function BrowseArtistAlbums() {
 
   return (
     <div class='flex flex-col gap-4 p-3 h-full w-full overflow-x-hidden overflow-y-auto bg-zinc-100'>
-      <Heading2>{directory()?.name ?? '[Unknown]'}</Heading2>
-
       <Show when={error()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
       <Show when={!isLoading()} fallback={<LoadCircle class='self-center justify-self-center' />}>
+        <Heading2>artists/{directory()?.name ?? '[Unknown]'}</Heading2>
         <AlbumGrid albums={albums()} emptyMessage={emptyMessage()} />
       </Show>
     </div>

@@ -30,7 +30,7 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
     <div class='overflow-visible relative'>
       <div
         ref={(ref) => (triggerRef = ref)}
-        class='flex flex-row cursor-pointer items-center select-none px-2 py-1 gap-2 border border-zinc-500 rounded-md bg-zinc-50 hover:bg-zinc-200'
+        class='flex flex-row cursor-pointer items-center select-none px-2 py-1 gap-2 border border-zinc-500 bg-zinc-50 rounded-md hover:bg-zinc-200'
         onClick={() => setOpen(!open())}
       >
         <Show when={sessionStore.activeSession}>
@@ -49,7 +49,7 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
       <Show when={open()}>
         <div
           ref={(ref) => (popupRef = ref)}
-          class='absolute right-0 mt-1 flex flex-col text-end items-end px-3 py-2 border border-zinc-500 rounded-md bg-zinc-50 shadow'
+          class='absolute right-0 mt-1 flex flex-col text-end items-end px-3 py-2 bg-zinc-50 border border-zinc-500 rounded-md shadow'
         >
           <p>
             {first().username} ({first().displayName})

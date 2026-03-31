@@ -24,7 +24,7 @@ const MusicDirectoryList: Component<MusicDirectoryListProps> = (props) => {
               <div
                 classList={{
                   'cursor-pointer hover:bg-zinc-100': item.isDirectory,
-                  'bg-zinc-50 text-zinc-500': !item.isDirectory,
+                  'text-zinc-500': !item.isDirectory,
                 }}
                 class='flex flex-col gap-1 px-3 py-2 transition-colors'
                 onClick={() => {

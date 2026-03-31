@@ -3,6 +3,7 @@ import { Component } from 'solid-js';
 interface BrowseListRowProps {
   label: string;
   selected?: boolean;
+  active?: boolean;
   onClick?: () => void;
 }
 
@@ -11,11 +12,19 @@ const BrowseListRow: Component<BrowseListRowProps> = (props) => {
     <div
       class='w-full cursor-pointer px-3 py-2 hover:bg-zinc-200'
       classList={{
-        'bg-zinc-200 text-zinc-950': props.selected ?? false,
+        'bg-zinc-200': (props.selected || props.active) ?? false,
       }}
       onClick={() => props.onClick?.()}
     >
-      <p class='text-xs'>{props.label}</p>
+      <p
+        class='text-xs'
+        classList={{
+          'text-sky-600 font-bold': props.active ?? false,
+          'text-zinc-950': props.selected ?? false,
+        }}
+      >
+        {props.label}
+      </p>
     </div>
   );
 };

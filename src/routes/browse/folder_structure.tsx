@@ -127,7 +127,7 @@ function BrowseFolderStructure() {
       <Show when={error()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
       <Show when={!isLoading()} fallback={<LoadCircle class='self-center justify-self-center' />}>
-        <Heading2>{heading()}</Heading2>
+        <Heading2>folders/{heading()}</Heading2>
         <Show when={nodeId()} fallback={<p class='text-sm text-zinc-500'>Select a folder.</p>}>
           <AlbumGrid albums={albums()} emptyMessage='No albums available in this folder.' />
         </Show>

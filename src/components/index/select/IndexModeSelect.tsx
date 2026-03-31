@@ -36,7 +36,7 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
           <For each={otherModes()}>
             {(mode) => (
               <div
-                class='flex w-full cursor-pointer bg-zinc-50 px-3 py-2 hover:bg-zinc-200'
+                class='flex w-full cursor-pointer px-3 py-2 hover:bg-zinc-200'
                 onClick={() => {
                   props.onSelect?.(mode);
                   setOpen(false);
