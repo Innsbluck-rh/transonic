@@ -2,7 +2,7 @@ import { useNavigate } from '@solidjs/router';
 import { createSignal, onMount, ParentComponent, Show } from 'solid-js';
 import ErrorMsg from '~/components/common/ErrorMsg';
 import Header from '~/components/header/Header';
-import NavigationSideBar from '~/components/navigation/NavigationSideBar';
+import IndexSideBar from '~/components/index/IndexSideBar';
 import PlayerBar from '~/components/player/PlayerBar';
 import { fetchBootstrapAppState, loadBootstrapToStore } from '~/features/session/service';
 import { sessionStore } from '~/stores/session/SessionStore';
@@ -57,7 +57,7 @@ const HomeLayout: ParentComponent = (props) => {
             <Header shouldShowProfiles={true} />
 
             <div class='flex flex-row w-full h-full overflow-hidden'>
-              <NavigationSideBar />
+              <IndexSideBar />
               {props.children}
             </div>
 

@@ -10,4 +10,4 @@ src-tauri/gen
 *.md
 
 pnpm-lock.yaml
-src/bindings.ts
+src/bindings.gen.ts

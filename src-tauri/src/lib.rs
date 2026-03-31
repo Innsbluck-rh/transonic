@@ -1,8 +1,6 @@
 pub mod bindings;
-mod browse_parser;
 mod commands;
 mod connection;
-mod folder_structure;
 mod models;
 mod profiles;
 mod secrets;

@@ -1,21 +1,27 @@
+import { useNavigate } from '@solidjs/router';
 import { Component, For, Match, Show, Switch } from 'solid-js';
 import BrowseListRow from './item/browse/BrowseListRow';
 
-type BrowseListItem = {
+export type BrowseListItem = {
   id: string;
   name: string;
+  href?: string;
 };
 
 interface BrowseListProps {
   items: BrowseListItem[];
-  isLoading: boolean;
-  error: string | null;
+  isLoading?: boolean; // this should be removed
+  error?: string | null; // this should be removed
   emptyMessage: string;
   selectedId?: string | null;
   onClickItem?: (item: BrowseListItem) => void;
 }
 
+/**
+ * @description Indexなどのための汎用リスト
+ */
 const BrowseList: Component<BrowseListProps> = (props) => {
+  const navigate = useNavigate();
   return (
     <div class='flex flex-col'>
       <Switch>
@@ -27,7 +33,16 @@ const BrowseList: Component<BrowseListProps> = (props) => {
 
         <Match when={props.items.length > 0}>
           <For each={props.items}>
-            {(item) => <BrowseListRow label={item.name} selected={props.selectedId === item.id} onClick={() => props.onClickItem?.(item)} />}
+            {(item) => (
+              <BrowseListRow
+                label={item.name}
+                selected={props.selectedId === item.id}
+                onClick={() => {
+                  props.onClickItem?.(item);
+                  if (item.href) navigate(item.href);
+                }}
+              />
+            )}
           </For>
         </Match>
 

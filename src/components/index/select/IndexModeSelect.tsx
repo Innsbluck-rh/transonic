@@ -1,14 +1,14 @@
 import { Component, createMemo, createSignal, For, Show } from 'solid-js';
 
-import { BROWSE_MODE_URLS, BrowseMode } from '../NavigationSideBar';
-import panelStates from './select_states.module.css';
+import { BROWSE_MODE_URLS, BrowseMode } from '../IndexSideBar';
+import selectStates from './select_states.module.css';
 
-interface NavigationTypeSelectProps {
+interface IndexModeSelectProps {
   defaultMode: BrowseMode;
   onSelect?: (mode: BrowseMode) => void;
 }
 
-const NavigationTypeSelect: Component<NavigationTypeSelectProps> = (props) => {
+const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
   const browseMode = createMemo(() => props.defaultMode);
   const [open, setOpen] = createSignal(false);
   const otherModes = createMemo<BrowseMode[]>(() => Object.keys(BROWSE_MODE_URLS).filter((mode): mode is BrowseMode => mode !== browseMode()));
@@ -25,12 +25,12 @@ const NavigationTypeSelect: Component<NavigationTypeSelectProps> = (props) => {
           class={`opacity-50 w-0 h-0 self-center ml-auto
             border-l-[5px] border-l-transparent 
             border-r-[5px] border-r-transparent 
-            border-t-[5px] border-t-zinc-800 ${panelStates.toggle}`}
-          classList={{ [panelStates['is-open']]: open() }}
+            border-t-[5px] border-t-zinc-800 ${selectStates.toggle}`}
+          classList={{ [selectStates['is-open']]: open() }}
         ></div>
       </div>
-      <div class={`grid ${panelStates.panel}`} classList={{ [panelStates['is-open']]: open() }}>
-        <div class={`relative flex flex-col ${panelStates['panel-inner']}`}>
+      <div class={`grid ${selectStates.panel}`} classList={{ [selectStates['is-open']]: open() }}>
+        <div class={`relative flex flex-col ${selectStates['panel-inner']}`}>
           {/* top shadow */}
           <div class='pointer-events-none absolute top-0 h-3 w-full bg-linear-to-t from-transparent to-zinc-500 opacity-10' />
           <For each={otherModes()}>
@@ -59,4 +59,4 @@ const NavigationTypeSelect: Component<NavigationTypeSelectProps> = (props) => {
   );
 };
 
-export default NavigationTypeSelect;
+export default IndexModeSelect;

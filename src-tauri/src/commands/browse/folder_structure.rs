@@ -3,114 +3,167 @@ use std::collections::{HashMap, HashSet};
 use async_trait::async_trait;
 use opensubsonic_client::{
     api::browsing::{
-        BrowsingApi, GetIndexesRequest, GetIndexesResponse, GetMusicDirectoryRequest,
-        GetMusicDirectoryResponse as ApiGetMusicDirectoryResponse,
+        BrowsingApi, GetMusicDirectoryRequest, GetMusicDirectoryResponse as ApiDirectoryResponse,
     },
     ApiError, Envelope,
 };
+use serde::Deserialize;
+use serde_json::Value;
+use tauri::{AppHandle, State};
 
 use crate::{
-    browse_parser::{parse_artist_indexes, parse_music_directory},
-    models::{
-        FolderStructureAlbumItem, FolderStructureAlbumsResponse, FolderStructureRootNode,
-        FolderStructureRootsResponse, FolderStructureSource, MusicDirectoryChild,
-        MusicFolderSummary,
+    commands::{
+        common::{client, format_api_error},
+        json::{opt_boolish, opt_stringish, opt_u32ish, stringish, value_as, vec_or_single},
     },
+    models::{
+        FolderStructureAlbumItem, FolderStructureAlbumsRequest, FolderStructureAlbumsResponse,
+    },
+    ActiveSessionState,
 };
 
 const UNKNOWN_ALBUM_NAME: &str = "Unknown Album";
 
-#[async_trait]
-pub(crate) trait FolderStructureBrowsingApi: Send + Sync {
-    async fn get_indexes(
-        &self,
-        req: GetIndexesRequest,
-    ) -> Result<Envelope<GetIndexesResponse>, ApiError>;
+#[derive(Debug, Clone, Deserialize)]
+struct RawDirectory {
+    name: String,
+    #[serde(default, deserialize_with = "vec_or_single")]
+    child: Vec<RawChild>,
+}
 
-    async fn get_music_directory(
-        &self,
-        req: GetMusicDirectoryRequest,
-    ) -> Result<Envelope<ApiGetMusicDirectoryResponse>, ApiError>;
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawChild {
+    #[serde(deserialize_with = "stringish")]
+    id: String,
+    album: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    album_id: Option<String>,
+    artist: Option<String>,
+    cover_art: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    media_type: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    content_type: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    item_type: Option<String>,
+    #[serde(default, deserialize_with = "opt_boolish")]
+    is_dir: Option<bool>,
+    #[serde(default, deserialize_with = "opt_boolish")]
+    is_video: Option<bool>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    year: Option<u32>,
+}
+
+impl RawChild {
+    fn is_directory(&self) -> bool {
+        self.is_dir.unwrap_or(false)
+    }
+
+    fn is_song(&self) -> bool {
+        if self.is_directory() {
+            return false;
+        }
+
+        if let Some(media_type) = normalize_text(self.media_type.as_deref()) {
+            return media_type.eq_ignore_ascii_case("song");
+        }
+
+        if self.is_video.unwrap_or(false) {
+            return false;
+        }
+
+        if let Some(content_type) = normalize_text(self.content_type.as_deref()) {
+            if content_type.to_ascii_lowercase().starts_with("audio/") {
+                return true;
+            }
+        }
+
+        if let Some(item_type) = normalize_text(self.item_type.as_deref()) {
+            if item_type.eq_ignore_ascii_case("music") {
+                return true;
+            }
+        }
+
+        true
+    }
+
+    fn song(&self) -> SongRow {
+        SongRow {
+            album: self.album.clone(),
+            album_id: self.album_id.clone(),
+            artist: self.artist.clone(),
+            cover_art_id: self.cover_art.clone(),
+            year: self.year,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct SongRow {
+    album: Option<String>,
+    album_id: Option<String>,
+    artist: Option<String>,
+    cover_art_id: Option<String>,
+    year: Option<u32>,
 }
 
 #[async_trait]
-impl<T> FolderStructureBrowsingApi for T
-where
-    T: BrowsingApi + Send + Sync,
-{
-    async fn get_indexes(
-        &self,
-        req: GetIndexesRequest,
-    ) -> Result<Envelope<GetIndexesResponse>, ApiError> {
-        BrowsingApi::get_indexes(self, req).await
-    }
-
+trait AlbumsApi: Send + Sync {
     async fn get_music_directory(
         &self,
         req: GetMusicDirectoryRequest,
-    ) -> Result<Envelope<ApiGetMusicDirectoryResponse>, ApiError> {
+    ) -> Result<Envelope<ApiDirectoryResponse>, ApiError>;
+}
+
+#[async_trait]
+impl<T> AlbumsApi for T
+where
+    T: BrowsingApi + Send + Sync,
+{
+    async fn get_music_directory(
+        &self,
+        req: GetMusicDirectoryRequest,
+    ) -> Result<Envelope<ApiDirectoryResponse>, ApiError> {
         BrowsingApi::get_music_directory(self, req).await
     }
 }
 
-pub(crate) async fn load_folder_structure_roots<C>(
-    client: &C,
-    library: &MusicFolderSummary,
-) -> Result<FolderStructureRootsResponse, ApiError>
-where
-    C: FolderStructureBrowsingApi,
-{
-    match client
-        .get_music_directory(GetMusicDirectoryRequest {
-            id: library.id.clone(),
-        })
-        .await
-    {
-        Ok(response) => {
-            let directory =
-                parse_music_directory(response.payload.directory).map_err(ApiError::Protocol)?;
-
-            Ok(FolderStructureRootsResponse {
-                library_id: library.id.clone(),
-                library_name: library.name.clone(),
-                source: FolderStructureSource::Directory,
-                root_nodes: root_nodes_from_directory_children(&directory.children),
-            })
-        }
-        Err(error) if should_use_indexes_fallback(&error) => {
-            let response = client
-                .get_indexes(GetIndexesRequest {
-                    music_folder_id: Some(library.id.clone()),
-                    if_modified_since: None,
-                })
-                .await?;
-            let artists =
-                parse_artist_indexes(response.payload.indexes).map_err(ApiError::Protocol)?;
-
-            Ok(FolderStructureRootsResponse {
-                library_id: library.id.clone(),
-                library_name: library.name.clone(),
-                source: FolderStructureSource::Indexes,
-                root_nodes: artists
-                    .into_iter()
-                    .map(|artist| FolderStructureRootNode {
-                        id: artist.id,
-                        name: artist.name,
-                    })
-                    .collect(),
-            })
-        }
-        Err(error) => Err(error),
+#[tauri::command]
+#[specta::specta]
+pub async fn get_folder_structure_albums(
+    app: AppHandle,
+    state: State<'_, ActiveSessionState>,
+    payload: FolderStructureAlbumsRequest,
+) -> Result<FolderStructureAlbumsResponse, String> {
+    let library_id = payload.library_id.trim();
+    if library_id.is_empty() {
+        return Err("libraryId is required.".to_string());
     }
+
+    let node_id = payload.node_id.trim();
+    if node_id.is_empty() {
+        return Err("nodeId is required.".to_string());
+    }
+
+    let client = client(&app, &state.0)?;
+    load_albums(&client, library_id, node_id)
+        .await
+        .map_err(format_api_error)
 }
 
-pub(crate) async fn load_folder_structure_albums<C>(
+fn parse_directory(payload: Value) -> Result<RawDirectory, String> {
+    value_as(payload)
+        .map_err(|error| format!("Failed to parse the music directory payload: {error}"))
+}
+
+async fn load_albums<C>(
     client: &C,
     library_id: &str,
     node_id: &str,
 ) -> Result<FolderStructureAlbumsResponse, ApiError>
 where
-    C: FolderStructureBrowsingApi,
+    C: AlbumsApi,
 {
     let mut visited_ids = HashSet::new();
     let mut stack = vec![node_id.to_string()];
@@ -125,27 +178,26 @@ where
         let response = client
             .get_music_directory(GetMusicDirectoryRequest { id: current_id })
             .await?;
-        let directory =
-            parse_music_directory(response.payload.directory).map_err(ApiError::Protocol)?;
+        let directory = parse_directory(response.payload.directory).map_err(ApiError::Protocol)?;
 
         if node_name.is_none() {
             node_name = Some(directory.name.clone());
         }
 
-        let mut child_directories = Vec::new();
-        for child in directory.children {
-            if child.is_directory {
-                child_directories.push(child.id.clone());
+        let mut directories = Vec::new();
+        for child in directory.child {
+            if child.is_directory() {
+                directories.push(child.id.clone());
                 continue;
             }
 
-            if child.media_type.as_deref() == Some("song") {
-                songs.push(child);
+            if child.is_song() {
+                songs.push(child.song());
             }
         }
 
-        for child_directory_id in child_directories.into_iter().rev() {
-            stack.push(child_directory_id);
+        for directory_id in directories.into_iter().rev() {
+            stack.push(directory_id);
         }
     }
 
@@ -153,39 +205,13 @@ where
         library_id: library_id.to_string(),
         node_id: node_id.to_string(),
         node_name: node_name.unwrap_or_else(|| "[Unknown]".to_string()),
-        albums: aggregate_folder_structure_albums(songs),
+        albums: aggregate_albums(songs),
     })
 }
 
-fn root_nodes_from_directory_children(
-    children: &[MusicDirectoryChild],
-) -> Vec<FolderStructureRootNode> {
-    children
-        .iter()
-        .filter(|child| child.is_directory)
-        .map(|child| FolderStructureRootNode {
-            id: child.id.clone(),
-            name: child.title.clone(),
-        })
-        .collect()
-}
-
-fn should_use_indexes_fallback(error: &ApiError) -> bool {
-    match error {
-        ApiError::Api { code, .. } if *code == 70 => true,
-        ApiError::Api { message, .. } => message
-            .as_deref()
-            .map(|message| message.to_ascii_lowercase().contains("directory not found"))
-            .unwrap_or(false),
-        _ => false,
-    }
-}
-
-fn aggregate_folder_structure_albums(
-    songs: Vec<MusicDirectoryChild>,
-) -> Vec<FolderStructureAlbumItem> {
+fn aggregate_albums(songs: Vec<SongRow>) -> Vec<FolderStructureAlbumItem> {
     #[derive(Debug)]
-    struct AlbumAccumulator {
+    struct AlbumGroup {
         id: String,
         name: String,
         artist_counts: HashMap<String, usize>,
@@ -194,7 +220,7 @@ fn aggregate_folder_structure_albums(
         year: Option<u32>,
     }
 
-    impl AlbumAccumulator {
+    impl AlbumGroup {
         fn new(id: String, name: String) -> Self {
             Self {
                 id,
@@ -206,7 +232,7 @@ fn aggregate_folder_structure_albums(
             }
         }
 
-        fn absorb_song(&mut self, song: &MusicDirectoryChild) {
+        fn absorb(&mut self, song: &SongRow) {
             if let Some(artist) = normalize_text(song.artist.as_deref()) {
                 if !self.artist_counts.contains_key(&artist) {
                     self.artist_order.push(artist.clone());
@@ -223,7 +249,7 @@ fn aggregate_folder_structure_albums(
             }
         }
 
-        fn representative_artist(&self) -> Option<String> {
+        fn artist(&self) -> Option<String> {
             let mut best_artist: Option<&str> = None;
             let mut best_count = 0usize;
 
@@ -239,25 +265,24 @@ fn aggregate_folder_structure_albums(
         }
     }
 
-    let mut groups: HashMap<String, AlbumAccumulator> = HashMap::new();
+    let mut groups: HashMap<String, AlbumGroup> = HashMap::new();
 
     for song in songs {
         let album_name =
             normalize_text(song.album.as_deref()).unwrap_or_else(|| UNKNOWN_ALBUM_NAME.to_string());
-        let group_key = album_group_key(&song);
-        let group_id =
-            normalize_text(song.album_id.as_deref()).unwrap_or_else(|| group_key.clone());
+        let key = album_key(&song);
+        let id = normalize_text(song.album_id.as_deref()).unwrap_or_else(|| key.clone());
 
         groups
-            .entry(group_key)
-            .or_insert_with(|| AlbumAccumulator::new(group_id, album_name))
-            .absorb_song(&song);
+            .entry(key)
+            .or_insert_with(|| AlbumGroup::new(id, album_name))
+            .absorb(&song);
     }
 
     let mut albums: Vec<_> = groups
         .into_values()
         .map(|group| {
-            let artist = group.representative_artist();
+            let artist = group.artist();
 
             FolderStructureAlbumItem {
                 id: group.id,
@@ -290,7 +315,7 @@ fn aggregate_folder_structure_albums(
     albums
 }
 
-fn album_group_key(song: &MusicDirectoryChild) -> String {
+fn album_key(song: &SongRow) -> String {
     if let Some(album_id) = normalize_text(song.album_id.as_deref()) {
         return format!("album_id:{album_id}");
     }
@@ -321,43 +346,26 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
-    use opensubsonic_client::{ResponseMeta, ResponseStatus};
+    use opensubsonic_client::{ApiError, ResponseMeta, ResponseStatus};
     use serde_json::json;
 
-    use super::{
-        load_folder_structure_albums, load_folder_structure_roots, ApiGetMusicDirectoryResponse,
-        FolderStructureBrowsingApi, GetIndexesRequest, GetIndexesResponse,
-        GetMusicDirectoryRequest, MusicFolderSummary,
-    };
-    use crate::models::FolderStructureSource;
-    use opensubsonic_client::{ApiError, Envelope};
+    use super::{load_albums, AlbumsApi, ApiDirectoryResponse, GetMusicDirectoryRequest};
+    use opensubsonic_client::Envelope;
 
     #[derive(Debug, Clone)]
     enum MockResponse {
         Ok(serde_json::Value),
-        ApiError { code: u32, message: Option<String> },
     }
 
     #[derive(Debug, Clone, Default)]
-    struct MockFolderStructureApi {
+    struct MockAlbumsApi {
         directory_responses: std::collections::HashMap<String, MockResponse>,
-        indexes_responses: std::collections::HashMap<Option<String>, MockResponse>,
         call_log: Arc<Mutex<Vec<String>>>,
     }
 
-    impl MockFolderStructureApi {
+    impl MockAlbumsApi {
         fn with_directory_response(mut self, id: &str, response: MockResponse) -> Self {
             self.directory_responses.insert(id.to_string(), response);
-            self
-        }
-
-        fn with_indexes_response(
-            mut self,
-            music_folder_id: Option<&str>,
-            response: MockResponse,
-        ) -> Self {
-            self.indexes_responses
-                .insert(music_folder_id.map(str::to_string), response);
             self
         }
 
@@ -367,31 +375,11 @@ mod tests {
     }
 
     #[async_trait]
-    impl FolderStructureBrowsingApi for MockFolderStructureApi {
-        async fn get_indexes(
-            &self,
-            req: GetIndexesRequest,
-        ) -> Result<Envelope<GetIndexesResponse>, ApiError> {
-            self.call_log
-                .lock()
-                .unwrap()
-                .push(format!("indexes:{:?}", req.music_folder_id));
-
-            match self
-                .indexes_responses
-                .get(&req.music_folder_id)
-                .cloned()
-                .expect("missing mock indexes response")
-            {
-                MockResponse::Ok(indexes) => Ok(ok_envelope(GetIndexesResponse { indexes })),
-                MockResponse::ApiError { code, message } => Err(api_error(code, message)),
-            }
-        }
-
+    impl AlbumsApi for MockAlbumsApi {
         async fn get_music_directory(
             &self,
             req: GetMusicDirectoryRequest,
-        ) -> Result<Envelope<ApiGetMusicDirectoryResponse>, ApiError> {
+        ) -> Result<Envelope<ApiDirectoryResponse>, ApiError> {
             self.call_log
                 .lock()
                 .unwrap()
@@ -403,10 +391,7 @@ mod tests {
                 .cloned()
                 .expect("missing mock directory response")
             {
-                MockResponse::Ok(directory) => {
-                    Ok(ok_envelope(ApiGetMusicDirectoryResponse { directory }))
-                }
-                MockResponse::ApiError { code, message } => Err(api_error(code, message)),
+                MockResponse::Ok(directory) => Ok(ok_envelope(ApiDirectoryResponse { directory })),
             }
         }
     }
@@ -424,21 +409,6 @@ mod tests {
         }
     }
 
-    fn api_error(code: u32, message: Option<String>) -> ApiError {
-        ApiError::Api {
-            code,
-            message,
-            help_url: None,
-            meta: ResponseMeta {
-                status: ResponseStatus::Failed,
-                api_version: "1.16.1".to_string(),
-                server_type: Some("mock".to_string()),
-                server_version: Some("1.0.0".to_string()),
-                open_subsonic: Some(true),
-            },
-        }
-    }
-
     fn folder_song(
         id: &str,
         album: Option<&str>,
@@ -450,100 +420,19 @@ mod tests {
     ) -> serde_json::Value {
         json!({
             "id": id,
-            "parent": "album-node",
             "isDir": false,
-            "title": format!("Song {id}"),
             "album": album,
             "albumId": album_id,
             "artist": artist,
             "coverArt": cover_art_id,
             "year": year,
-            "track": 1,
-            "discNumber": 1,
-            "path": format!("root/{id}.flac"),
             "mediaType": media_type
         })
     }
 
     #[tokio::test]
-    async fn load_folder_structure_roots_uses_music_directory_when_available() {
-        let library = MusicFolderSummary {
-            id: "1".to_string(),
-            name: "Library".to_string(),
-        };
-        let api = MockFolderStructureApi::default().with_directory_response(
-            "1",
-            MockResponse::Ok(json!({
-                "id": "1",
-                "name": "Library",
-                "child": [
-                    {
-                        "id": "artist-a",
-                        "title": "Artist A",
-                        "isDir": true
-                    },
-                    {
-                        "id": "song-1",
-                        "title": "Loose Song",
-                        "isDir": false,
-                        "mediaType": "song"
-                    }
-                ]
-            })),
-        );
-
-        let response = load_folder_structure_roots(&api, &library).await.unwrap();
-
-        assert_eq!(response.library_id, "1");
-        assert_eq!(response.library_name, "Library");
-        assert_eq!(response.source, FolderStructureSource::Directory);
-        assert_eq!(response.root_nodes.len(), 1);
-        assert_eq!(response.root_nodes[0].id, "artist-a");
-        assert_eq!(response.root_nodes[0].name, "Artist A");
-        assert_eq!(api.calls(), vec!["directory:1"]);
-    }
-
-    #[tokio::test]
-    async fn load_folder_structure_roots_falls_back_to_indexes_for_directory_not_found() {
-        let library = MusicFolderSummary {
-            id: "1".to_string(),
-            name: "Library".to_string(),
-        };
-        let api = MockFolderStructureApi::default()
-            .with_directory_response(
-                "1",
-                MockResponse::ApiError {
-                    code: 70,
-                    message: Some("Directory not found".to_string()),
-                },
-            )
-            .with_indexes_response(
-                Some("1"),
-                MockResponse::Ok(json!({
-                    "index": [
-                        {
-                            "artist": [
-                                {
-                                    "id": "artist-a",
-                                    "name": "Artist A"
-                                }
-                            ]
-                        }
-                    ]
-                })),
-            );
-
-        let response = load_folder_structure_roots(&api, &library).await.unwrap();
-
-        assert_eq!(response.source, FolderStructureSource::Indexes);
-        assert_eq!(response.root_nodes.len(), 1);
-        assert_eq!(response.root_nodes[0].id, "artist-a");
-        assert_eq!(api.calls(), vec!["directory:1", "indexes:Some(\"1\")"]);
-    }
-
-    #[tokio::test]
-    async fn load_folder_structure_albums_merges_split_album_parts_into_one_card() {
-        let api = MockFolderStructureApi::default()
+    async fn load_albums_merges_split_album_parts_into_one_card() {
+        let api = MockAlbumsApi::default()
             .with_directory_response(
                 "artist-a",
                 MockResponse::Ok(json!({
@@ -552,12 +441,10 @@ mod tests {
                     "child": [
                         {
                             "id": "album-c-part-1",
-                            "title": "AlbumC_parted",
                             "isDir": true
                         },
                         {
                             "id": "album-c-part-2",
-                            "title": "AlbumC_parted2",
                             "isDir": true
                         }
                     ]
@@ -584,9 +471,7 @@ mod tests {
                 })),
             );
 
-        let response = load_folder_structure_albums(&api, "1", "artist-a")
-            .await
-            .unwrap();
+        let response = load_albums(&api, "1", "artist-a").await.unwrap();
 
         assert_eq!(response.albums.len(), 1);
         assert_eq!(response.albums[0].id, "album-c");
@@ -596,8 +481,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn load_folder_structure_albums_uses_song_artist_for_album_artist_label() {
-        let api = MockFolderStructureApi::default()
+    async fn load_albums_uses_song_artist_for_album_artist_label() {
+        let api = MockAlbumsApi::default()
             .with_directory_response(
                 "artist-a",
                 MockResponse::Ok(json!({
@@ -606,7 +491,6 @@ mod tests {
                     "child": [
                         {
                             "id": "album-b",
-                            "title": "Album B",
                             "isDir": true
                         }
                     ]
@@ -623,17 +507,15 @@ mod tests {
                 })),
             );
 
-        let response = load_folder_structure_albums(&api, "1", "artist-a")
-            .await
-            .unwrap();
+        let response = load_albums(&api, "1", "artist-a").await.unwrap();
 
         assert_eq!(response.albums.len(), 1);
         assert_eq!(response.albums[0].artist.as_deref(), Some("ArtistB"));
     }
 
     #[tokio::test]
-    async fn load_folder_structure_albums_uses_unknown_album_fallback() {
-        let api = MockFolderStructureApi::default().with_directory_response(
+    async fn load_albums_uses_unknown_album_fallback() {
+        let api = MockAlbumsApi::default().with_directory_response(
             "folder-root",
             MockResponse::Ok(json!({
                 "id": "folder-root",
@@ -644,9 +526,7 @@ mod tests {
             })),
         );
 
-        let response = load_folder_structure_albums(&api, "1", "folder-root")
-            .await
-            .unwrap();
+        let response = load_albums(&api, "1", "folder-root").await.unwrap();
 
         assert_eq!(response.albums.len(), 1);
         assert_eq!(response.albums[0].name, "Unknown Album");
@@ -654,8 +534,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn load_folder_structure_albums_does_not_visit_the_same_node_twice() {
-        let api = MockFolderStructureApi::default()
+    async fn load_albums_does_not_visit_the_same_node_twice() {
+        let api = MockAlbumsApi::default()
             .with_directory_response(
                 "root",
                 MockResponse::Ok(json!({
@@ -664,12 +544,10 @@ mod tests {
                     "child": [
                         {
                             "id": "loop",
-                            "title": "Loop",
                             "isDir": true
                         },
                         {
                             "id": "loop",
-                            "title": "Loop Duplicate",
                             "isDir": true
                         }
                     ]
@@ -683,7 +561,6 @@ mod tests {
                     "child": [
                         {
                             "id": "root",
-                            "title": "Back To Root",
                             "isDir": true
                         },
                         folder_song("song-1", Some("Album Loop"), Some("album-loop"), Some("Artist Loop"), Some("song"), Some(2021), None)
@@ -691,9 +568,7 @@ mod tests {
                 })),
             );
 
-        let response = load_folder_structure_albums(&api, "1", "root")
-            .await
-            .unwrap();
+        let response = load_albums(&api, "1", "root").await.unwrap();
         let calls = api.calls();
         let root_calls = calls
             .iter()
