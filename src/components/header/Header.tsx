@@ -1,4 +1,4 @@
-import { useNavigate } from '@solidjs/router';
+import { useLocation, useNavigate } from '@solidjs/router';
 import { Component, Show } from 'solid-js';
 import { sessionStore } from '~/stores/SessionStore';
 import Title from '../common/Title';
@@ -10,6 +10,7 @@ interface HeaderProps {
 }
 
 const Header: Component<HeaderProps> = (props) => {
+  const location = useLocation();
   const navigate = useNavigate();
 
   return (
@@ -18,6 +19,7 @@ const Header: Component<HeaderProps> = (props) => {
         {props.title ?? 'Transonic'}
       </Title>
       <div class='flex-1' />
+      <p class='text-xs opacity-25 mr-3'>{location.pathname}</p>
       <Show when={props.shouldShowProfiles}>
         <ProfilesNew profiles={sessionStore.profiles} />
       </Show>

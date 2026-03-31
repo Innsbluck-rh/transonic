@@ -10,7 +10,7 @@ function NotFound() {
       <div class='flex flex-col gap-4 p-4  bg-zinc-100'>
         <Icon icon='pixelarticons:fire' class='text-8xl w-fit' />
         <Heading1>Oops!</Heading1>
-        <p class='archivo italic opacity-75'>This Page ({location.pathname}) is not available.</p>
+        <p class='archivo italic opacity-75'>This Page ({decodeURIComponent(location.pathname)}) is not available.</p>
         <button class='w-fit' onClick={() => navigate(-1)}>
           Back
         </button>
