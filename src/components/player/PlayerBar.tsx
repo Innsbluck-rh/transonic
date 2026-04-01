@@ -1,5 +1,5 @@
-import { Component, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { commands, PlaybackState, SongResponse } from '~/bindings';
+import { Component, createEffect, createMemo, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
+import { commands, PlaybackLoadingReason, PlaybackState, SongResponse } from '~/bindings';
 import { hasPlaybackCommandError } from '~/features/playback/service';
 import { playbackStore } from '~/stores/PlaybackStore';
 import PlayerIcon from './PlayerIcon';
@@ -32,18 +32,49 @@ function clampPositionMs(positionMs: number, durationMs: number) {
   return Math.min(Math.max(0, positionMs), durationMs);
 }
 
-const PlayerBar: Component = () => {
+// this may include
+type PlayerIcons = 'prev' | 'playpause' | 'next';
+
+interface PlayerBarProps {
+  iconsVisibility?: Record<PlayerIcons, boolean>;
+}
+
+const PlayerBar: Component<PlayerBarProps> = (props) => {
+  const iconsVisibility: Record<PlayerIcons, boolean> = props.iconsVisibility ?? {
+    prev: true,
+    playpause: true,
+    next: true,
+  };
+
   const [playingSong, setPlayingSong] = createSignal<SongResponse | null>(null);
   const [syncedPositionMs, setSyncedPositionMs] = createSignal<number>(0);
   const [positionSyncedAtMs, setPositionSyncedAtMs] = createSignal<number>(Date.now());
   const [nowMs, setNowMs] = createSignal<number>(Date.now());
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
+  const [pendingSeekPositionMs, setPendingSeekPositionMs] = createSignal<number | null>(null);
+  const [seeking, setSeeking] = createSignal<boolean>(false);
+  const [canAnimatePlayingProgress, setCanAnimatePlayingProgress] = createSignal<boolean>(false);
 
   const status = createMemo(() => playbackStore.status);
   const playbackState = createMemo(() => status()?.state);
+  const loadingReason = createMemo<PlaybackLoadingReason | null>(() => status()?.loadingReason ?? null);
   const isLoading = createMemo(() => playbackState() === 'loading');
   const isInactive = createMemo(() => isInactivePlaybackState(playbackState()));
   const currentSongId = createMemo(() => status()?.currentSongId ?? null);
+  const loadingLabel = createMemo(() => {
+    switch (loadingReason()) {
+      case 'seeking':
+        return '[seeking...]';
+      case 'buffering':
+        return '[buffering...]';
+      default:
+        return '[loading...]';
+    }
+  });
+  const subtitleText = createMemo(() => {
+    const artist = playingSong()?.artist || '[unknown]';
+    return isLoading() ? `${artist} ${loadingLabel()}` : artist;
+  });
 
   const syncPlaybackPosition = (positionMs: number) => {
     const syncedAtMs = Date.now();
@@ -51,6 +82,8 @@ const PlayerBar: Component = () => {
     setPositionSyncedAtMs(syncedAtMs);
     setNowMs(syncedAtMs);
     setPreviewPositionMs(null);
+    setPendingSeekPositionMs(null);
+    setSeeking(false);
   };
 
   const songDurationMs = createMemo(() => {
@@ -64,6 +97,11 @@ const PlayerBar: Component = () => {
       return clampPositionMs(nextPreviewPositionMs, songDurationMs());
     }
 
+    const nextPendingSeekPositionMs = pendingSeekPositionMs();
+    if (nextPendingSeekPositionMs !== null) {
+      return clampPositionMs(nextPendingSeekPositionMs, songDurationMs());
+    }
+
     const currentStatus = status();
     if (!currentStatus) {
       return 0;
@@ -71,7 +109,7 @@ const PlayerBar: Component = () => {
 
     const durationMs = songDurationMs();
     const basePositionMs = syncedPositionMs();
-    if (currentStatus.state !== 'playing') {
+    if (currentStatus.state !== 'playing' || !canAnimatePlayingProgress()) {
       return clampPositionMs(basePositionMs, durationMs);
     }
 
@@ -85,16 +123,20 @@ const PlayerBar: Component = () => {
 
   const handleSeekCommit = async (nextPositionMs: number) => {
     const durationMs = songDurationMs();
-    if (durationMs <= 0) {
+    if (durationMs <= 0 || seeking()) {
       setPreviewPositionMs(null);
       return;
     }
 
-    setPreviewPositionMs(nextPositionMs);
+    const clampedPositionMs = clampPositionMs(nextPositionMs, durationMs);
+    setPreviewPositionMs(null);
+    setPendingSeekPositionMs(clampedPositionMs);
+    setSeeking(true);
 
-    const result = await commands.playbackSeek({ positionMs: nextPositionMs });
+    const result = await commands.playbackSeek({ positionMs: clampedPositionMs });
     if (hasPlaybackCommandError(result)) {
-      setPreviewPositionMs(null);
+      setPendingSeekPositionMs(null);
+      setSeeking(false);
     }
   };
 
@@ -127,14 +169,18 @@ const PlayerBar: Component = () => {
     onCleanup(() => window.clearInterval(intervalId));
   });
 
-  createEffect(() => {
+  createEffect((previousPlaybackState?: PlaybackState) => {
     const currentStatus = status();
     if (!currentStatus) {
+      setCanAnimatePlayingProgress(false);
       syncPlaybackPosition(0);
-      return;
+      return undefined;
     }
 
     syncPlaybackPosition(currentStatus.currentPositionMs);
+    const confirmedPlayingUpdate = currentStatus.state === 'playing' && (previousPlaybackState === 'playing' || currentStatus.currentPositionMs > 0);
+    setCanAnimatePlayingProgress(confirmedPlayingUpdate);
+    return currentStatus.state;
   });
 
   createEffect(() => {
@@ -166,32 +212,55 @@ const PlayerBar: Component = () => {
         <PlayerSlider
           valueMs={currentPositionMs()}
           maxMs={songDurationMs()}
-          disabled={!canSeek()}
+          disabled={!canSeek() || seeking()}
           onPreview={(valueMs) => setPreviewPositionMs(valueMs)}
           onCommit={handleSeekCommit}
         />
       </div>
       <div class='flex flex-row w-full h-full px-4 gap-2 items-center'>
         <div class='flex flex-row gap-2 items-center'>
-          <PlayerIcon type='prev' disabled={isInactive()} onClick={handlePrev} />
-          <PlayerIcon
-            type={playbackState() === 'playing' ? 'pause' : 'play'}
-            disabled={isInactive()}
-            loading={isLoading()}
-            onClick={handlePlayPause}
-          />
-          <PlayerIcon type='next' disabled={isInactive()} onClick={handleNext} />
+          <Show when={iconsVisibility.prev}>
+            <PlayerIcon type='prev' disabled={isInactive()} onClick={handlePrev} />
+          </Show>
+          <Show when={iconsVisibility.playpause}>
+            <PlayerIcon
+              type={playbackState() === 'playing' ? 'pause' : 'play'}
+              disabled={isInactive()}
+              loading={isLoading()}
+              onClick={handlePlayPause}
+            />
+          </Show>
+          <Show when={iconsVisibility.next}>
+            <PlayerIcon type='next' disabled={isInactive()} onClick={handleNext} />
+          </Show>
         </div>
 
-        <div class='flex flex-col flex-1 ml-2'>
-          <p class='archivo bold'>{playingSong()?.title || 'play something...'}</p>
-          <p class='archivo italic text-xs leading-none opacity-75'>{playingSong()?.artist || '[unknown]'}</p>
-        </div>
-        <div class='flex flex-col gap-1'>
-          <p class='archivo text-xs'>
-            {formatTime(currentPositionMs() / 1000)} / {formatTime(songDurationMs() / 1000)}
-          </p>
-        </div>
+        <Switch
+          fallback={
+            <>
+              <div class='flex flex-col flex-1 ml-2'>
+                <p class='archivo bold'>{playingSong()?.title || '[unknown]'}</p>
+                <p class='archivo italic text-xs leading-none text-secondary-text'>{subtitleText()}</p>
+              </div>
+              <div class='flex flex-col gap-1 mr-1'>
+                <p class='archivo text-xs'>
+                  {formatTime(currentPositionMs() / 1000)} / {formatTime(songDurationMs() / 1000)}
+                </p>
+              </div>
+            </>
+          }
+        >
+          <Match when={playbackState() === 'error'}>
+            <div class='flex-1 ml-2'>
+              <p class='archivo italic text-secondary-text'>[error occured]</p>
+            </div>
+          </Match>
+          <Match when={playbackState() === 'idle'}>
+            <div class='flex-1 ml-2'>
+              <p class='archivo italic text-secondary-text'>[nothing played]</p>
+            </div>
+          </Match>
+        </Switch>
       </div>
     </div>
   );

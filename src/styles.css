@@ -29,14 +29,16 @@
   --color-secondary-text: var(--color-zinc-500);
 
   --color-accent: var(--color-sky-600);
+
+  --color-sp-nav-space: var(--color-zinc-600);
 }
 
 .sp-top-space {
-  @apply bg-zinc-500;
+  @apply bg-sp-nav-space;
   height: env(safe-area-inset-top);
 }
 .sp-bottom-space {
-  @apply bg-zinc-500;
+  @apply bg-sp-nav-space;
   height: env(safe-area-inset-bottom);
 }
 

@@ -10,13 +10,17 @@ pub fn create_playback_backend() -> Box<dyn PlaybackBackend> {
 enum PlaybackJob {
     Load {
         request: PreparedBinaryRequest,
-        start_position_ms: u32,
+        absolute_start_position_ms: u32,
+        local_start_position_ms: u32,
         autoplay: bool,
         result_tx: std::sync::mpsc::Sender<Result<(), String>>,
     },
     Seek {
         position_ms: u32,
         result_tx: std::sync::mpsc::Sender<Result<(), String>>,
+    },
+    CurrentPosition {
+        result_tx: std::sync::mpsc::Sender<Result<u32, String>>,
     },
     Pause {
         result_tx: std::sync::mpsc::Sender<Result<(), String>>,
@@ -52,18 +56,33 @@ impl WindowsPlaybackBackend {
             .recv()
             .unwrap_or_else(|_| Err("Playback worker terminated unexpectedly.".to_string()))
     }
+
+    fn request_position_result(
+        &self,
+        build_job: impl FnOnce(std::sync::mpsc::Sender<Result<u32, String>>) -> PlaybackJob,
+    ) -> Result<u32, String> {
+        let (result_tx, result_rx) = std::sync::mpsc::channel::<Result<u32, String>>();
+        self.tx
+            .send(build_job(result_tx))
+            .map_err(|_| "Playback worker is unavailable.".to_string())?;
+        result_rx
+            .recv()
+            .unwrap_or_else(|_| Err("Playback worker terminated unexpectedly.".to_string()))
+    }
 }
 
 impl PlaybackBackend for WindowsPlaybackBackend {
     fn load(
         &mut self,
         request: PreparedBinaryRequest,
-        start_position_ms: u32,
+        absolute_start_position_ms: u32,
+        local_start_position_ms: u32,
         autoplay: bool,
     ) -> Result<(), String> {
         self.request_result(|result_tx| PlaybackJob::Load {
             request,
-            start_position_ms,
+            absolute_start_position_ms,
+            local_start_position_ms,
             autoplay,
             result_tx,
         })
@@ -74,6 +93,10 @@ impl PlaybackBackend for WindowsPlaybackBackend {
             position_ms,
             result_tx,
         })
+    }
+
+    fn current_position_ms(&self) -> Result<u32, String> {
+        self.request_position_result(|result_tx| PlaybackJob::CurrentPosition { result_tx })
     }
 
     fn pause(&mut self) -> Result<(), String> {
@@ -92,17 +115,26 @@ fn playback_worker_loop(rx: std::sync::mpsc::Receiver<PlaybackJob>) {
         match job {
             PlaybackJob::Load {
                 request,
-                start_position_ms,
+                absolute_start_position_ms,
+                local_start_position_ms,
                 autoplay,
                 result_tx,
             } => {
-                let _ = result_tx.send(worker.load(request, start_position_ms, autoplay));
+                let _ = result_tx.send(worker.load(
+                    request,
+                    absolute_start_position_ms,
+                    local_start_position_ms,
+                    autoplay,
+                ));
             }
             PlaybackJob::Seek {
                 position_ms,
                 result_tx,
             } => {
                 let _ = result_tx.send(worker.seek(position_ms));
+            }
+            PlaybackJob::CurrentPosition { result_tx } => {
+                let _ = result_tx.send(worker.current_position_ms());
             }
             PlaybackJob::Pause { result_tx } => {
                 let _ = result_tx.send(worker.pause());
@@ -116,23 +148,21 @@ fn playback_worker_loop(rx: std::sync::mpsc::Receiver<PlaybackJob>) {
 
 #[derive(Default)]
 struct WindowsPlaybackWorker {
-    output_stream: Option<rodio::OutputStream>,
-    output_stream_handle: Option<rodio::OutputStreamHandle>,
-    sink: Option<rodio::Sink>,
+    output_stream: Option<rodio::MixerDeviceSink>,
+    sink: Option<rodio::Player>,
+    loaded_absolute_position_ms: Option<u32>,
 }
 
 impl WindowsPlaybackWorker {
-    fn ensure_output_stream(&mut self) -> Result<&rodio::OutputStreamHandle, String> {
-        if self.output_stream.is_none() || self.output_stream_handle.is_none() {
-            let (output_stream, output_stream_handle) = rodio::OutputStream::try_default()
-                .map_err(|error| {
-                    format!("Failed to initialize the Windows audio output: {error}")
-                })?;
+    fn ensure_output_stream(&mut self) -> Result<&rodio::MixerDeviceSink, String> {
+        if self.output_stream.is_none() {
+            let output_stream = rodio::DeviceSinkBuilder::open_default_sink().map_err(|error| {
+                format!("Failed to initialize the Windows audio output: {error}")
+            })?;
             self.output_stream = Some(output_stream);
-            self.output_stream_handle = Some(output_stream_handle);
         }
 
-        self.output_stream_handle
+        self.output_stream
             .as_ref()
             .ok_or_else(|| "Windows audio output is unavailable.".to_string())
     }
@@ -140,7 +170,8 @@ impl WindowsPlaybackWorker {
     fn load(
         &mut self,
         request: PreparedBinaryRequest,
-        start_position_ms: u32,
+        absolute_start_position_ms: u32,
+        local_start_position_ms: u32,
         autoplay: bool,
     ) -> Result<(), String> {
         use rodio::Source;
@@ -179,10 +210,9 @@ impl WindowsPlaybackWorker {
         )))
         .map_err(|error| format!("Failed to decode stream bytes: {error}"))?
         .skip_duration(std::time::Duration::from_millis(u64::from(
-            start_position_ms,
+            local_start_position_ms,
         )));
-        let sink = rodio::Sink::try_new(self.ensure_output_stream()?)
-            .map_err(|error| format!("Failed to create the playback sink: {error}"))?;
+        let sink = rodio::Player::connect_new(self.ensure_output_stream()?.mixer());
 
         if let Some(existing_sink) = self.sink.take() {
             existing_sink.stop();
@@ -195,6 +225,7 @@ impl WindowsPlaybackWorker {
             sink.pause();
         }
         self.sink = Some(sink);
+        self.loaded_absolute_position_ms = Some(absolute_start_position_ms);
 
         Ok(())
     }
@@ -206,6 +237,20 @@ impl WindowsPlaybackWorker {
         };
         sink.try_seek(std::time::Duration::from_millis(u64::from(position_ms)))
             .map_err(|error| format!("Failed to seek the playback sink: {error}"))
+    }
+
+    fn current_position_ms(&self) -> Result<u32, String> {
+        let Some(sink) = self.sink.as_ref() else {
+            log::warn!("backend.current_position_ms: no sink is loaded");
+            return Err("No stream is loaded for playback.".to_string());
+        };
+
+        let base_position_ms = self
+            .loaded_absolute_position_ms
+            .ok_or_else(|| "Playback position base is unavailable.".to_string())?;
+        let elapsed_ms = sink.get_pos().as_millis();
+        let elapsed_ms = u32::try_from(elapsed_ms).unwrap_or(u32::MAX);
+        Ok(base_position_ms.saturating_add(elapsed_ms))
     }
 
     fn pause(&mut self) -> Result<(), String> {
@@ -221,6 +266,7 @@ impl WindowsPlaybackWorker {
         if let Some(sink) = self.sink.take() {
             sink.stop();
         }
+        self.loaded_absolute_position_ms = None;
         Ok(())
     }
 }

@@ -2,7 +2,7 @@ import { useNavigate } from '@solidjs/router';
 import { Component, Show } from 'solid-js';
 import { sessionStore } from '~/stores/SessionStore';
 import Title from '../Title';
-import ProfilesNew from './Profiles';
+import ProfilesNew from './ServerProfile';
 
 interface HeaderProps {
   title?: string;

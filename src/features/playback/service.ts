@@ -1,5 +1,7 @@
 import { commands, events, PlaybackStatus } from '~/bindings';
-import { setPlaybackStore } from '~/stores/PlaybackStore';
+import { playbackStore, setPlaybackStore } from '~/stores/PlaybackStore';
+
+const PLAYBACK_STATE_POLL_MS = 1000;
 
 type PlaybackCommandResult = { status: 'ok' } | { status: 'error'; error: string };
 
@@ -8,23 +10,50 @@ function applyPlaybackState(status: PlaybackStatus) {
 }
 
 export async function startPlaybackStateSync() {
-  let receivedEvent = false;
+  let stateGeneration = 0;
+  let pollInFlight = false;
+
+  const applyAuthoritativeState = (status: PlaybackStatus) => {
+    stateGeneration += 1;
+    applyPlaybackState(status);
+  };
+
   const unlisten = await events.playbackStatus.listen((event) => {
-    receivedEvent = true;
-    applyPlaybackState(event.payload);
+    applyAuthoritativeState(event.payload);
   });
 
-  const stateResult = await commands.playbackGetState();
-  if (stateResult.status === 'error') {
-    console.error(stateResult.error);
-    return unlisten;
-  }
+  const refreshPlaybackState = async () => {
+    const startedAtGeneration = stateGeneration;
+    const stateResult = await commands.playbackGetState();
+    if (stateResult.status === 'error') {
+      console.error(stateResult.error);
+      return;
+    }
 
-  if (!receivedEvent) {
-    applyPlaybackState(stateResult.data);
-  }
+    if (startedAtGeneration !== stateGeneration) {
+      return;
+    }
 
-  return unlisten;
+    applyAuthoritativeState(stateResult.data);
+  };
+
+  await refreshPlaybackState();
+
+  const intervalId = window.setInterval(() => {
+    if (pollInFlight || playbackStore.status?.state !== 'playing') {
+      return;
+    }
+
+    pollInFlight = true;
+    void refreshPlaybackState().finally(() => {
+      pollInFlight = false;
+    });
+  }, PLAYBACK_STATE_POLL_MS);
+
+  return () => {
+    window.clearInterval(intervalId);
+    unlisten();
+  };
 }
 
 export function hasPlaybackCommandError(result: PlaybackCommandResult) {

@@ -13,10 +13,18 @@ pub enum PlaybackState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackLoadingReason {
+    Buffering,
+    Seeking,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueEntry {
     pub song_id: String,
     pub title: String,
+    pub path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -36,6 +44,7 @@ pub struct PlaybackSeekRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackStatus {
     pub state: PlaybackState,
+    pub loading_reason: Option<PlaybackLoadingReason>,
     pub queue: Vec<PlaybackQueueEntry>,
     pub current_index: Option<u32>,
     pub current_position_ms: u32,
@@ -47,6 +56,7 @@ impl PlaybackStatus {
     pub fn empty() -> Self {
         Self {
             state: PlaybackState::Idle,
+            loading_reason: None,
             queue: Vec::new(),
             current_index: None,
             current_position_ms: 0,

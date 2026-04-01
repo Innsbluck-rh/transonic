@@ -5,7 +5,6 @@ import AlbumCover from './AlbumCover';
 interface AlbumGridItemProps {
   class?: string;
   album: AlbumListItem;
-  clickable?: boolean;
   onClick?: (e: MouseEvent) => void;
   onDblClick?: (e: MouseEvent) => void;
   onArtClick?: (e: MouseEvent) => void;
@@ -13,18 +12,22 @@ interface AlbumGridItemProps {
 }
 
 const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
-  const isClickable = props.clickable === undefined ? true : props.clickable;
+  const isClickable = !!(props.onClick || props.onDblClick || props.onArtClick || props.onArtDblClick);
 
   return (
     <div
       class={`group flex flex-col shrink-0 gap-0.5 ${props.class}`}
-      classList={{
-        'cursor-pointer': isClickable,
-      }}
       onClick={(e) => props.onArtClick?.(e)}
       onDblClick={(e) => props.onArtDblClick?.(e)}
     >
-      <div class='relative w-fit h-fit' onClick={(e) => props.onClick?.(e)} onDblClick={(e) => props.onDblClick?.(e)}>
+      <div
+        class='relative w-fit h-fit'
+        classList={{
+          'cursor-pointer': isClickable,
+        }}
+        onClick={(e) => props.onClick?.(e)}
+        onDblClick={(e) => props.onDblClick?.(e)}
+      >
         <AlbumCover albumName={props.album.name} coverArtId={props.album.coverArtId} year={props.album.year} />
         <div
           class='absolute top-0 bottom-0 left-0 right-0  bg-[#00000020] hidden'

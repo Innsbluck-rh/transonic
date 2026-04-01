@@ -20,8 +20,8 @@ fn active_capability_matrix(state: &ActiveSessionState) -> Result<CapabilityMatr
 pub fn playback_get_state(
     state: State<'_, PlaybackControllerState>,
 ) -> Result<PlaybackStatus, String> {
-    let controller = state.0.lock().unwrap();
-    Ok(controller.state())
+    let mut controller = state.0.lock().unwrap();
+    controller.synced_state()
 }
 
 #[tauri::command]
