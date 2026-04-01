@@ -18,10 +18,21 @@ pub fn builder() -> Builder<tauri::Wry> {
         commands::get_music_folders,
         commands::get_folder_structure_roots,
         commands::get_folder_structure_albums,
+        commands::get_folder_structure_album_songs,
         commands::get_artist_indexes,
         commands::get_music_directory,
+        commands::get_album_songs,
+        commands::get_song,
         commands::get_album_list,
-        commands::get_cover_art
+        commands::get_cover_art,
+        commands::playback_get_state,
+        commands::playback_set_queue,
+        commands::playback_play,
+        commands::playback_pause,
+        commands::playback_stop,
+        commands::playback_seek,
+        commands::playback_next,
+        commands::playback_prev
     ])
 }
 

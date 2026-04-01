@@ -7,6 +7,7 @@ async-trait = "0.1"
 md5 = "0.7"
 rand = "0.8"
 reqwest = { version = "0.12", default-features = false, features = [
+    "blocking",
     "json",
     "rustls-tls",
 ] }
@@ -39,6 +40,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
+tauri-plugin-log = "2"
 opensubsonic-client = { path = "crates/opensubsonic-client" }
 reqwest = { workspace = true }
 serde = { workspace = true }
@@ -49,9 +51,11 @@ base64 = "0.22"
 specta = { workspace = true }
 specta-typescript = { workspace = true }
 tauri-specta = { workspace = true }
+log = "0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
 keyring = { version = "3", features = ["windows-native"] }
+rodio = "0.20"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }

@@ -12,7 +12,7 @@ export default defineConfig(async () => ({
     solid(),
     tailwindcss(),
     webfontDownload([
-      'https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:ital,wght@0,100..900;1,100..900&family=Public+Sans:ital,wght@0,100..900;1,100..900&display=swap',
+      'https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:ital,wght@0,100..900;1,100..900&family=Public+Sans:ital,wght@0,100..900;1,100..900&display=block',
     ]),
   ],
 

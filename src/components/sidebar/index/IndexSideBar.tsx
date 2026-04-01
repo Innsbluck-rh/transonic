@@ -14,7 +14,7 @@ const IndexSideBar: Component = () => {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Folder Structures');
 
   return (
-    <div class='flex flex-col min-w-40 w-56 border-r border-zinc-600 resize-x overflow-auto'>
+    <div class='flex flex-col min-w-40 w-56 border-r border-primary-border resize-x overflow-auto'>
       <IndexModeSelect
         defaultMode={browseMode()}
         onSelect={(mode) => {

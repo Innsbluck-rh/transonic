@@ -53,6 +53,14 @@ async getFolderStructureAlbums(payload: FolderStructureAlbumsRequest) : Promise<
     else return { status: "error", error: e  as any };
 }
 },
+async getFolderStructureAlbumSongs(payload: FolderStructureAlbumSongsRequest) : Promise<Result<FolderStructureAlbumSongsResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_folder_structure_album_songs", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getArtistIndexes(payload: ArtistIndexesRequest | null) : Promise<Result<ArtistIndexesResponse, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_artist_indexes", { payload }) };
@@ -69,6 +77,22 @@ async getMusicDirectory(payload: MusicDirectoryRequest) : Promise<Result<MusicDi
     else return { status: "error", error: e  as any };
 }
 },
+async getAlbumSongs(payload: AlbumSongsRequest) : Promise<Result<AlbumSongsResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_album_songs", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getSong(payload: SongRequest) : Promise<Result<SongResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_song", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getAlbumList(payload: AlbumListRequest) : Promise<Result<AlbumListResponse, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_album_list", { payload }) };
@@ -80,6 +104,70 @@ async getAlbumList(payload: AlbumListRequest) : Promise<Result<AlbumListResponse
 async getCoverArt(payload: CoverArtRequest) : Promise<Result<CoverArtResponse, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_cover_art", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackGetState() : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_get_state") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackSetQueue(payload: PlaybackSetQueueRequest) : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_set_queue", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackPlay() : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_play") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackPause() : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_pause") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackStop() : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_stop") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackSeek(payload: PlaybackSeekRequest) : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_seek", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackNext() : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_next") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackPrev() : Promise<Result<PlaybackStatus, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_prev") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -102,6 +190,8 @@ export type AlbumListContext = "random" | "newest" | "frequent" | "recent" | "st
 export type AlbumListItem = { id: string; name: string; artist: string | null; coverArtId: string | null; year: number | null }
 export type AlbumListRequest = { context: AlbumListContext; size: number | null; offset: number | null; fromYear: number | null; toYear: number | null; genre: string | null; musicFolderId: string | null }
 export type AlbumListResponse = { context: AlbumListContext; albums: AlbumListItem[] }
+export type AlbumSongsRequest = { id: string }
+export type AlbumSongsResponse = { albumId: string; songs: SongResponse[] }
 export type AppBootstrap = { profiles: SavedProfileSummary[]; activeSession: ActiveSession | null; restoreStatus: RestoreStatus; message: string | null }
 export type ArtistIndexItem = { id: string; name: string }
 export type ArtistIndexesRequest = { musicFolderId: string | null }
@@ -114,6 +204,8 @@ export type ConnectServerProfileResult = { status: "connected"; activeSession: A
 export type CoverArtRequest = { coverArtId: string; size: number | null }
 export type CoverArtResponse = { dataUrl: string }
 export type FolderStructureAlbumItem = { id: string; name: string; artist: string | null; coverArtId: string | null; year: number | null }
+export type FolderStructureAlbumSongsRequest = { libraryId: string; nodeId: string; albumId: string }
+export type FolderStructureAlbumSongsResponse = { libraryId: string; nodeId: string; albumId: string; songs: SongResponse[] }
 export type FolderStructureAlbumsRequest = { libraryId: string; nodeId: string }
 export type FolderStructureAlbumsResponse = { libraryId: string; nodeId: string; nodeName: string; albums: FolderStructureAlbumItem[] }
 export type FolderStructureRootNode = { id: string; name: string }
@@ -127,9 +219,16 @@ export type MusicDirectoryResponse = { id: string; name: string; children: Music
 export type MusicFolderSummary = { id: string; name: string }
 export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
+export type PlaybackQueueEntry = { songId: string }
+export type PlaybackSeekRequest = { positionMs: number }
+export type PlaybackSetQueueRequest = { entries: PlaybackQueueEntry[]; currentIndex: number | null }
+export type PlaybackState = "idle" | "loading" | "playing" | "paused" | "stopped" | "error"
+export type PlaybackStatus = { state: PlaybackState; queue: PlaybackQueueEntry[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
 export type ProfileIdRequest = { profileId: string }
 export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"
 export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }
+export type SongRequest = { id: string }
+export type SongResponse = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; duration: number | null; isDirectory: boolean; mediaType: string | null }
 
 /** tauri-specta globals **/
 

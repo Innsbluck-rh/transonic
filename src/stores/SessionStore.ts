@@ -9,8 +9,6 @@ interface SessionStore {
 const DEFAULT_SESSION_STORE: SessionStore = {
   profiles: [],
   activeSession: null,
-} as const;
+};
 
-const [sessionStore, setSessionStore] = createStore<SessionStore>(DEFAULT_SESSION_STORE);
-
-export { sessionStore, setSessionStore };
+export const [sessionStore, setSessionStore] = createStore<SessionStore>(DEFAULT_SESSION_STORE);

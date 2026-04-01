@@ -1,11 +1,11 @@
 import { Component, createSignal, onMount, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
-import BrowseList, { BrowseListItem } from '~/components/list/BrowseList';
+import BrowseList, { BrowseListItem } from '~/components/common/list/BrowseList';
 
-interface FolderListProps {}
+interface ArtistListProps {}
 
-const FolderList: Component<FolderListProps> = (props) => {
+const ArtistList: Component<ArtistListProps> = (props) => {
   const [loading, setLoading] = createSignal<boolean>(false);
   const [items, setItems] = createSignal<BrowseListItem[]>([]);
 
@@ -20,21 +20,19 @@ const FolderList: Component<FolderListProps> = (props) => {
     const mfData = mfResult.data;
     // temporaly use first
     const library = mfData.musicFolders[0];
-    const fsrResult = await commands.getFolderStructureRoots({
-      libraryId: library.id,
-    });
-    if (fsrResult.status === 'error') {
-      console.error(fsrResult.error);
+    const aiResult = await commands.getArtistIndexes({ musicFolderId: library.id });
+    if (aiResult.status === 'error') {
+      console.error(aiResult.error);
       setLoading(false);
       return;
     }
 
     setItems(
-      fsrResult.data.rootNodes.map((node) => {
+      aiResult.data.artists.map((artist) => {
         return {
-          id: node.id,
-          name: node.name,
-          href: `/browse/folders/${encodeURIComponent(library.id)}/${encodeURIComponent(node.id)}`,
+          id: artist.id,
+          name: artist.name,
+          href: `/browse/artists/${encodeURIComponent(artist.id)}`,
         } as BrowseListItem;
       })
     );
@@ -55,4 +53,4 @@ const FolderList: Component<FolderListProps> = (props) => {
   );
 };
 
-export default FolderList;
+export default ArtistList;

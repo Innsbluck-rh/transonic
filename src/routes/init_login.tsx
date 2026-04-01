@@ -3,7 +3,7 @@ import { createSignal, Show } from 'solid-js';
 import { commands, type ConnectServerProfileRequest, type ConnectServerProfileResult } from '~/bindings';
 import AuthForm, { AuthFormData } from '~/components/auth/AuthForm';
 import ErrorMsg from '~/components/common/ErrorMsg';
-import Header from '~/components/header/Header';
+import Header from '~/components/common/header/Header';
 import { setSessionStore } from '~/stores/SessionStore';
 
 function formatFailureMsg(result: ConnectServerProfileResult) {
@@ -88,7 +88,7 @@ function InitLogin() {
     <div class='flex flex-col w-dvw h-dvh'>
       <Header title='Login to server' shouldShowProfiles={false} />
       <div class='flex flex-col w-full h-full items-center justify-center bg-zinc-200'>
-        <div class='flex flex-col p-7 gap-3 bg-zinc-50 border border-zinc-600 rounded-md'>
+        <div class='flex flex-col p-7 gap-3 bg-primary-plane border border-zinc-600 rounded-md'>
           <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
 
           <Show when={submitError()}>

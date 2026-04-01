@@ -5,12 +5,23 @@ type PlayerIconTypes = 'play' | 'pause' | 'next' | 'prev';
 
 interface PlayerIconProps {
   type: PlayerIconTypes;
+  disabled?: boolean;
+  onClick?: (e: MouseEvent) => void;
 }
 
 const PlayerIcon: Component<PlayerIconProps> = (props) => {
   return (
-    <div class='flex items-center justify-center p-2 cursor-pointer rounded-full hover:bg-zinc-200'>
-      <Icon icon={`${getIconForType(props.type)}`} class='text-zinc-700 scale-150' />
+    <div
+      class='flex items-center justify-center p-2 rounded-full'
+      classList={{
+        'cursor-pointer hover:bg-zinc-200': !props.disabled,
+      }}
+      onClick={(e) => {
+        if (props.disabled) return;
+        props.onClick?.(e);
+      }}
+    >
+      <Icon icon={`${getIconForType(props.type)}`} class={`${props.disabled ? 'text-zinc-400' : 'text-zinc-700'} scale-150`} />
     </div>
   );
 };

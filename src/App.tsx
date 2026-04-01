@@ -1,16 +1,15 @@
 // @refresh reload
 
 import { MetaProvider } from '@solidjs/meta';
-import { Route, Router } from '@solidjs/router';
-import Index from './routes';
+import { Navigate, Route, Router } from '@solidjs/router';
+import { HOME_ROUTE } from './features/session/bootstrap';
 import BrowseArtistAlbums from './routes/browse/artist_albums';
 import BrowseFolderStructure from './routes/browse/folder_structure';
+import AppError from './routes/error';
 import Home from './routes/home';
-import HomeConnectionError from './routes/home_errors/connection_error';
-import HomeNoNetwork from './routes/home_errors/no_network';
 import HomeLayout from './routes/homeLayout';
+import InitLoad from './routes/init_load';
 import InitLogin from './routes/init_login';
-import NotFound from './routes/notFound';
 
 export default function App() {
   return (
@@ -24,17 +23,18 @@ export default function App() {
         </MetaProvider>
       )}
     >
-      <Route path='/' component={Index} />
-      <Route component={HomeLayout}>
-        <Route path='/home' component={Home} />
-        <Route path='/home/no_network' component={HomeNoNetwork} />
-        <Route path='/home/connection_error' component={HomeConnectionError} />
-        <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
-        <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
-        <Route path='/browse/artists/:id' component={BrowseArtistAlbums} />
+      <Route path='/' component={() => <Navigate href={HOME_ROUTE} />} />
+      <Route component={InitLoad}>
+        <Route path='/home/error' component={AppError} />
+        <Route component={HomeLayout}>
+          <Route path='/home' component={Home} />
+          <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
+          <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
+          <Route path='/browse/artists/:id' component={BrowseArtistAlbums} />
+        </Route>
       </Route>
       <Route path='/init_login' component={InitLogin} />
-      <Route path='*404' component={NotFound} />
+      <Route path='*404' component={AppError} />
     </Router>
   );
 }

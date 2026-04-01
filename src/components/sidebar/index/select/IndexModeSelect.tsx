@@ -16,7 +16,7 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
   return (
     <div class='flex flex-col'>
       <div
-        class='flex flex-row w-full cursor-pointer border-b border-zinc-400 px-3 py-2 text-left hover:bg-zinc-100'
+        class='flex flex-row w-full cursor-pointer border-b border-primary-border px-3 py-2 text-left hover:bg-primary-surface'
         onClick={() => setOpen((current) => !current)}
       >
         <p class='archivo font-bold text-zinc-800 text-xs'>{browseMode()}</p>

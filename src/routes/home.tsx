@@ -2,7 +2,8 @@ import { createSignal, For, onMount, Show } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
 import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
-import AlbumHorizontalList from '~/components/list/AlbumHorizontalList';
+import AlbumHorizontalList from '~/components/common/list/AlbumHorizontalList';
+import { syncPlaybackState } from '~/features/playback/service';
 import { sessionStore } from '~/stores/SessionStore';
 
 type HomeAlbumSection = {
@@ -75,6 +76,7 @@ function Home() {
 
   onMount(async () => {
     await loadHomeAlbumSections();
+    await syncPlaybackState();
   });
 
   return (
@@ -86,7 +88,7 @@ function Home() {
         </div>
       }
     >
-      <div class='flex flex-col gap-4 p-3 w-full h-full bg-zinc-100 overflow-x-hidden overflow-y-auto'>
+      <div class='flex flex-col gap-4 p-3 w-full h-full bg-primary-surface overflow-x-hidden overflow-y-auto'>
         <Heading1>Hello.</Heading1>
 
         <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>

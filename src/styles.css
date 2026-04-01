@@ -16,6 +16,14 @@
   font-style: normal;
 }
 
+@theme {
+  --color-primary-plane: var(--color-zinc-50);
+  --color-primary-surface: var(--color-zinc-100);
+
+  --color-primary-border: var(--color-zinc-400);
+  --color-secondary-border: var(--color-zinc-200);
+}
+
 @layer base {
   html,
   body {
@@ -74,4 +82,8 @@
       @apply cursor-none;
     }
   }
+}
+
+.home-surface-root {
+  @apply flex flex-col gap-4 p-3 h-full w-full overflow-x-hidden overflow-y-auto bg-primary-surface;
 }
