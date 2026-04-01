@@ -8,7 +8,8 @@ version: 0.0.1
 
 - 再生実装の正本は Rust backend に置くことに決定した。
 - queue は順序を持つ配列として扱い、現在位置は曲 ID ではなく queue 上の index で扱うことに決定した。
-- OS 依存の再生処理は shim 境界の内側に閉じ込め、v1 では Windows 実装のみを持つことに決定した。
+- ~~OS 依存の再生処理は shim 境界の内側に閉じ込め、v1 では Windows 実装のみを持つことに決定した。~~
+  (2026-04-01 17:27) shim 境界の内側に閉じ込める方針は維持します。2026-03-31 時点では Windows 実装のみでしたが、v1 を Windows 固定の意味では扱わず、Windows、Android、そのほかの OS の backend を追加しうる前提に修正しました。
 - server への再生報告は再生成立の前提にはせず、OpenSubsonic/Subsonic の capability に応じて使い分けることに決定した。
 
 ## 今回決めたこと
@@ -28,7 +29,8 @@ version: 0.0.1
 ### OS 依存の再生処理は shim 境界に閉じ込める
 
 - Rust backend には playback controller と backend interface を置き、その外側へ OS 依存の実装を漏らさない。
-- v1 の再生実装は Windows backend のみを持つ。
+- ~~v1 の再生実装は Windows backend のみを持つ。~~
+  (2026-04-01 17:27) これは 2026-03-31 時点の実装状況でした。v1 を Windows 専用の意味では扱わず、Windows、Android、そのほかの OS の backend を追加しうる前提に修正しました。
 - 他 OS の事情を frontend や command 層へ広げない。
 
 ### 音源取得は `stream` を基準にし、transcode は条件付きで扱う

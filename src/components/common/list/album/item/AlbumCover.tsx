@@ -24,17 +24,11 @@ const AlbumCover: Component<AlbumCoverProps> = (props) => {
   const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
 
   return (
-    <Show when={coverArt()} fallback={<PseudoAlbumCover coverArtId={props.coverArtId} year={props.year} />}>
-      {(dataUrl) => (
-        <img
-          class='aspect-square border border-zinc-200 object-cover'
-          src={dataUrl()}
-          alt={`${props.albumName} cover art`}
-          loading='lazy'
-          decoding='async'
-        />
-      )}
-    </Show>
+    <div class='aspect-square object-cover border border-zinc-200'>
+      <Show when={coverArt()} fallback={<PseudoAlbumCover coverArtId={props.coverArtId} year={props.year} />}>
+        {(dataUrl) => <img class='aspect-square object-cover' src={dataUrl()} alt={`${props.albumName} cover art`} loading='lazy' decoding='async' />}
+      </Show>
+    </div>
   );
 };
 
