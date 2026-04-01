@@ -1,7 +1,7 @@
 import { Component, createSignal, onMount, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
-import BrowseList, { BrowseListItem } from '~/components/common/list/BrowseList';
+import BrowseList, { BrowseListItem } from '~/components/common/list/index/BrowseList';
 
 interface FolderListProps {}
 

@@ -1,11 +1,13 @@
 import { Icon } from '@iconify-icon/solid';
-import { Component } from 'solid-js';
+import { Component, Show } from 'solid-js';
+import LoadCircle from '../common/LoadCircle';
 
 type PlayerIconTypes = 'play' | 'pause' | 'next' | 'prev';
 
 interface PlayerIconProps {
   type: PlayerIconTypes;
   disabled?: boolean;
+  loading?: boolean;
   onClick?: (e: MouseEvent) => void;
 }
 
@@ -14,14 +16,16 @@ const PlayerIcon: Component<PlayerIconProps> = (props) => {
     <div
       class='flex items-center justify-center p-2 rounded-full'
       classList={{
-        'cursor-pointer hover:bg-zinc-200': !props.disabled,
+        'cursor-pointer hover:bg-primary-hover': !props.disabled,
       }}
       onClick={(e) => {
         if (props.disabled) return;
         props.onClick?.(e);
       }}
     >
-      <Icon icon={`${getIconForType(props.type)}`} class={`${props.disabled ? 'text-zinc-400' : 'text-zinc-700'} scale-150`} />
+      <Show when={!props.loading} fallback={<LoadCircle />}>
+        <Icon icon={`${getIconForType(props.type)}`} class={`${props.disabled ? 'text-zinc-400' : 'text-zinc-700'} scale-150`} />
+      </Show>
     </div>
   );
 };

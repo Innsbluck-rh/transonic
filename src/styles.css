@@ -20,16 +20,33 @@
   --color-primary-plane: var(--color-zinc-50);
   --color-primary-surface: var(--color-zinc-100);
 
+  --color-primary-hover: var(--color-zinc-200);
+
   --color-primary-border: var(--color-zinc-400);
-  --color-secondary-border: var(--color-zinc-200);
+  --color-secondary-border: var(--color-zinc-300);
+
+  --color-primary-text: var(--color-zinc-800);
+  --color-secondary-text: var(--color-zinc-500);
+
+  --color-accent: var(--color-sky-600);
+}
+
+.sp-top-space {
+  @apply bg-zinc-500;
+  height: env(safe-area-inset-top);
+}
+.sp-bottom-space {
+  @apply bg-zinc-500;
+  height: env(safe-area-inset-bottom);
 }
 
 @layer base {
   html,
   body {
+    @apply box-border;
     font-family: 'Public Sans', sans-serif;
     line-height: 1;
-    width: 100vw;
+    width: 100dvw;
     overflow-x: hidden;
     user-select: none;
   }
@@ -65,7 +82,7 @@
   span,
   input,
   label {
-    @apply text-sm text-zinc-800;
+    @apply text-sm text-primary-text;
   }
 
   select {
@@ -76,7 +93,7 @@
   }
 
   button {
-    @apply text-sm font-bold px-1.5 py-0.5 border border-zinc-600 rounded-sm cursor-pointer hover:bg-zinc-200;
+    @apply text-sm font-bold px-1.5 py-0.5 border border-zinc-600 rounded-sm cursor-pointer hover:bg-primary-hover;
 
     &:disabled {
       @apply cursor-none;
@@ -85,5 +102,5 @@
 }
 
 .home-surface-root {
-  @apply flex flex-col gap-4 p-3 h-full w-full overflow-x-hidden overflow-y-auto bg-primary-surface;
+  @apply flex flex-col gap-2 flex-1 min-h-0 w-full overflow-x-hidden overflow-y-auto bg-primary-surface;
 }

@@ -1,6 +1,6 @@
 import { Component, createMemo, createSignal, For, Show } from 'solid-js';
 
-import { BROWSE_MODE_URLS, BrowseMode } from '../IndexSideBar';
+import { BROWSE_MODE_URLS, BrowseMode } from '../IndexContent';
 import selectStates from './select_states.module.css';
 
 interface IndexModeSelectProps {
@@ -16,7 +16,7 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
   return (
     <div class='flex flex-col'>
       <div
-        class='flex flex-row w-full cursor-pointer border-b border-primary-border px-3 py-2 text-left hover:bg-primary-surface'
+        class='flex flex-row w-full cursor-pointer border-b border-primary-border px-3 py-2 text-left hover:bg-primary-hover'
         onClick={() => setOpen((current) => !current)}
       >
         <p class='archivo font-bold text-zinc-800 text-xs'>{browseMode()}</p>

@@ -45,8 +45,8 @@ const HomeLayout: ParentComponent = (props) => {
           <div class='flex flex-row w-full h-full overflow-hidden'>
             <IndexSideBar />
             <div class='flex flex-col min-w-0 flex-1 h-full'>
-              <div class='flex flex-row w-full items-center h-6 px-1 bg-primary-plane border-b border-primary-border'>
-                <p class='archivo text-[10px] opacity-50'>{location.pathname}</p>
+              <div class='flex flex-row w-full h-6 items-center px-1 bg-primary-plane border-b border-primary-border'>
+                <p class='archivo text-[10px] text-secondary-text'>{location.pathname}</p>
               </div>
               {props.children}
             </div>

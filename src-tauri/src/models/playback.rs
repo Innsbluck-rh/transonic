@@ -16,6 +16,7 @@ pub enum PlaybackState {
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackQueueEntry {
     pub song_id: String,
+    pub title: String,
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]

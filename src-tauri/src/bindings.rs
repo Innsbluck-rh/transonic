@@ -11,30 +11,31 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 use crate::{commands, models::PlaybackStatus};
 
 pub fn builder() -> Builder<tauri::Wry> {
-    Builder::<tauri::Wry>::new().commands(collect_commands![
-        commands::bootstrap_app_state,
-        commands::connect_server_profile,
-        commands::delete_server_profile,
-        commands::get_music_folders,
-        commands::get_folder_structure_roots,
-        commands::get_folder_structure_albums,
-        commands::get_folder_structure_album_songs,
-        commands::get_artist_indexes,
-        commands::get_music_directory,
-        commands::get_album_songs,
-        commands::get_song,
-        commands::get_album_list,
-        commands::get_cover_art,
-        commands::playback_get_state,
-        commands::playback_set_queue,
-        commands::playback_play,
-        commands::playback_pause,
-        commands::playback_stop,
-        commands::playback_seek,
-        commands::playback_next,
-        commands::playback_prev
-    ])
-    .events(collect_events![PlaybackStatus])
+    Builder::<tauri::Wry>::new()
+        .commands(collect_commands![
+            commands::bootstrap_app_state,
+            commands::connect_server_profile,
+            commands::delete_server_profile,
+            commands::get_music_folders,
+            commands::get_folder_structure_roots,
+            commands::get_folder_structure_albums,
+            commands::get_folder_structure_album_songs,
+            commands::get_artist_indexes,
+            commands::get_music_directory,
+            commands::get_album_songs,
+            commands::get_song,
+            commands::get_album_list,
+            commands::get_cover_art,
+            commands::playback_get_state,
+            commands::playback_set_queue,
+            commands::playback_play,
+            commands::playback_pause,
+            commands::playback_stop,
+            commands::playback_seek,
+            commands::playback_next,
+            commands::playback_prev
+        ])
+        .events(collect_events![PlaybackStatus])
 }
 
 pub fn export_typescript_bindings() -> Result<(), specta_typescript::ExportError> {
@@ -133,7 +134,7 @@ impl fmt::Display for BindingsCheckError {
 impl Error for BindingsCheckError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::Export(err) => Some(err),
+            Self::Export(..) => None,
             Self::Io(err) => Some(err),
             Self::Drift { .. } => None,
         }

@@ -51,10 +51,9 @@ pub use index::folder_structure::{
 pub use playback::{
     __cmd__playback_get_state, __cmd__playback_next, __cmd__playback_pause, __cmd__playback_play,
     __cmd__playback_prev, __cmd__playback_seek, __cmd__playback_set_queue, __cmd__playback_stop,
-    __specta__fn__playback_get_state,
-    __specta__fn__playback_next, __specta__fn__playback_pause, __specta__fn__playback_play,
-    __specta__fn__playback_prev, __specta__fn__playback_seek, __specta__fn__playback_set_queue,
-    __specta__fn__playback_stop,
+    __specta__fn__playback_get_state, __specta__fn__playback_next, __specta__fn__playback_pause,
+    __specta__fn__playback_play, __specta__fn__playback_prev, __specta__fn__playback_seek,
+    __specta__fn__playback_set_queue, __specta__fn__playback_stop,
 };
 #[doc(hidden)]
 pub use session::{

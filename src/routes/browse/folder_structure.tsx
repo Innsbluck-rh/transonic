@@ -1,10 +1,9 @@
 import { useParams } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
-import { commands, PlaybackQueueEntry, type AlbumListItem, type FolderStructureAlbumsResponse, type FolderStructureRootsResponse } from '~/bindings';
-import Heading3 from '~/components/common/Heading3';
+import { commands, type AlbumListItem, type FolderStructureAlbumsResponse, type FolderStructureRootsResponse } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
-import AlbumGrid from '~/components/common/list/AlbumGrid';
-import { hasPlaybackCommandError } from '~/features/playback/service';
+import AlbumGrid from '~/components/common/list/album/AlbumGrid';
+import { replaceQueueWithFolderAlbumAndPlay } from '~/features/playback/album';
 import { sessionStore } from '~/stores/SessionStore';
 
 function decodePathParam(value?: string) {
@@ -124,32 +123,18 @@ function BrowseFolderStructure() {
   });
 
   return (
-    <div class='home-surface-root'>
+    <div class='home-surface-root p-3'>
       <Show when={error()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
       <Show when={!isLoading()} fallback={<LoadCircle class='self-center justify-self-center' />}>
-        <Heading3>folders/{heading()}</Heading3>
+        {/* <Heading3>folders/{heading()}</Heading3> */}
         <Show when={nodeId()} fallback={<p class='text-sm text-zinc-500'>Select a folder.</p>}>
           <AlbumGrid
             albums={albums()}
             emptyMessage='No albums available in this folder.'
-            onClickItem={async (album) => {
+            onItemClick={async (album) => {
               if (!params.libraryId || !params.nodeId) return;
-              // get album songs
-              const asResult = await commands.getFolderStructureAlbumSongs({ libraryId: params.libraryId, nodeId: params.nodeId, albumId: album.id });
-              if (asResult.status == 'error') {
-                return;
-              }
-              const entries: PlaybackQueueEntry[] = asResult.data.songs.map((song) => {
-                return { songId: song.id } as PlaybackQueueEntry;
-              });
-              // TODO: consider batch this?
-              const setQueueResult = await commands.playbackSetQueue({ currentIndex: 0, entries });
-              if (hasPlaybackCommandError(setQueueResult)) {
-                return;
-              }
-              const playResult = await commands.playbackPlay();
-              hasPlaybackCommandError(playResult);
+              replaceQueueWithFolderAlbumAndPlay(params.libraryId, params.nodeId, album.id);
             }}
           />
         </Show>

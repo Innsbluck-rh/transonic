@@ -9,7 +9,7 @@ interface ProfilesProps {
 }
 
 const ProfilesNew: Component<ProfilesProps> = (props) => {
-  const first = createMemo(() => props.profiles[0]);
+  const activeProfile = createMemo(() => props.profiles.find((p) => p.isActive));
   const [open, setOpen] = createSignal(false);
 
   let triggerRef: HTMLDivElement;
@@ -31,12 +31,12 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
     <div class='overflow-visible relative'>
       <div
         ref={(ref) => (triggerRef = ref)}
-        class='flex flex-row cursor-pointer items-center select-none px-2 py-1 gap-2 border border-zinc-500 bg-primary-plane rounded-md hover:bg-zinc-200'
+        class='flex flex-row cursor-pointer items-center select-none px-2 py-1 gap-2 border border-zinc-500 bg-primary-plane rounded-md hover:bg-primary-hover'
         onClick={() => setOpen(!open())}
       >
         <Icon icon='pixelarticons:avatar-circle' />
         <Show when={sessionStore.activeSession}>
-          <p class='text-zinc-900 text-xs font-normal'>{first().displayName}</p>
+          <p class='text-zinc-900 text-xs font-normal'>{activeProfile()?.displayName}</p>
         </Show>
         <div
           class='opacity-50 w-0 h-0 
@@ -53,10 +53,17 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
         >
           <div class='flex flex-col items-end'>
             <p>
-              {first().username} ({first().displayName})
+              {activeProfile()?.username} ({activeProfile()?.displayName})
             </p>
-            <p class='text-xs text-zinc-500'>{first().normalizedServerUrl}</p>
-            <a class='underline text-red-500 text-xs w-fit' href='#' onClick={() => deleteProfile(first().profileId)}>
+            <p class='text-xs text-zinc-500'>{activeProfile()?.normalizedServerUrl}</p>
+            <a
+              class='underline text-red-500 text-xs w-fit'
+              href='#'
+              onClick={() => {
+                const profileToDelete = activeProfile();
+                if (profileToDelete) deleteProfile(profileToDelete.profileId);
+              }}
+            >
               delete this profile
             </a>
           </div>

@@ -8,7 +8,7 @@ use crate::models::{
 };
 
 use super::{
-    backend::{create_playback_backend, PlaybackBackend},
+    backend_shims::{create_playback_backend, PlaybackBackend},
     queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
     reporting::{PlaybackEventAppHandle, PlaybackReporter, TauriPlaybackReporter},
 };
@@ -106,18 +106,23 @@ impl PlaybackController {
         requested_position_ms: u32,
     ) -> Result<PlaybackStatus, String> {
         let index = self.ensure_current_index()?;
-        let supports_offset = context.capability_matrix.transcode_offset;
-        let normalized_position_ms =
-            normalize_seek_position(requested_position_ms, supports_offset);
         let autoplay = matches!(self.status.state, PlaybackState::Playing);
 
         if matches!(
             self.status.state,
             PlaybackState::Playing | PlaybackState::Paused
         ) {
-            self.load_track_at_index(context, index, normalized_position_ms, autoplay)?;
+            if let Err(error) = self.backend.seek(requested_position_ms) {
+                log::warn!(
+                    "controller.seek: backend seek failed at position_ms={requested_position_ms}: {error}; falling back to reload"
+                );
+                self.load_track_at_index(context, index, requested_position_ms, autoplay)?;
+            } else {
+                self.status.current_position_ms = requested_position_ms;
+                self.status.error = None;
+            }
         } else {
-            self.status.current_position_ms = normalized_position_ms;
+            self.status.current_position_ms = requested_position_ms;
             self.status.error = None;
         }
 
@@ -237,26 +242,29 @@ impl PlaybackController {
         };
 
         let supports_offset = context.capability_matrix.transcode_offset;
-        let normalized_position_ms =
-            normalize_seek_position(requested_position_ms, supports_offset);
-        let stream_offset_seconds = position_ms_to_offset_seconds(normalized_position_ms);
+        let stream_offset_seconds =
+            stream_seek_offset_seconds(requested_position_ms, supports_offset);
+        let backend_position_ms = backend_seek_position_ms(requested_position_ms, supports_offset);
         self.status.state = PlaybackState::Loading;
         self.status.current_index = Some(index);
         self.status.current_song_id = Some(song_id.clone());
-        self.status.current_position_ms = normalized_position_ms;
+        self.status.current_position_ms = requested_position_ms;
         self.status.error = None;
         self.report_status();
 
         let load_result = (|| {
             let raw_stream =
                 build_stream_request(context.client, &song_id, stream_offset_seconds, true)?;
-            if let Err(raw_error) = self.backend.load(raw_stream, autoplay) {
+            if let Err(raw_error) = self.backend.load(raw_stream, backend_position_ms, autoplay) {
                 log::warn!(
                     "controller.load_track_at_index: raw stream load failed for song_id={song_id}: {raw_error}"
                 );
                 let fallback_stream =
                     build_stream_request(context.client, &song_id, stream_offset_seconds, false)?;
-                if let Err(fallback_error) = self.backend.load(fallback_stream, autoplay) {
+                if let Err(fallback_error) =
+                    self.backend
+                        .load(fallback_stream, backend_position_ms, autoplay)
+                {
                     let message = format!(
                         "Failed to load playback stream. raw stream failed: {raw_error}; fallback stream failed: {fallback_error}"
                     );
@@ -282,7 +290,7 @@ impl PlaybackController {
         } else {
             PlaybackState::Paused
         };
-        self.status.current_position_ms = normalized_position_ms;
+        self.status.current_position_ms = requested_position_ms;
         self.status.current_song_id = Some(song_id);
         self.status.error = None;
 
@@ -346,11 +354,19 @@ fn current_song_id(entries: &[PlaybackQueueEntry], current_index: Option<u32>) -
     entries.get(index).map(|entry| entry.song_id.clone())
 }
 
-fn normalize_seek_position(position_ms: u32, supports_offset: bool) -> u32 {
+fn stream_seek_offset_seconds(position_ms: u32, supports_offset: bool) -> Option<u32> {
     if supports_offset {
-        position_ms
+        position_ms_to_offset_seconds(position_ms)
     } else {
-        0
+        None
+    }
+}
+
+fn backend_seek_position_ms(position_ms: u32, supports_offset: bool) -> u32 {
+    if supports_offset {
+        position_ms % 1000
+    } else {
+        position_ms
     }
 }
 
@@ -387,13 +403,13 @@ mod tests {
     use opensubsonic_client::{normalize_base_url, Auth, ClientConfig};
 
     use super::{
-        current_song_id, normalize_seek_position, position_ms_to_offset_seconds,
-        PlaybackController, PlaybackRuntimeContext, PlaybackStatus,
+        backend_seek_position_ms, current_song_id, position_ms_to_offset_seconds,
+        stream_seek_offset_seconds, PlaybackController, PlaybackRuntimeContext, PlaybackStatus,
     };
     use crate::{
         models::{CapabilityMatrix, PlaybackQueueEntry, PlaybackSetQueueRequest, PlaybackState},
         playback::{
-            backend::PlaybackBackend,
+            backend_shims::PlaybackBackend,
             queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
             reporting::PlaybackReporter,
         },
@@ -402,8 +418,11 @@ mod tests {
     #[derive(Debug, Default)]
     struct MockBackendState {
         load_calls: Vec<String>,
+        load_start_positions_ms: Vec<u32>,
+        seek_calls_ms: Vec<u32>,
         fail_first_load: bool,
         always_fail_load: bool,
+        fail_seek: bool,
         has_failed_first_load: bool,
         pause_calls: usize,
         stop_calls: usize,
@@ -426,10 +445,12 @@ mod tests {
         fn load(
             &mut self,
             request: opensubsonic_client::PreparedBinaryRequest,
+            start_position_ms: u32,
             _autoplay: bool,
         ) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
             state.load_calls.push(request.url.to_string());
+            state.load_start_positions_ms.push(start_position_ms);
             if state.always_fail_load {
                 return Err("stream rejected".to_string());
             }
@@ -438,6 +459,15 @@ mod tests {
                 return Err("raw stream rejected".to_string());
             }
 
+            Ok(())
+        }
+
+        fn seek(&mut self, position_ms: u32) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.seek_calls_ms.push(position_ms);
+            if state.fail_seek {
+                return Err("sink rejected seek".to_string());
+            }
             Ok(())
         }
 
@@ -488,12 +518,13 @@ mod tests {
         Arc<Mutex<MockBackendState>>,
         Arc<Mutex<MockReporterState>>,
     ) {
-        controller_with_mock_backend_config(fail_first_load, false)
+        controller_with_mock_backend_config(fail_first_load, false, false)
     }
 
     fn controller_with_mock_backend_config(
         fail_first_load: bool,
         always_fail_load: bool,
+        fail_seek: bool,
     ) -> (
         PlaybackController,
         Arc<Mutex<MockBackendState>>,
@@ -502,6 +533,7 @@ mod tests {
         let state = Arc::new(Mutex::new(MockBackendState {
             fail_first_load,
             always_fail_load,
+            fail_seek,
             ..MockBackendState::default()
         }));
         let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
@@ -521,6 +553,7 @@ mod tests {
             .iter()
             .map(|song_id| PlaybackQueueEntry {
                 song_id: (*song_id).to_string(),
+                title: (*song_id).to_string(),
             })
             .collect()
     }
@@ -659,12 +692,65 @@ mod tests {
             })
             .unwrap();
         let seeked = controller.seek(&runtime_context, 5_000).unwrap();
-        assert_eq!(seeked.current_position_ms, 0);
+        assert_eq!(seeked.current_position_ms, 5_000);
         controller.play(&runtime_context).unwrap();
 
-        let load_calls = backend_state.lock().unwrap().load_calls.clone();
+        let backend_state = backend_state.lock().unwrap();
+        let load_calls = backend_state.load_calls.clone();
         assert_eq!(load_calls.len(), 1);
+        assert_eq!(backend_state.load_start_positions_ms, vec![5_000]);
         assert!(!load_calls[0].contains("timeOffset="));
+    }
+
+    #[test]
+    fn active_seek_uses_backend_seek_without_reloading_stream() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(false);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        let seeked = controller.seek(&runtime_context, 5_500).unwrap();
+        assert_eq!(seeked.current_position_ms, 5_500);
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.load_calls.len(), 1);
+        assert_eq!(backend_state.seek_calls_ms, vec![5_500]);
+    }
+
+    #[test]
+    fn active_seek_reloads_stream_when_backend_seek_fails() {
+        let (mut controller, backend_state, _) =
+            controller_with_mock_backend_config(false, false, true);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        let seeked = controller.seek(&runtime_context, 5_500).unwrap();
+        assert_eq!(seeked.current_position_ms, 5_500);
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.seek_calls_ms, vec![5_500]);
+        assert_eq!(backend_state.load_calls.len(), 2);
+        assert_eq!(backend_state.load_start_positions_ms, vec![0, 500]);
+        assert!(backend_state.load_calls[1].contains("timeOffset=5"));
     }
 
     #[test]
@@ -678,9 +764,15 @@ mod tests {
     }
 
     #[test]
-    fn helper_normalize_seek_position_applies_capability_gate() {
-        assert_eq!(normalize_seek_position(7_000, true), 7_000);
-        assert_eq!(normalize_seek_position(7_000, false), 0);
+    fn helper_stream_seek_offset_seconds_applies_capability_gate() {
+        assert_eq!(stream_seek_offset_seconds(7_000, true), Some(7));
+        assert_eq!(stream_seek_offset_seconds(7_000, false), None);
+    }
+
+    #[test]
+    fn helper_backend_seek_position_ms_preserves_local_remainder() {
+        assert_eq!(backend_seek_position_ms(7_500, true), 500);
+        assert_eq!(backend_seek_position_ms(7_500, false), 7_500);
     }
 
     #[test]
@@ -729,7 +821,6 @@ mod tests {
                 PlaybackState::Loading,
                 PlaybackState::Playing,
                 PlaybackState::Paused,
-                PlaybackState::Loading,
                 PlaybackState::Paused,
                 PlaybackState::Loading,
                 PlaybackState::Paused,
@@ -739,13 +830,14 @@ mod tests {
             ]
         );
         assert_eq!(reported_states[4].current_position_ms, 8_000);
-        assert_eq!(reported_states[6].current_index, Some(1));
-        assert_eq!(reported_states[9].current_index, Some(0));
+        assert_eq!(reported_states[5].current_index, Some(1));
+        assert_eq!(reported_states[8].current_index, Some(0));
     }
 
     #[test]
     fn load_failures_are_reported_as_error_snapshots() {
-        let (mut controller, _, reporter_state) = controller_with_mock_backend_config(false, true);
+        let (mut controller, _, reporter_state) =
+            controller_with_mock_backend_config(false, true, false);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -776,12 +868,10 @@ mod tests {
                 PlaybackState::Error,
             ]
         );
-        assert!(
-            reported_states
-                .last()
-                .and_then(|status| status.error.as_deref())
-                .is_some_and(|message| message.contains("Failed to load playback stream."))
-        );
+        assert!(reported_states
+            .last()
+            .and_then(|status| status.error.as_deref())
+            .is_some_and(|message| message.contains("Failed to load playback stream.")));
     }
 
     #[test]

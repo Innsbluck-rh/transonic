@@ -98,7 +98,9 @@ pub fn playback_seek(
     };
 
     let mut controller = playback.0.lock().unwrap();
-    let result = controller.seek(&runtime_context, payload.position_ms).map(|_| ());
+    let result = controller
+        .seek(&runtime_context, payload.position_ms)
+        .map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_seek: failed: {error}");
     }

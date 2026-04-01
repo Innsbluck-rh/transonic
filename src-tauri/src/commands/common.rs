@@ -5,11 +5,13 @@ use opensubsonic_client::{ApiError, OpenSubsonicClient, PreparedBinaryRequest};
 use tauri::{AppHandle, Manager};
 
 use crate::{
-    connection::ConnectionService, models::ActiveSession, secrets::OsKeyringSecretStore,
+    connection::ConnectionService,
+    models::ActiveSession,
+    secrets::{create_secret_store, AppSecretStore},
     session::SessionService,
 };
 
-type AppService = SessionService<OsKeyringSecretStore, ConnectionService>;
+type AppService = SessionService<AppSecretStore, ConnectionService>;
 
 pub(crate) fn service(app: &AppHandle) -> Result<AppService, String> {
     let config_dir = app
@@ -17,12 +19,13 @@ pub(crate) fn service(app: &AppHandle) -> Result<AppService, String> {
         .app_config_dir()
         .map_err(|error| format!("Failed to resolve the app config directory: {error}"))?;
     let secret_service_name = format!("{}.server-profile", app.config().identifier);
+    let secret_store = create_secret_store(&config_dir);
     let api = ConnectionService::new("transonic");
 
     Ok(SessionService::new(
         config_dir,
         secret_service_name,
-        OsKeyringSecretStore,
+        secret_store,
         api,
     ))
 }
