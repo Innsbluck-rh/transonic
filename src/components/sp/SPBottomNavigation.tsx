@@ -6,7 +6,7 @@ interface SPBottomNavigationProps {}
 
 const SPBottomNavigation: Component<SPBottomNavigationProps> = (_props) => {
   return (
-    <div class='flex flex-row border-t border-primary-border'>
+    <div class='flex flex-row border-t border-primary-border bg-primary-plane z-20'>
       <SPBottomNavigationItem navState={'index'} icon='material-symbols:library-music-sharp' label='index' />
       <SPBottomNavigationItem navState={'main'} icon='material-symbols:play-circle' label='main' />
       <SPBottomNavigationItem navState={'queue'} icon='material-symbols:playlist-play' label='queue' />

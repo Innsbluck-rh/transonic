@@ -179,8 +179,10 @@ async playbackPrev() : Promise<Result<null, string>> {
 
 
 export const events = __makeEvents__<{
+playbackNativeDirty: PlaybackNativeDirty,
 playbackStatus: PlaybackStatus
 }>({
+playbackNativeDirty: "playback-native-dirty",
 playbackStatus: "playback-status"
 })
 
@@ -225,7 +227,8 @@ export type MusicFolderSummary = { id: string; name: string }
 export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
 export type PlaybackLoadingReason = "buffering" | "seeking"
-export type PlaybackQueueEntry = { songId: string; title: string; path: string | null }
+export type PlaybackNativeDirty = null
+export type PlaybackQueueEntry = { songId: string; title: string; path: string | null; artist: string | null; album: string | null; duration: number | null; coverArtId: string | null }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { entries: PlaybackQueueEntry[]; currentIndex: number | null }
 export type PlaybackState = "idle" | "loading" | "playing" | "paused" | "stopped" | "error"

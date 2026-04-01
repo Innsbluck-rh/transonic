@@ -24,7 +24,7 @@ const PlayerIcon: Component<PlayerIconProps> = (props) => {
       }}
     >
       <Show when={!props.loading} fallback={<LoadCircle />}>
-        <Icon icon={`${getIconForType(props.type)}`} class={`${props.disabled ? 'text-zinc-400' : 'text-zinc-700'} scale-150`} />
+        <Icon icon={`${getIconForType(props.type)}`} class={`${props.disabled ? 'text-secondary-text' : 'text-primary-text'} scale-150`} />
       </Show>
     </div>
   );

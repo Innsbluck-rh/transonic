@@ -1,6 +1,6 @@
-use opensubsonic_client::PreparedBinaryRequest;
-
-use crate::playback::backend_shims::backend::PlaybackBackend;
+use crate::playback::backend_shims::backend::{
+    PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
+};
 
 pub fn create_playback_backend() -> Box<dyn PlaybackBackend> {
     Box::new(WindowsPlaybackBackend::default())
@@ -9,14 +9,7 @@ pub fn create_playback_backend() -> Box<dyn PlaybackBackend> {
 #[derive(Debug)]
 enum PlaybackJob {
     Load {
-        request: PreparedBinaryRequest,
-        absolute_start_position_ms: u32,
-        local_start_position_ms: u32,
-        autoplay: bool,
-        result_tx: std::sync::mpsc::Sender<Result<(), String>>,
-    },
-    Seek {
-        position_ms: u32,
+        request: PlaybackBackendLoadRequest,
         result_tx: std::sync::mpsc::Sender<Result<(), String>>,
     },
     CurrentPosition {
@@ -72,27 +65,20 @@ impl WindowsPlaybackBackend {
 }
 
 impl PlaybackBackend for WindowsPlaybackBackend {
-    fn load(
-        &mut self,
-        request: PreparedBinaryRequest,
-        absolute_start_position_ms: u32,
-        local_start_position_ms: u32,
-        autoplay: bool,
-    ) -> Result<(), String> {
-        self.request_result(|result_tx| PlaybackJob::Load {
-            request,
-            absolute_start_position_ms,
-            local_start_position_ms,
-            autoplay,
-            result_tx,
-        })
+    fn plan_load(
+        &self,
+        requested_position_ms: u32,
+        _supports_stream_offset: bool,
+    ) -> PlaybackLoadStrategy {
+        PlaybackLoadStrategy::exact_local(requested_position_ms)
     }
 
-    fn seek(&mut self, position_ms: u32) -> Result<(), String> {
-        self.request_result(|result_tx| PlaybackJob::Seek {
-            position_ms,
-            result_tx,
-        })
+    fn load(&mut self, request: PlaybackBackendLoadRequest) -> Result<(), String> {
+        self.request_result(|result_tx| PlaybackJob::Load { request, result_tx })
+    }
+
+    fn seek(&mut self, _position_ms: u32) -> Result<PlaybackSeekAction, String> {
+        Ok(PlaybackSeekAction::ReloadRequired)
     }
 
     fn current_position_ms(&self) -> Result<u32, String> {
@@ -113,25 +99,8 @@ fn playback_worker_loop(rx: std::sync::mpsc::Receiver<PlaybackJob>) {
 
     while let Ok(job) = rx.recv() {
         match job {
-            PlaybackJob::Load {
-                request,
-                absolute_start_position_ms,
-                local_start_position_ms,
-                autoplay,
-                result_tx,
-            } => {
-                let _ = result_tx.send(worker.load(
-                    request,
-                    absolute_start_position_ms,
-                    local_start_position_ms,
-                    autoplay,
-                ));
-            }
-            PlaybackJob::Seek {
-                position_ms,
-                result_tx,
-            } => {
-                let _ = result_tx.send(worker.seek(position_ms));
+            PlaybackJob::Load { request, result_tx } => {
+                let _ = result_tx.send(worker.load(request));
             }
             PlaybackJob::CurrentPosition { result_tx } => {
                 let _ = result_tx.send(worker.current_position_ms());
@@ -167,18 +136,12 @@ impl WindowsPlaybackWorker {
             .ok_or_else(|| "Windows audio output is unavailable.".to_string())
     }
 
-    fn load(
-        &mut self,
-        request: PreparedBinaryRequest,
-        absolute_start_position_ms: u32,
-        local_start_position_ms: u32,
-        autoplay: bool,
-    ) -> Result<(), String> {
-        use rodio::Source;
+    fn load(&mut self, request: PlaybackBackendLoadRequest) -> Result<(), String> {
+        use rodio::{Decoder, Source};
 
         let response = reqwest::blocking::Client::new()
-            .get(request.url)
-            .headers(request.headers)
+            .get(request.request.url)
+            .headers(request.request.headers)
             .send()
             .map_err(|error| format!("Failed to fetch the stream payload: {error}"))?;
 
@@ -205,38 +168,37 @@ impl WindowsPlaybackWorker {
         let bytes = response
             .bytes()
             .map_err(|error| format!("Failed to read stream bytes: {error}"))?;
-        let source = rodio::Decoder::new(std::io::BufReader::new(std::io::Cursor::new(
-            bytes.to_vec(),
-        )))
-        .map_err(|error| format!("Failed to decode stream bytes: {error}"))?
-        .skip_duration(std::time::Duration::from_millis(u64::from(
-            local_start_position_ms,
-        )));
+        let byte_len = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
+        let mut decoder = Decoder::builder()
+            .with_data(std::io::Cursor::new(bytes.to_vec()))
+            .with_byte_len(byte_len)
+            .with_seekable(true)
+            .with_mime_type(normalize_mime_type(&content_type))
+            .build()
+            .map_err(|error| format!("Failed to decode stream bytes: {error}"))?;
+        if request.local_start_position_ms > 0 {
+            decoder
+                .try_seek(std::time::Duration::from_millis(u64::from(
+                    request.local_start_position_ms,
+                )))
+                .map_err(|error| format!("Failed to seek decoded stream bytes: {error}"))?;
+        }
         let sink = rodio::Player::connect_new(self.ensure_output_stream()?.mixer());
 
         if let Some(existing_sink) = self.sink.take() {
             existing_sink.stop();
         }
 
-        sink.append(source);
-        if autoplay {
+        sink.append(decoder);
+        if request.autoplay {
             sink.play();
         } else {
             sink.pause();
         }
         self.sink = Some(sink);
-        self.loaded_absolute_position_ms = Some(absolute_start_position_ms);
+        self.loaded_absolute_position_ms = Some(request.absolute_start_position_ms);
 
         Ok(())
-    }
-
-    fn seek(&mut self, position_ms: u32) -> Result<(), String> {
-        let Some(sink) = self.sink.as_ref() else {
-            log::warn!("backend.seek: no sink is loaded");
-            return Err("No stream is loaded for playback.".to_string());
-        };
-        sink.try_seek(std::time::Duration::from_millis(u64::from(position_ms)))
-            .map_err(|error| format!("Failed to seek the playback sink: {error}"))
     }
 
     fn current_position_ms(&self) -> Result<u32, String> {
@@ -275,4 +237,13 @@ fn is_supported_audio_content_type(content_type: &str) -> bool {
     content_type.starts_with("audio/")
         || content_type.starts_with("application/octet-stream")
         || content_type.starts_with("application/ogg")
+}
+
+fn normalize_mime_type(content_type: &str) -> &str {
+    content_type
+        .split(';')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("application/octet-stream")
 }

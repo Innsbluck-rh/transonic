@@ -1,5 +1,5 @@
 use opensubsonic_client::{
-    api::retrieval::{RetrievalApi, StreamRequest},
+    api::retrieval::{GetCoverArtRequest, RetrievalApi, StreamRequest},
     ApiError, OpenSubsonicClient, PreparedBinaryRequest,
 };
 
@@ -9,9 +9,10 @@ use crate::models::{
 };
 
 use super::{
-    backend_shims::{create_playback_backend, PlaybackBackend},
-    queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
-    reporting::{PlaybackEventAppHandle, PlaybackReporter, TauriPlaybackReporter},
+    backend_shims::{PlaybackBackend, PlaybackBackendLoadRequest, PlaybackSeekAction},
+    native_events::{NativePlaybackEventSource, PlaybackNativeEvent},
+    queue_sync::QueueSyncGateway,
+    reporting::PlaybackReporter,
 };
 
 pub struct PlaybackRuntimeContext<'a> {
@@ -23,30 +24,25 @@ pub struct PlaybackController {
     backend: Box<dyn PlaybackBackend>,
     reporter: Box<dyn PlaybackReporter>,
     queue_sync: Box<dyn QueueSyncGateway>,
+    native_events: Box<dyn NativePlaybackEventSource>,
     status: PlaybackStatus,
-    current_source_absolute_start_position_ms: Option<u32>,
+    buffering_resume_state: Option<PlaybackState>,
 }
 
 impl PlaybackController {
-    pub(crate) fn with_tauri_reporter(app_handle: PlaybackEventAppHandle) -> Self {
-        Self::new(
-            create_playback_backend(),
-            Box::new(TauriPlaybackReporter::new(app_handle)),
-            Box::new(NoopQueueSyncGateway),
-        )
-    }
-
     pub fn new(
         backend: Box<dyn PlaybackBackend>,
         reporter: Box<dyn PlaybackReporter>,
         queue_sync: Box<dyn QueueSyncGateway>,
+        native_events: Box<dyn NativePlaybackEventSource>,
     ) -> Self {
         Self {
             backend,
             reporter,
             queue_sync,
+            native_events,
             status: PlaybackStatus::empty(),
-            current_source_absolute_start_position_ms: None,
+            buffering_resume_state: None,
         }
     }
 
@@ -55,8 +51,18 @@ impl PlaybackController {
     }
 
     pub fn synced_state(&mut self) -> Result<PlaybackStatus, String> {
+        self.process_native_events_inner(None, false)?;
         self.sync_current_position_from_backend()?;
         Ok(self.state())
+    }
+
+    #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+    pub fn process_native_events(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<(), String> {
+        let _ = self.process_native_events_inner(context, true)?;
+        Ok(())
     }
 
     pub fn set_queue(
@@ -65,6 +71,7 @@ impl PlaybackController {
     ) -> Result<PlaybackStatus, String> {
         validate_queue_index(&payload.entries, payload.current_index)?;
         self.backend.stop()?;
+        self.clear_native_events();
 
         let next_song_id = current_song_id(&payload.entries, payload.current_index);
         self.status.queue = payload.entries;
@@ -73,20 +80,19 @@ impl PlaybackController {
         self.status.current_song_id = next_song_id;
         self.status.error = None;
         self.status.loading_reason = None;
+        self.buffering_resume_state = None;
         self.status.state = if self.status.queue.is_empty() {
             PlaybackState::Idle
         } else {
             PlaybackState::Stopped
         };
-        self.current_source_absolute_start_position_ms = None;
 
         if let Some(entry) = current_queue_entry(&self.status.queue, self.status.current_index) {
             log::info!(
-                "controller.set_queue: current_index={:?} song_id={} path={:?} is_flac={}",
+                "controller.set_queue: current_index={:?} song_id={} path={:?}",
                 self.status.current_index,
                 entry.song_id,
-                entry.path,
-                is_probably_flac_path(entry.path.as_deref())
+                entry.path
             );
         } else {
             log::info!(
@@ -105,6 +111,7 @@ impl PlaybackController {
         let index = self.ensure_current_index()?;
         let requested_position_ms = self.status.current_position_ms;
         self.load_track_at_index(context, index, requested_position_ms, true)?;
+        self.process_native_events_inner(Some(context), false)?;
         self.report_status();
         Ok(self.state())
     }
@@ -115,17 +122,20 @@ impl PlaybackController {
         self.status.state = PlaybackState::Paused;
         self.status.error = None;
         self.status.loading_reason = None;
+        self.buffering_resume_state = None;
+        self.process_native_events_inner(None, false)?;
         self.report_status();
         Ok(self.state())
     }
 
     pub fn stop(&mut self) -> Result<PlaybackStatus, String> {
         self.backend.stop()?;
+        self.clear_native_events();
         self.status.state = PlaybackState::Stopped;
         self.status.current_position_ms = 0;
         self.status.error = None;
         self.status.loading_reason = None;
-        self.current_source_absolute_start_position_ms = None;
+        self.buffering_resume_state = None;
         self.report_status();
         Ok(self.state())
     }
@@ -145,19 +155,14 @@ impl PlaybackController {
                     .map_err(|_| "Current playback index is out of range.".to_string())?,
             )
             .cloned();
-        let is_flac = entry
-            .as_ref()
-            .is_some_and(|queue_entry| is_probably_flac_path(queue_entry.path.as_deref()));
 
         log::info!(
-            "controller.seek: song_id={:?} path={:?} state={:?} requested_position_ms={} current_position_ms={} source_start_ms={:?} is_flac={}",
+            "controller.seek: song_id={:?} path={:?} state={:?} requested_position_ms={} current_position_ms={}",
             entry.as_ref().map(|queue_entry| queue_entry.song_id.as_str()),
             entry.as_ref().and_then(|queue_entry| queue_entry.path.as_deref()),
             self.status.state,
             requested_position_ms,
-            self.status.current_position_ms,
-            self.current_source_absolute_start_position_ms,
-            is_flac
+            self.status.current_position_ms
         );
 
         if matches!(
@@ -166,21 +171,18 @@ impl PlaybackController {
         ) {
             self.sync_current_position_from_backend()?;
 
-            if is_flac {
-                log::info!(
-                    "controller.seek: using exact reload because the current track is detected as FLAC"
-                );
-                self.reload_track_at_index_exact(context, index, requested_position_ms, autoplay)?;
-            } else if self.current_source_absolute_start_position_ms == Some(0) {
-                log::info!(
-                    "controller.seek: attempting native backend seek because source_start_ms is zero and track is not detected as FLAC"
-                );
-                if let Err(error) = self.backend.seek(requested_position_ms) {
-                    log::warn!(
-                        "controller.seek: backend seek failed at position_ms={requested_position_ms}: {error}; song_id={:?} path={:?} is_flac={}; falling back to exact reload",
-                        entry.as_ref().map(|queue_entry| queue_entry.song_id.as_str()),
-                        entry.as_ref().and_then(|queue_entry| queue_entry.path.as_deref()),
-                        is_flac
+            match self.backend.seek(requested_position_ms)? {
+                PlaybackSeekAction::Applied => {
+                    log::info!(
+                        "controller.seek: backend applied native seek at position_ms={requested_position_ms}"
+                    );
+                    self.status.current_position_ms = requested_position_ms;
+                    self.status.error = None;
+                    self.status.loading_reason = None;
+                }
+                PlaybackSeekAction::ReloadRequired => {
+                    log::info!(
+                        "controller.seek: backend requested exact reload at position_ms={requested_position_ms}"
                     );
                     self.reload_track_at_index_exact(
                         context,
@@ -188,24 +190,16 @@ impl PlaybackController {
                         requested_position_ms,
                         autoplay,
                     )?;
-                } else {
-                    self.status.current_position_ms = requested_position_ms;
-                    self.status.error = None;
-                    self.status.loading_reason = None;
                 }
-            } else {
-                log::info!(
-                    "controller.seek: using exact reload because source_start_ms={:?} indicates a non-zero loaded source",
-                    self.current_source_absolute_start_position_ms
-                );
-                self.reload_track_at_index_exact(context, index, requested_position_ms, autoplay)?;
             }
         } else {
             self.status.current_position_ms = requested_position_ms;
             self.status.error = None;
             self.status.loading_reason = None;
+            self.buffering_resume_state = None;
         }
 
+        self.process_native_events_inner(Some(context), false)?;
         self.report_status();
         Ok(self.state())
     }
@@ -235,9 +229,10 @@ impl PlaybackController {
             self.status.state = PlaybackState::Stopped;
             self.status.error = None;
             self.status.loading_reason = None;
-            self.current_source_absolute_start_position_ms = None;
+            self.buffering_resume_state = None;
         }
 
+        self.process_native_events_inner(Some(context), false)?;
         self.report_status();
         Ok(self.state())
     }
@@ -262,20 +257,22 @@ impl PlaybackController {
             self.status.state = PlaybackState::Stopped;
             self.status.error = None;
             self.status.loading_reason = None;
-            self.current_source_absolute_start_position_ms = None;
+            self.buffering_resume_state = None;
         }
 
+        self.process_native_events_inner(Some(context), false)?;
         self.report_status();
         Ok(self.state())
     }
 
     #[allow(dead_code)]
     pub fn on_track_finished(&mut self) -> PlaybackStatus {
+        self.clear_native_events();
         self.status.state = PlaybackState::Stopped;
         self.status.current_position_ms = 0;
         self.status.error = None;
         self.status.loading_reason = None;
-        self.current_source_absolute_start_position_ms = None;
+        self.buffering_resume_state = None;
         self.report_status();
         self.state()
     }
@@ -285,8 +282,9 @@ impl PlaybackController {
             log::warn!("controller.reset: failed to stop backend: {error}");
         }
 
+        self.clear_native_events();
         self.status = PlaybackStatus::empty();
-        self.current_source_absolute_start_position_ms = None;
+        self.buffering_resume_state = None;
         self.sync_queue_state();
         self.report_status();
         self.state()
@@ -329,12 +327,18 @@ impl PlaybackController {
         };
         let song_id = entry.song_id.clone();
 
+        self.clear_native_events();
         self.status.state = PlaybackState::Loading;
         self.status.loading_reason = Some(PlaybackLoadingReason::Buffering);
         self.status.current_index = Some(index);
         self.status.current_song_id = Some(song_id.clone());
         self.status.current_position_ms = requested_position_ms;
         self.status.error = None;
+        self.buffering_resume_state = if autoplay {
+            Some(PlaybackState::Playing)
+        } else {
+            Some(PlaybackState::Paused)
+        };
         self.report_status();
 
         let load_result =
@@ -357,7 +361,7 @@ impl PlaybackController {
         self.status.current_song_id = Some(song_id);
         self.status.error = None;
         self.status.loading_reason = None;
-        self.current_source_absolute_start_position_ms = Some(requested_position_ms);
+        self.buffering_resume_state = None;
 
         Ok(())
     }
@@ -374,23 +378,26 @@ impl PlaybackController {
         };
         let song_id = entry.song_id.clone();
         let previous_status = self.status.clone();
-        let previous_source_absolute_start_position_ms =
-            self.current_source_absolute_start_position_ms;
 
+        self.clear_native_events();
         self.status.state = PlaybackState::Loading;
         self.status.loading_reason = Some(PlaybackLoadingReason::Seeking);
         self.status.current_index = Some(index);
         self.status.current_song_id = Some(song_id.clone());
         self.status.current_position_ms = requested_position_ms;
         self.status.error = None;
+        self.buffering_resume_state = if autoplay {
+            Some(PlaybackState::Playing)
+        } else {
+            Some(PlaybackState::Paused)
+        };
         self.report_status();
 
         if let Err(error) =
             self.load_stream_for_song(context, &entry, requested_position_ms, autoplay)
         {
             self.status = previous_status;
-            self.current_source_absolute_start_position_ms =
-                previous_source_absolute_start_position_ms;
+            self.buffering_resume_state = None;
             self.report_status();
             return Err(error);
         }
@@ -404,7 +411,7 @@ impl PlaybackController {
         self.status.current_position_ms = requested_position_ms;
         self.status.error = None;
         self.status.loading_reason = None;
-        self.current_source_absolute_start_position_ms = Some(requested_position_ms);
+        self.buffering_resume_state = None;
 
         Ok(())
     }
@@ -417,44 +424,56 @@ impl PlaybackController {
         autoplay: bool,
     ) -> Result<(), String> {
         let song_id = entry.song_id.as_str();
-        let supports_offset = context.capability_matrix.transcode_offset
-            && !is_probably_flac_path(entry.path.as_deref());
-        let stream_offset_seconds =
-            stream_seek_offset_seconds(requested_position_ms, supports_offset);
-        let local_start_position_ms =
-            backend_seek_position_ms(requested_position_ms, supports_offset);
+        let load_strategy = self.backend.plan_load(
+            requested_position_ms,
+            context.capability_matrix.transcode_offset,
+        );
+        let stream_offset_seconds = load_strategy.stream_offset_seconds;
+        let local_start_position_ms = load_strategy.local_start_position_ms;
 
         log::info!(
-            "controller.load_stream_for_song: song_id={} path={:?} requested_position_ms={} supports_offset={} stream_offset_seconds={:?} local_start_position_ms={} autoplay={}",
+            "controller.load_stream_for_song: song_id={} path={:?} requested_position_ms={} server_offset_capability={} stream_offset_seconds={:?} local_start_position_ms={} autoplay={}",
             song_id,
             entry.path,
             requested_position_ms,
-            supports_offset,
+            context.capability_matrix.transcode_offset,
             stream_offset_seconds,
             local_start_position_ms,
             autoplay
         );
 
+        let artwork_url = build_cover_art_url(context.client, entry.cover_art_id.as_deref())?;
+
         if requested_position_ms == 0 {
             let raw_stream =
                 build_stream_request(context.client, song_id, stream_offset_seconds, true)?;
-            if let Err(raw_error) = self.backend.load(
-                raw_stream,
-                requested_position_ms,
+            if let Err(raw_error) = self.backend.load(PlaybackBackendLoadRequest {
+                request: raw_stream,
+                media_id: entry.song_id.clone(),
+                title: entry.title.clone(),
+                artist: entry.artist.clone(),
+                album: entry.album.clone(),
+                artwork_url: artwork_url.clone(),
+                absolute_start_position_ms: requested_position_ms,
                 local_start_position_ms,
                 autoplay,
-            ) {
+            }) {
                 log::warn!(
                     "controller.load_track_at_index: raw stream load failed for song_id={song_id}: {raw_error}"
                 );
                 let fallback_stream =
                     build_stream_request(context.client, song_id, stream_offset_seconds, false)?;
-                if let Err(fallback_error) = self.backend.load(
-                    fallback_stream,
-                    requested_position_ms,
+                if let Err(fallback_error) = self.backend.load(PlaybackBackendLoadRequest {
+                    request: fallback_stream,
+                    media_id: entry.song_id.clone(),
+                    title: entry.title.clone(),
+                    artist: entry.artist.clone(),
+                    album: entry.album.clone(),
+                    artwork_url,
+                    absolute_start_position_ms: requested_position_ms,
                     local_start_position_ms,
                     autoplay,
-                ) {
+                }) {
                     let message = format!(
                         "Failed to load playback stream. raw stream failed: {raw_error}; fallback stream failed: {fallback_error}"
                     );
@@ -471,12 +490,17 @@ impl PlaybackController {
         let standard_stream =
             build_stream_request(context.client, song_id, stream_offset_seconds, false)?;
         self.backend
-            .load(
-                standard_stream,
-                requested_position_ms,
+            .load(PlaybackBackendLoadRequest {
+                request: standard_stream,
+                media_id: entry.song_id.clone(),
+                title: entry.title.clone(),
+                artist: entry.artist.clone(),
+                album: entry.album.clone(),
+                artwork_url,
+                absolute_start_position_ms: requested_position_ms,
                 local_start_position_ms,
                 autoplay,
-            )
+            })
             .map_err(|error| format!("Failed to load playback stream: {error}"))
     }
 
@@ -496,6 +520,124 @@ impl PlaybackController {
         self.status.error = None;
         self.status.loading_reason = None;
         Ok(())
+    }
+
+    fn process_native_events_inner(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+        report_changes: bool,
+    ) -> Result<bool, String> {
+        let events = self.native_events.drain_events();
+        if events.is_empty() {
+            return Ok(false);
+        }
+
+        let mut changed = false;
+        for event in events {
+            changed |= self.apply_native_event(event, context)?;
+        }
+
+        if changed && report_changes {
+            self.report_status();
+        }
+
+        Ok(changed)
+    }
+
+    fn apply_native_event(
+        &mut self,
+        event: PlaybackNativeEvent,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<bool, String> {
+        match event {
+            PlaybackNativeEvent::Buffering { position_ms } => {
+                if !matches!(self.status.state, PlaybackState::Loading) {
+                    self.buffering_resume_state = Some(self.status.state.clone());
+                }
+                self.status.state = PlaybackState::Loading;
+                self.status.loading_reason = Some(PlaybackLoadingReason::Buffering);
+                self.status.current_position_ms = position_ms;
+                self.status.error = None;
+                Ok(true)
+            }
+            PlaybackNativeEvent::Ready { position_ms } => {
+                self.status.current_position_ms = position_ms;
+                self.status.error = None;
+                self.status.loading_reason = None;
+                if matches!(self.status.state, PlaybackState::Loading) {
+                    self.status.state = self
+                        .buffering_resume_state
+                        .clone()
+                        .unwrap_or(PlaybackState::Paused);
+                }
+                self.buffering_resume_state = None;
+                Ok(true)
+            }
+            PlaybackNativeEvent::Playing { position_ms } => {
+                self.status.state = PlaybackState::Playing;
+                self.status.loading_reason = None;
+                self.status.current_position_ms = position_ms;
+                self.status.error = None;
+                self.buffering_resume_state = None;
+                Ok(true)
+            }
+            PlaybackNativeEvent::Paused { position_ms } => {
+                self.status.state = PlaybackState::Paused;
+                self.status.loading_reason = None;
+                self.status.current_position_ms = position_ms;
+                self.status.error = None;
+                self.buffering_resume_state = None;
+                Ok(true)
+            }
+            PlaybackNativeEvent::Error { message } => {
+                self.status.state = PlaybackState::Error;
+                self.status.loading_reason = None;
+                self.status.error = Some(message);
+                self.buffering_resume_state = None;
+                Ok(true)
+            }
+            PlaybackNativeEvent::Ended => self.handle_track_ended(context),
+        }
+    }
+
+    fn handle_track_ended(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<bool, String> {
+        let Some(current_index) = self.status.current_index else {
+            return Ok(false);
+        };
+        let Some(next_index) = current_index.checked_add(1) else {
+            self.transition_to_stopped_end_of_queue();
+            return Ok(true);
+        };
+        let has_next = usize::try_from(next_index)
+            .ok()
+            .is_some_and(|index| index < self.status.queue.len());
+        if !has_next {
+            self.transition_to_stopped_end_of_queue();
+            return Ok(true);
+        }
+
+        let Some(runtime_context) = context else {
+            self.transition_to_stopped_end_of_queue();
+            return Ok(true);
+        };
+        self.load_track_at_index(runtime_context, next_index, 0, true)?;
+        self.report_status();
+        Ok(false)
+    }
+
+    fn transition_to_stopped_end_of_queue(&mut self) {
+        self.status.state = PlaybackState::Stopped;
+        self.status.current_position_ms = 0;
+        self.status.error = None;
+        self.status.loading_reason = None;
+        self.buffering_resume_state = None;
+    }
+
+    fn clear_native_events(&mut self) {
+        let _ = self.native_events.drain_events();
     }
 
     fn sync_queue_state(&mut self) {
@@ -523,6 +665,23 @@ fn build_stream_request(
             estimate_content_length: None,
             converted: None,
         })
+        .map_err(format_api_error)
+}
+
+fn build_cover_art_url(
+    client: &OpenSubsonicClient,
+    cover_art_id: Option<&str>,
+) -> Result<Option<String>, String> {
+    let Some(cover_art_id) = cover_art_id else {
+        return Ok(None);
+    };
+
+    client
+        .get_cover_art(GetCoverArtRequest {
+            id: cover_art_id.to_string(),
+            size: Some(512),
+        })
+        .map(|request| Some(request.url.to_string()))
         .map_err(format_api_error)
 }
 
@@ -563,43 +722,6 @@ fn current_queue_entry(
     entries.get(index)
 }
 
-fn is_probably_flac_path(path: Option<&str>) -> bool {
-    path.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then_some(trimmed)
-    })
-    .and_then(|value| {
-        std::path::Path::new(value)
-            .extension()
-            .and_then(|ext| ext.to_str())
-    })
-    .is_some_and(|extension| extension.eq_ignore_ascii_case("flac"))
-}
-
-fn stream_seek_offset_seconds(position_ms: u32, supports_offset: bool) -> Option<u32> {
-    if supports_offset {
-        position_ms_to_offset_seconds(position_ms)
-    } else {
-        None
-    }
-}
-
-fn backend_seek_position_ms(position_ms: u32, supports_offset: bool) -> u32 {
-    if supports_offset {
-        position_ms % 1000
-    } else {
-        position_ms
-    }
-}
-
-fn position_ms_to_offset_seconds(position_ms: u32) -> Option<u32> {
-    if position_ms == 0 {
-        return None;
-    }
-
-    Some(position_ms / 1000)
-}
-
 fn format_api_error(error: ApiError) -> String {
     match error {
         ApiError::InvalidUrl(message)
@@ -624,22 +746,32 @@ mod tests {
 
     use opensubsonic_client::{normalize_base_url, Auth, ClientConfig};
 
-    use super::{
-        backend_seek_position_ms, current_song_id, is_probably_flac_path,
-        position_ms_to_offset_seconds, stream_seek_offset_seconds, PlaybackController,
-        PlaybackRuntimeContext, PlaybackStatus,
-    };
+    use super::{current_song_id, PlaybackController, PlaybackRuntimeContext, PlaybackStatus};
     use crate::{
         models::{
             CapabilityMatrix, PlaybackLoadingReason, PlaybackQueueEntry, PlaybackSetQueueRequest,
             PlaybackState,
         },
         playback::{
-            backend_shims::PlaybackBackend,
+            backend_shims::{
+                PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy,
+                PlaybackSeekAction,
+            },
+            native_events::{
+                NativePlaybackEventSource, NoopNativePlaybackEventSource, PlaybackNativeEvent,
+            },
             queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
             reporting::PlaybackReporter,
         },
     };
+
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+    enum MockSeekBehavior {
+        #[default]
+        Apply,
+        ReloadRequired,
+        Fail,
+    }
 
     #[derive(Debug, Default)]
     struct MockBackendState {
@@ -649,11 +781,10 @@ mod tests {
         seek_calls_ms: Vec<u32>,
         current_position_ms: u32,
         current_position_calls: usize,
-        current_source_absolute_start_position_ms: Option<u32>,
         fail_first_load: bool,
         always_fail_load: bool,
         fail_standard_load: bool,
-        fail_seek: bool,
+        seek_behavior: MockSeekBehavior,
         has_failed_first_load: bool,
         pause_calls: usize,
         stop_calls: usize,
@@ -672,26 +803,36 @@ mod tests {
         state: Arc<Mutex<MockReporterState>>,
     }
 
+    #[derive(Default)]
+    struct MockNativeEventSource {
+        events: Arc<Mutex<Vec<PlaybackNativeEvent>>>,
+    }
+
     impl PlaybackBackend for MockBackend {
-        fn load(
-            &mut self,
-            request: opensubsonic_client::PreparedBinaryRequest,
-            absolute_start_position_ms: u32,
-            local_start_position_ms: u32,
-            _autoplay: bool,
-        ) -> Result<(), String> {
+        fn plan_load(
+            &self,
+            requested_position_ms: u32,
+            supports_stream_offset: bool,
+        ) -> PlaybackLoadStrategy {
+            PlaybackLoadStrategy::split_by_stream_offset(
+                requested_position_ms,
+                supports_stream_offset,
+            )
+        }
+
+        fn load(&mut self, request: PlaybackBackendLoadRequest) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
-            state.load_calls.push(request.url.to_string());
+            state.load_calls.push(request.request.url.to_string());
             state
                 .load_absolute_start_positions_ms
-                .push(absolute_start_position_ms);
+                .push(request.absolute_start_position_ms);
             state
                 .load_local_start_positions_ms
-                .push(local_start_position_ms);
+                .push(request.local_start_position_ms);
             if state.always_fail_load {
                 return Err("stream rejected".to_string());
             }
-            if state.fail_standard_load && !request.url.as_str().contains("format=raw") {
+            if state.fail_standard_load && !request.request.url.as_str().contains("format=raw") {
                 return Err("standard stream rejected".to_string());
             }
             if state.fail_first_load && !state.has_failed_first_load {
@@ -699,20 +840,22 @@ mod tests {
                 return Err("raw stream rejected".to_string());
             }
 
-            state.current_position_ms = absolute_start_position_ms;
-            state.current_source_absolute_start_position_ms = Some(absolute_start_position_ms);
+            state.current_position_ms = request.absolute_start_position_ms;
 
             Ok(())
         }
 
-        fn seek(&mut self, position_ms: u32) -> Result<(), String> {
+        fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String> {
             let mut state = self.state.lock().unwrap();
             state.seek_calls_ms.push(position_ms);
-            if state.fail_seek {
-                return Err("sink rejected seek".to_string());
+            match state.seek_behavior {
+                MockSeekBehavior::Apply => {
+                    state.current_position_ms = position_ms;
+                    Ok(PlaybackSeekAction::Applied)
+                }
+                MockSeekBehavior::ReloadRequired => Ok(PlaybackSeekAction::ReloadRequired),
+                MockSeekBehavior::Fail => Err("sink rejected seek".to_string()),
             }
-            state.current_position_ms = position_ms;
-            Ok(())
         }
 
         fn current_position_ms(&self) -> Result<u32, String> {
@@ -730,7 +873,6 @@ mod tests {
             let mut state = self.state.lock().unwrap();
             state.stop_calls += 1;
             state.current_position_ms = 0;
-            state.current_source_absolute_start_position_ms = None;
             Ok(())
         }
     }
@@ -743,6 +885,13 @@ mod tests {
                 .reported_states
                 .push(status.clone());
             Ok(())
+        }
+    }
+
+    impl NativePlaybackEventSource for MockNativeEventSource {
+        fn drain_events(&mut self) -> Vec<PlaybackNativeEvent> {
+            let mut events = self.events.lock().unwrap();
+            std::mem::take(&mut *events)
         }
     }
 
@@ -805,7 +954,11 @@ mod tests {
             fail_first_load,
             always_fail_load,
             fail_standard_load,
-            fail_seek,
+            seek_behavior: if fail_seek {
+                MockSeekBehavior::Fail
+            } else {
+                MockSeekBehavior::Apply
+            },
             ..MockBackendState::default()
         }));
         let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
@@ -816,7 +969,57 @@ mod tests {
             state: reporter_state.clone(),
         });
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
-        let controller = PlaybackController::new(backend, reporter, queue_sync);
+        let controller = PlaybackController::new(
+            backend,
+            reporter,
+            queue_sync,
+            Box::new(NoopNativePlaybackEventSource),
+        );
+        (controller, state, reporter_state)
+    }
+
+    fn controller_with_mock_backend_and_native_events(
+        fail_first_load: bool,
+    ) -> (
+        PlaybackController,
+        Arc<Mutex<MockBackendState>>,
+        Arc<Mutex<MockReporterState>>,
+        Arc<Mutex<Vec<PlaybackNativeEvent>>>,
+    ) {
+        let state = Arc::new(Mutex::new(MockBackendState {
+            fail_first_load,
+            ..MockBackendState::default()
+        }));
+        let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
+        let native_events = Arc::new(Mutex::new(Vec::new()));
+        let backend = Box::new(MockBackend {
+            state: state.clone(),
+        });
+        let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
+            state: reporter_state.clone(),
+        });
+        let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
+        let controller = PlaybackController::new(
+            backend,
+            reporter,
+            queue_sync,
+            Box::new(MockNativeEventSource {
+                events: native_events.clone(),
+            }),
+        );
+        (controller, state, reporter_state, native_events)
+    }
+
+    fn controller_with_mock_backend_seek_behavior(
+        seek_behavior: MockSeekBehavior,
+    ) -> (
+        PlaybackController,
+        Arc<Mutex<MockBackendState>>,
+        Arc<Mutex<MockReporterState>>,
+    ) {
+        let (controller, state, reporter_state) =
+            controller_with_mock_backend_full_config(false, false, false, false);
+        state.lock().unwrap().seek_behavior = seek_behavior;
         (controller, state, reporter_state)
     }
 
@@ -827,17 +1030,10 @@ mod tests {
                 song_id: (*song_id).to_string(),
                 title: (*song_id).to_string(),
                 path: None,
-            })
-            .collect()
-    }
-
-    fn queue_entries_with_paths(entries: &[(&str, Option<&str>)]) -> Vec<PlaybackQueueEntry> {
-        entries
-            .iter()
-            .map(|(song_id, path)| PlaybackQueueEntry {
-                song_id: (*song_id).to_string(),
-                title: (*song_id).to_string(),
-                path: path.map(str::to_string),
+                artist: None,
+                album: None,
+                duration: None,
+                cover_art_id: None,
             })
             .collect()
     }
@@ -984,6 +1180,97 @@ mod tests {
     }
 
     #[test]
+    fn native_paused_event_is_applied_before_synced_state_returns() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 4_321;
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Paused { position_ms: 4_321 });
+
+        let synced = controller.synced_state().unwrap();
+
+        assert_eq!(synced.state, PlaybackState::Paused);
+        assert_eq!(synced.current_position_ms, 4_321);
+    }
+
+    #[test]
+    fn ended_native_event_auto_advances_to_next_track() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a", "song-b"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Ended);
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        assert_eq!(status.state, PlaybackState::Playing);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id.as_deref(), Some("song-b"));
+        assert_eq!(backend_state.lock().unwrap().load_calls.len(), 2);
+    }
+
+    #[test]
+    fn ended_native_event_stops_at_end_of_queue() {
+        let (mut controller, _, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Ended);
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        assert_eq!(status.state, PlaybackState::Stopped);
+        assert_eq!(status.current_index, Some(0));
+        assert_eq!(status.current_position_ms, 0);
+    }
+
+    #[test]
     fn raw_stream_falls_back_to_standard_stream_when_backend_rejects_raw() {
         let (mut controller, backend_state, _) = controller_with_mock_backend(true);
         let (client, capability_matrix) = runtime_context(true);
@@ -1057,9 +1344,9 @@ mod tests {
     }
 
     #[test]
-    fn active_seek_reloads_stream_when_backend_seek_fails_using_standard_stream() {
+    fn active_seek_reloads_stream_when_backend_requires_reload_using_standard_stream() {
         let (mut controller, backend_state, _) =
-            controller_with_mock_backend_config(false, false, true);
+            controller_with_mock_backend_seek_behavior(MockSeekBehavior::ReloadRequired);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -1089,34 +1376,9 @@ mod tests {
     }
 
     #[test]
-    fn flac_active_seek_always_reloads_without_native_seek() {
-        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
-        let (client, capability_matrix) = runtime_context(true);
-        let runtime_context = PlaybackRuntimeContext {
-            client: &client,
-            capability_matrix: &capability_matrix,
-        };
-        controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries_with_paths(&[("song-a", Some("music/song-a.FLAC"))]),
-                current_index: Some(0),
-            })
-            .unwrap();
-        controller.play(&runtime_context).unwrap();
-
-        let seeked = controller.seek(&runtime_context, 5_500).unwrap();
-        assert_eq!(seeked.current_position_ms, 5_500);
-
-        let backend_state = backend_state.lock().unwrap();
-        assert!(backend_state.seek_calls_ms.is_empty());
-        assert_eq!(backend_state.load_calls.len(), 2);
-        assert!(!backend_state.load_calls[1].contains("timeOffset="));
-        assert_eq!(backend_state.load_local_start_positions_ms, vec![0, 5_500]);
-    }
-
-    #[test]
-    fn active_seek_after_nonzero_reload_skips_native_seek_and_uses_standard_stream() {
-        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+    fn repeated_reload_required_seeks_continue_using_standard_stream() {
+        let (mut controller, backend_state, _) =
+            controller_with_mock_backend_seek_behavior(MockSeekBehavior::ReloadRequired);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -1134,8 +1396,8 @@ mod tests {
         controller.seek(&runtime_context, 7_000).unwrap();
 
         let backend_state = backend_state.lock().unwrap();
-        assert!(backend_state.seek_calls_ms.is_empty());
         assert_eq!(backend_state.load_calls.len(), 2);
+        assert_eq!(backend_state.seek_calls_ms, vec![7_000]);
         assert!(!backend_state.load_calls[0].contains("format=raw"));
         assert!(!backend_state.load_calls[1].contains("format=raw"));
         assert_eq!(
@@ -1147,7 +1409,8 @@ mod tests {
     #[test]
     fn failed_exact_seek_preserves_last_confirmed_position() {
         let (mut controller, backend_state, _) =
-            controller_with_mock_backend_full_config(false, false, true, true);
+            controller_with_mock_backend_seek_behavior(MockSeekBehavior::ReloadRequired);
+        backend_state.lock().unwrap().fail_standard_load = true;
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -1187,29 +1450,28 @@ mod tests {
     }
 
     #[test]
-    fn helper_detects_flac_paths_case_insensitively() {
-        assert!(is_probably_flac_path(Some("music/song.flac")));
-        assert!(is_probably_flac_path(Some("music/song.FLAC")));
-        assert!(!is_probably_flac_path(Some("music/song.mp3")));
-        assert!(!is_probably_flac_path(None));
-    }
-
-    #[test]
-    fn helper_stream_seek_offset_seconds_applies_capability_gate() {
-        assert_eq!(stream_seek_offset_seconds(7_000, true), Some(7));
-        assert_eq!(stream_seek_offset_seconds(7_000, false), None);
-    }
-
-    #[test]
-    fn helper_backend_seek_position_ms_preserves_local_remainder() {
-        assert_eq!(backend_seek_position_ms(7_500, true), 500);
-        assert_eq!(backend_seek_position_ms(7_500, false), 7_500);
-    }
-
-    #[test]
-    fn helper_position_ms_to_offset_seconds_rounds_down() {
-        assert_eq!(position_ms_to_offset_seconds(0), None);
-        assert_eq!(position_ms_to_offset_seconds(1_999), Some(1));
+    fn load_strategy_split_by_stream_offset_uses_server_seconds_and_local_remainder() {
+        assert_eq!(
+            PlaybackLoadStrategy::split_by_stream_offset(7_500, true),
+            PlaybackLoadStrategy {
+                stream_offset_seconds: Some(7),
+                local_start_position_ms: 500,
+            }
+        );
+        assert_eq!(
+            PlaybackLoadStrategy::split_by_stream_offset(7_500, false),
+            PlaybackLoadStrategy {
+                stream_offset_seconds: None,
+                local_start_position_ms: 7_500,
+            }
+        );
+        assert_eq!(
+            PlaybackLoadStrategy::split_by_stream_offset(0, true),
+            PlaybackLoadStrategy {
+                stream_offset_seconds: None,
+                local_start_position_ms: 0,
+            }
+        );
     }
 
     #[test]
@@ -1278,8 +1540,9 @@ mod tests {
     }
 
     #[test]
-    fn flac_seek_reports_loading_reason_as_seeking() {
-        let (mut controller, _, reporter_state) = controller_with_mock_backend(false);
+    fn reload_required_seek_reports_loading_reason_as_seeking() {
+        let (mut controller, _, reporter_state) =
+            controller_with_mock_backend_seek_behavior(MockSeekBehavior::ReloadRequired);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -1287,7 +1550,7 @@ mod tests {
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries_with_paths(&[("song-a", Some("music/song-a.flac"))]),
+                entries: queue_entries(&["song-a"]),
                 current_index: Some(0),
             })
             .unwrap();

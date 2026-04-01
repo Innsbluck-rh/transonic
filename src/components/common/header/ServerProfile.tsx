@@ -33,7 +33,7 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
         class='flex flex-row cursor-pointer items-center p-2 gap-2 rounded-full bg-primary-plane hover:bg-primary-hover'
         onClick={() => setOpen(!open())}
       >
-        <Icon icon='pixelarticons:server' />
+        <Icon class='text-primary-text' icon='pixelarticons:server' />
         {/* <Show when={sessionStore.activeSession}>
           <p class='text-primary-text text-xs font-normal'>{activeProfile()?.displayName}</p>
         </Show> */}

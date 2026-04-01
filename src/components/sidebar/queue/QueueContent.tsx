@@ -44,12 +44,12 @@ const QueueContent: Component = () => {
               <div
                 class='col-span-2 grid w-full cursor-pointer grid-cols-subgrid items-center gap-x-2 px-3 py-2 hover:bg-primary-hover'
                 classList={{
-                  'bg-zinc-200': isPlaying,
+                  'bg-primary-playing': isPlaying,
                 }}
                 onClick={onClickEntry}
               >
                 <div class='flex flex-row items-start'>
-                  <Show when={!isPlaying} fallback={<Icon class='-ml-0.5 text-xs w-fit' icon='material-symbols:play-arrow' />}>
+                  <Show when={!isPlaying} fallback={<Icon class='-ml-0.5 text-xs w-fit scale-125 text-accent' icon='material-symbols:play-arrow' />}>
                     <p class='archivo text-xs font-bold'>{i() + 1}</p>
                   </Show>
                 </div>

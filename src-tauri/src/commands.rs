@@ -1,6 +1,6 @@
 mod albums;
 mod browse;
-mod common;
+pub(crate) mod common;
 mod cover_art;
 mod index;
 mod json;

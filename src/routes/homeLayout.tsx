@@ -30,7 +30,7 @@ const HomeLayout: ParentComponent = (props) => {
   });
 
   return (
-    <div class='w-dvw h-dvh bg-primary-plane'>
+    <div class='w-dvw h-dvh bg-primary-plane border-t border-secondary-border'>
       <Show
         when={sessionStore.activeSession}
         fallback={
@@ -45,8 +45,8 @@ const HomeLayout: ParentComponent = (props) => {
           <div class='flex flex-row w-full h-full overflow-hidden'>
             <IndexSideBar />
             <div class='flex flex-col min-w-0 flex-1 h-full'>
-              <div class='flex flex-row w-full h-6 items-center px-1 bg-primary-plane border-b border-primary-border'>
-                <p class='archivo text-[10px] text-secondary-text'>{location.pathname}</p>
+              <div class='flex flex-row w-full h-6 items-center bg-primary-plane border-b border-secondary-border'>
+                <p class='archivo text-[10px] text-secondary-text mx-4'>{location.pathname}</p>
               </div>
               {props.children}
             </div>

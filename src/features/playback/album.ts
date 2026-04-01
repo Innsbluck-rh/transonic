@@ -9,7 +9,15 @@ export async function replaceQueueWithAlbumAndPlay(albumId: string) {
     return;
   }
   const entries: PlaybackQueueEntry[] = asResult.data.songs.map((song) => {
-    return { songId: song.id, title: song.title, path: song.path } as PlaybackQueueEntry;
+    return {
+      songId: song.id,
+      title: song.title,
+      path: song.path,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+      coverArtId: song.coverArtId,
+    } as PlaybackQueueEntry;
   });
   // TODO: consider batch this?
   const setQueueResult = await commands.playbackSetQueue({ currentIndex: 0, entries });
@@ -26,7 +34,15 @@ export async function replaceQueueWithFolderAlbumAndPlay(libraryId: string, node
     return;
   }
   const entries: PlaybackQueueEntry[] = asResult.data.songs.map((song) => {
-    return { songId: song.id, title: song.title, path: song.path } as PlaybackQueueEntry;
+    return {
+      songId: song.id,
+      title: song.title,
+      path: song.path,
+      artist: song.artist,
+      album: song.album,
+      duration: song.duration,
+      coverArtId: song.coverArtId,
+    } as PlaybackQueueEntry;
   });
   // TODO: consider batch this?
   const setQueueResult = await commands.playbackSetQueue({ currentIndex: 0, entries });

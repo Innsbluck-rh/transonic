@@ -1,5 +1,6 @@
-import { Component, createEffect, createMemo, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
+import { Component, createEffect, createMemo, createResource, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
 import { commands, PlaybackLoadingReason, PlaybackState, SongResponse } from '~/bindings';
+import { fetchCoverArtDataUrl } from '~/features/albums/service';
 import { hasPlaybackCommandError } from '~/features/playback/service';
 import { playbackStore } from '~/stores/PlaybackStore';
 import PlayerIcon from './PlayerIcon';
@@ -206,9 +207,23 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
     })();
   });
 
+  const DEFAULT_COVER_ART_SIZE = 224;
+  const request = createMemo(() => {
+    const coverArtId = playingSong()?.coverArtId;
+    if (!coverArtId) {
+      return null;
+    }
+
+    return {
+      coverArtId,
+      size: DEFAULT_COVER_ART_SIZE,
+    };
+  });
+  const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
+
   return (
-    <div class='flex flex-col relative w-full h-18 '>
-      <div class='absolute w-full translate-y-[-50%]'>
+    <div class='flex flex-col relative w-full h-18 shadow-[0_0_8px_rgba(128,128,128,0.1)]'>
+      <div class='absolute w-full translate-y-[-50%] z-30'>
         <PlayerSlider
           valueMs={currentPositionMs()}
           maxMs={songDurationMs()}
@@ -217,7 +232,15 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
           onCommit={handleSeekCommit}
         />
       </div>
-      <div class='flex flex-row w-full h-full px-4 gap-2 items-center'>
+
+      <Show when={coverArt()}>
+        {(dataUrl) => <img class='absolute w-full h-full object-cover' src={dataUrl()} loading='lazy' decoding='async' />}
+      </Show>
+      <div class='absolute z-0 w-full h-full  backdrop-blur-xs'></div>
+      <div class='absolute z-0 w-full h-full bg-primary-plane opacity-50'></div>
+      <div class='absolute z-0 w-full h-full  from-primary-plane to-transparent bg-linear-to-r'></div>
+
+      <div class='flex flex-row w-full h-full px-4 gap-2 items-center shadow-xl z-10'>
         <div class='flex flex-row gap-2 items-center'>
           <Show when={iconsVisibility.prev}>
             <PlayerIcon type='prev' disabled={isInactive()} onClick={handlePrev} />

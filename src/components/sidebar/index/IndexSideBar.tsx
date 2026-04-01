@@ -7,6 +7,10 @@ const IndexSideBar: Component = () => {
     edges: { right: true },
     listeners: {
       move: function (event) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+
         let { x, y } = event.target.dataset;
 
         x = (parseFloat(x) || 0) + event.deltaRect.left;
@@ -16,7 +20,6 @@ const IndexSideBar: Component = () => {
         Object.assign(event.target.style, {
           width: `${event.rect.width}px`,
           height: `${event.rect.height}px`,
-          transform: `translate(${x}px, ${y}px)`,
         });
 
         Object.assign(event.target.dataset, { x, y });
@@ -25,7 +28,7 @@ const IndexSideBar: Component = () => {
   });
 
   return (
-    <div class='index-sidebar flex flex-col min-w-40 w-56 border-r border-primary-border resize-x overflow-auto'>
+    <div class='index-sidebar flex flex-col min-w-40 w-56 max-w-96 border-r border-primary-border'>
       <IndexContent />
     </div>
   );

@@ -25,6 +25,10 @@ pub struct PlaybackQueueEntry {
     pub song_id: String,
     pub title: String,
     pub path: Option<String>,
+    pub artist: Option<String>,
+    pub album: Option<String>,
+    pub duration: Option<u32>,
+    pub cover_art_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -65,3 +69,6 @@ impl PlaybackStatus {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, specta::Type, Event)]
+pub struct PlaybackNativeDirty;

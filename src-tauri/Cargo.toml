@@ -61,6 +61,9 @@ rodio = "0.22.2"
 [target.'cfg(target_os = "macos")'.dependencies]
 keyring = { version = "3", features = ["apple-native"] }
 
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
 [target.'cfg(any(target_os = "linux", target_os = "freebsd", target_os = "openbsd"))'.dependencies]
 keyring = { version = "3", features = [
     "linux-native-sync-persistent",
@@ -71,3 +74,9 @@ keyring = { version = "3", features = [
 mockito = "1"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+
+[profile.release]
+lto = true
+codegen-units = 1 # Allows LLVM to perform better optimizations
+strip = true      # Ensure debug symbols are removed

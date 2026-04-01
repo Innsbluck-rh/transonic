@@ -31,7 +31,7 @@ function Home() {
         HOME_ALBUM_CONTEXTS.map(async (section) => {
           const result = await commands.getAlbumList({
             context: section.context,
-            size: 8,
+            size: 16,
             offset: null,
             fromYear: null,
             toYear: null,

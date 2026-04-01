@@ -19,6 +19,8 @@
 @theme {
   --color-primary-plane: var(--color-zinc-50);
   --color-primary-surface: var(--color-zinc-100);
+  --color-primary-selected: var(--color-zinc-200);
+  --color-primary-playing: var(--color-zinc-200);
 
   --color-primary-hover: var(--color-zinc-200);
 
@@ -28,9 +30,27 @@
   --color-primary-text: var(--color-zinc-800);
   --color-secondary-text: var(--color-zinc-500);
 
+  /* --color-primary-plane: var(--color-zinc-900);
+  --color-primary-surface: var(--color-zinc-800);
+  --color-primary-selected: var(--color-zinc-800);
+  --color-primary-playing: var(--color-zinc-800);
+
+  --color-primary-hover: var(--color-zinc-700);
+
+  --color-primary-border: var(--color-zinc-600);
+  --color-secondary-border: var(--color-zinc-700);
+
+  --color-primary-text: var(--color-zinc-100);
+  --color-secondary-text: var(--color-zinc-500); */
+
   --color-accent: var(--color-sky-600);
 
-  --color-sp-nav-space: var(--color-zinc-600);
+  --color-sp-nav-space: var(--color-zinc-500);
+}
+
+:root {
+  --player-bar-height: 0.15rem;
+  --player-bar-detect-height: 1.5rem;
 }
 
 .sp-top-space {
@@ -45,7 +65,7 @@
 @layer base {
   html,
   body {
-    @apply box-border;
+    @apply box-border bg-primary-plane;
     font-family: 'Public Sans', sans-serif;
     line-height: 1;
     width: 100dvw;

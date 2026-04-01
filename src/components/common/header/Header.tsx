@@ -21,6 +21,7 @@ const Header: Component<HeaderProps> = (props) => {
         </Title>
       </Show>
       <div class='flex-1' />
+      {/* <input class='text-xs mr-2' placeholder='search...' /> */}
       <Show when={props.shouldShowProfiles}>
         <ProfilesNew profiles={sessionStore.profiles} />
       </Show>

@@ -14,10 +14,7 @@ use models::ActiveSession;
 use playback::{PlaybackController, PlaybackEventAppHandle};
 
 pub(crate) struct ActiveSessionState(pub Mutex<Option<ActiveSession>>);
-pub(crate) struct PlaybackControllerState(
-    pub Mutex<PlaybackController>,
-    pub PlaybackEventAppHandle,
-);
+pub(crate) struct PlaybackControllerState(pub Mutex<PlaybackController>);
 
 impl Default for ActiveSessionState {
     fn default() -> Self {
@@ -25,13 +22,9 @@ impl Default for ActiveSessionState {
     }
 }
 
-impl Default for PlaybackControllerState {
-    fn default() -> Self {
-        let app_handle: PlaybackEventAppHandle = Arc::new(Mutex::new(None));
-        Self(
-            Mutex::new(PlaybackController::with_tauri_reporter(app_handle.clone())),
-            app_handle,
-        )
+impl PlaybackControllerState {
+    fn new(controller: PlaybackController) -> Self {
+        Self(Mutex::new(controller))
     }
 }
 
@@ -39,9 +32,8 @@ impl Default for PlaybackControllerState {
 pub fn run() {
     let specta_builder = bindings::builder();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .manage(ActiveSessionState::default())
-        .manage(PlaybackControllerState::default())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -51,11 +43,24 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_os::init())
-        .invoke_handler(specta_builder.invoke_handler())
+        .invoke_handler(specta_builder.invoke_handler());
+
+    #[cfg(target_os = "android")]
+    let builder = builder.plugin(playback::init_android_mobile_plugin());
+
+    builder
         .setup(move |app| {
             specta_builder.mount_events(app);
-            let playback = app.state::<PlaybackControllerState>();
-            *playback.1.lock().unwrap() = Some(app.handle().clone());
+
+            let app_handle: PlaybackEventAppHandle =
+                Arc::new(Mutex::new(Some(app.handle().clone())));
+            let controller =
+                playback::create_playback_controller(&app.handle(), app_handle.clone());
+            app.manage(PlaybackControllerState::new(controller));
+
+            #[cfg(target_os = "android")]
+            playback::install_android_app_handle(app.handle().clone());
+
             Ok(())
         })
         .run(tauri::generate_context!())

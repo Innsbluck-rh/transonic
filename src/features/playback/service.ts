@@ -18,8 +18,23 @@ export async function startPlaybackStateSync() {
     applyPlaybackState(status);
   };
 
-  const unlisten = await events.playbackStatus.listen((event) => {
+  const refreshIfIdle = () => {
+    if (pollInFlight) {
+      return;
+    }
+
+    pollInFlight = true;
+    void refreshPlaybackState().finally(() => {
+      pollInFlight = false;
+    });
+  };
+
+  const unlistenStatus = await events.playbackStatus.listen((event) => {
     applyAuthoritativeState(event.payload);
+  });
+
+  const unlistenNativeDirty = await events.playbackNativeDirty.listen(() => {
+    refreshIfIdle();
   });
 
   const refreshPlaybackState = async () => {
@@ -44,15 +59,13 @@ export async function startPlaybackStateSync() {
       return;
     }
 
-    pollInFlight = true;
-    void refreshPlaybackState().finally(() => {
-      pollInFlight = false;
-    });
+    refreshIfIdle();
   }, PLAYBACK_STATE_POLL_MS);
 
   return () => {
     window.clearInterval(intervalId);
-    unlisten();
+    unlistenStatus();
+    unlistenNativeDirty();
   };
 }
 

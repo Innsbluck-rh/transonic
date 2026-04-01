@@ -1,31 +1,33 @@
-use opensubsonic_client::PreparedBinaryRequest;
-
-use crate::playback::backend_shims::backend::PlaybackBackend;
+use crate::playback::backend_shims::backend::{
+    PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
+};
 
 #[derive(Debug, Default)]
 struct UnsupportedPlaybackBackend;
 
 impl PlaybackBackend for UnsupportedPlaybackBackend {
-    fn load(
-        &mut self,
-        _request: PreparedBinaryRequest,
-        _absolute_start_position_ms: u32,
-        _local_start_position_ms: u32,
-        _autoplay: bool,
-    ) -> Result<(), String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+    fn plan_load(
+        &self,
+        requested_position_ms: u32,
+        supports_stream_offset: bool,
+    ) -> PlaybackLoadStrategy {
+        PlaybackLoadStrategy::split_by_stream_offset(requested_position_ms, supports_stream_offset)
     }
 
-    fn seek(&mut self, _position_ms: u32) -> Result<(), String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+    fn load(&mut self, _request: PlaybackBackendLoadRequest) -> Result<(), String> {
+        Err("Playback backend is only implemented for Windows and Android.".to_string())
+    }
+
+    fn seek(&mut self, _position_ms: u32) -> Result<PlaybackSeekAction, String> {
+        Err("Playback backend is only implemented for Windows and Android.".to_string())
     }
 
     fn current_position_ms(&self) -> Result<u32, String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+        Err("Playback backend is only implemented for Windows and Android.".to_string())
     }
 
     fn pause(&mut self) -> Result<(), String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+        Err("Playback backend is only implemented for Windows and Android.".to_string())
     }
 
     fn stop(&mut self) -> Result<(), String> {

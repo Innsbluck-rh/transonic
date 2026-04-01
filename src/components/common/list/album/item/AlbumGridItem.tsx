@@ -21,7 +21,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
       onDblClick={(e) => props.onArtDblClick?.(e)}
     >
       <div
-        class='relative w-fit h-fit'
+        class='relative'
         classList={{
           'cursor-pointer': isClickable,
         }}
@@ -42,7 +42,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         <p class='truncate text-sm' title={props.album.name}>
           {props.album.name}
         </p>
-        <p class='truncate text-xs text-zinc-500' title={props.album.artist ?? undefined}>
+        <p class='truncate text-xs text-secondary-text' title={props.album.artist ?? undefined}>
           {props.album.artist ?? 'unknown artist'}
         </p>
       </div>

@@ -8,7 +8,10 @@ use std::{
 use specta_typescript::Typescript;
 use tauri_specta::{collect_commands, collect_events, Builder};
 
-use crate::{commands, models::PlaybackStatus};
+use crate::{
+    commands,
+    models::{PlaybackNativeDirty, PlaybackStatus},
+};
 
 pub fn builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
@@ -35,7 +38,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback_next,
             commands::playback_prev
         ])
-        .events(collect_events![PlaybackStatus])
+        .events(collect_events![PlaybackStatus, PlaybackNativeDirty])
 }
 
 pub fn export_typescript_bindings() -> Result<(), specta_typescript::ExportError> {

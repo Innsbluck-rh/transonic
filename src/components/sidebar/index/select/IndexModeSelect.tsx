@@ -19,13 +19,13 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
         class='flex flex-row w-full cursor-pointer border-b border-primary-border px-3 py-2 text-left hover:bg-primary-hover'
         onClick={() => setOpen((current) => !current)}
       >
-        <p class='archivo font-bold text-zinc-800 text-xs'>{browseMode()}</p>
+        <p class='archivo font-bold text-xs'>{browseMode()}</p>
 
         <div
           class={`opacity-50 w-0 h-0 self-center ml-auto
             border-l-[5px] border-l-transparent 
             border-r-[5px] border-r-transparent 
-            border-t-[5px] border-t-zinc-800 ${selectStates.toggle}`}
+            border-t-[5px] border-t border-secondary-text ${selectStates.toggle}`}
           classList={{ [selectStates['is-open']]: open() }}
         ></div>
       </div>
@@ -36,13 +36,13 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
           <For each={otherModes()}>
             {(mode) => (
               <div
-                class='flex w-full cursor-pointer px-3 py-2 hover:bg-zinc-200'
+                class='flex w-full cursor-pointer px-3 py-2 hover:bg-primary-hover'
                 onClick={() => {
                   props.onSelect?.(mode);
                   setOpen(false);
                 }}
               >
-                <p class='archivo font-bold text-zinc-800 text-xs'>{mode}</p>
+                <p class='archivo font-bold text-xs'>{mode}</p>
               </div>
             )}
           </For>
@@ -53,7 +53,7 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
 
       {/* border */}
       <Show when={open()}>
-        <div class='w-full h-0 border-b border-zinc-400' />
+        <div class='w-full h-0 border-b border-primary-border' />
       </Show>
     </div>
   );

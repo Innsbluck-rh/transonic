@@ -53,8 +53,8 @@ const HomeLayoutSP: ParentComponent = (props) => {
               </Match>
               <Match when={SPNavStore.state === 'main'}>
                 <div class='flex flex-col min-w-0 flex-1 h-full'>
-                  <div class='flex flex-row w-full h-6 items-center px-1 bg-primary-plane border-b border-primary-border'>
-                    <p class='archivo text-[10px] text-secondary-text'>{location.pathname}</p>
+                  <div class='flex flex-row w-full h-6 items-center bg-primary-plane border-b border-secondary-border'>
+                    <p class='archivo text-[10px] text-secondary-text mx-3'>{location.pathname}</p>
                   </div>
                   {props.children}
                 </div>

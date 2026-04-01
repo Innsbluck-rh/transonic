@@ -1,38 +1,75 @@
-use opensubsonic_client::PreparedBinaryRequest;
+use crate::playback::android_mobile_plugin::{
+    AndroidPlaybackBridge, AndroidPlaybackHeader, AndroidPreparedMediaRequest,
+};
+use crate::playback::backend_shims::backend::{
+    PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
+};
 
-use crate::playback::backend_shims::backend::PlaybackBackend;
-
-#[derive(Debug, Default)]
-struct AndroidPlaybackBackend;
+#[derive(Debug, Clone)]
+struct AndroidPlaybackBackend {
+    bridge: AndroidPlaybackBridge,
+}
 
 impl PlaybackBackend for AndroidPlaybackBackend {
-    fn load(
-        &mut self,
-        _request: PreparedBinaryRequest,
-        _absolute_start_position_ms: u32,
-        _local_start_position_ms: u32,
-        _autoplay: bool,
-    ) -> Result<(), String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+    fn plan_load(
+        &self,
+        requested_position_ms: u32,
+        supports_stream_offset: bool,
+    ) -> PlaybackLoadStrategy {
+        PlaybackLoadStrategy::split_by_stream_offset(requested_position_ms, supports_stream_offset)
     }
 
-    fn seek(&mut self, _position_ms: u32) -> Result<(), String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+    fn load(&mut self, request: PlaybackBackendLoadRequest) -> Result<(), String> {
+        let headers = request
+            .request
+            .headers
+            .iter()
+            .map(|(name, value)| {
+                Ok(AndroidPlaybackHeader {
+                    name: name.as_str().to_string(),
+                    value: value
+                        .to_str()
+                        .map_err(|error| {
+                            format!("Invalid stream header value for {name}: {error}")
+                        })?
+                        .to_string(),
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+
+        self.bridge
+            .load_prepared_media(&AndroidPreparedMediaRequest {
+                media_id: request.media_id,
+                stream_url: request.request.url.to_string(),
+                headers,
+                absolute_start_position_ms: request.absolute_start_position_ms,
+                local_start_position_ms: request.local_start_position_ms,
+                autoplay: request.autoplay,
+                title: request.title,
+                artist: request.artist,
+                album: request.album,
+                artwork_url: request.artwork_url,
+            })
+    }
+
+    fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String> {
+        self.bridge.seek_to(position_ms)?;
+        Ok(PlaybackSeekAction::Applied)
     }
 
     fn current_position_ms(&self) -> Result<u32, String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+        self.bridge.current_position_ms()
     }
 
     fn pause(&mut self) -> Result<(), String> {
-        Err("Playback backend is only implemented for Windows.".to_string())
+        self.bridge.pause()
     }
 
     fn stop(&mut self) -> Result<(), String> {
-        Ok(())
+        self.bridge.stop()
     }
 }
 
-pub fn create_playback_backend() -> Box<dyn PlaybackBackend> {
-    Box::new(AndroidPlaybackBackend)
+pub fn create_playback_backend(bridge: AndroidPlaybackBridge) -> Box<dyn PlaybackBackend> {
+    Box::new(AndroidPlaybackBackend { bridge })
 }

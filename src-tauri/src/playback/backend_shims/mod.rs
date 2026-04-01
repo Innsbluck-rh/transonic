@@ -1,5 +1,8 @@
 mod backend;
-pub use backend::PlaybackBackend;
+#[allow(unused_imports)]
+pub use backend::{
+    PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
+};
 
 #[cfg(target_os = "windows")]
 mod windows;
