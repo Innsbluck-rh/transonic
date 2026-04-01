@@ -6,14 +6,18 @@ mod playback;
 mod profiles;
 mod secrets;
 mod session;
+use std::sync::{Arc, Mutex};
 
-use std::sync::Mutex;
+use tauri::Manager;
 
 use models::ActiveSession;
-use playback::PlaybackController;
+use playback::{PlaybackController, PlaybackEventAppHandle};
 
 pub(crate) struct ActiveSessionState(pub Mutex<Option<ActiveSession>>);
-pub(crate) struct PlaybackControllerState(pub Mutex<PlaybackController>);
+pub(crate) struct PlaybackControllerState(
+    pub Mutex<PlaybackController>,
+    pub PlaybackEventAppHandle,
+);
 
 impl Default for ActiveSessionState {
     fn default() -> Self {
@@ -23,7 +27,11 @@ impl Default for ActiveSessionState {
 
 impl Default for PlaybackControllerState {
     fn default() -> Self {
-        Self(Mutex::new(PlaybackController::with_defaults()))
+        let app_handle: PlaybackEventAppHandle = Arc::new(Mutex::new(None));
+        Self(
+            Mutex::new(PlaybackController::with_tauri_reporter(app_handle.clone())),
+            app_handle,
+        )
     }
 }
 
@@ -45,6 +53,8 @@ pub fn run() {
         .invoke_handler(specta_builder.invoke_handler())
         .setup(move |app| {
             specta_builder.mount_events(app);
+            let playback = app.state::<PlaybackControllerState>();
+            *playback.1.lock().unwrap() = Some(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

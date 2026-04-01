@@ -29,9 +29,9 @@ pub fn playback_get_state(
 pub fn playback_set_queue(
     state: State<'_, PlaybackControllerState>,
     payload: PlaybackSetQueueRequest,
-) -> Result<PlaybackStatus, String> {
+) -> Result<(), String> {
     let mut controller = state.0.lock().unwrap();
-    let result = controller.set_queue(payload);
+    let result = controller.set_queue(payload).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_set_queue: failed: {error}");
     }
@@ -44,7 +44,7 @@ pub fn playback_play(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
     playback: State<'_, PlaybackControllerState>,
-) -> Result<PlaybackStatus, String> {
+) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
@@ -53,7 +53,7 @@ pub fn playback_play(
     };
 
     let mut controller = playback.0.lock().unwrap();
-    let result = controller.play(&runtime_context);
+    let result = controller.play(&runtime_context).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_play: failed: {error}");
     }
@@ -62,9 +62,9 @@ pub fn playback_play(
 
 #[tauri::command]
 #[specta::specta]
-pub fn playback_pause(state: State<'_, PlaybackControllerState>) -> Result<PlaybackStatus, String> {
+pub fn playback_pause(state: State<'_, PlaybackControllerState>) -> Result<(), String> {
     let mut controller = state.0.lock().unwrap();
-    let result = controller.pause();
+    let result = controller.pause().map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_pause: failed: {error}");
     }
@@ -73,9 +73,9 @@ pub fn playback_pause(state: State<'_, PlaybackControllerState>) -> Result<Playb
 
 #[tauri::command]
 #[specta::specta]
-pub fn playback_stop(state: State<'_, PlaybackControllerState>) -> Result<PlaybackStatus, String> {
+pub fn playback_stop(state: State<'_, PlaybackControllerState>) -> Result<(), String> {
     let mut controller = state.0.lock().unwrap();
-    let result = controller.stop();
+    let result = controller.stop().map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_stop: failed: {error}");
     }
@@ -89,7 +89,7 @@ pub fn playback_seek(
     sessions: State<'_, ActiveSessionState>,
     playback: State<'_, PlaybackControllerState>,
     payload: PlaybackSeekRequest,
-) -> Result<PlaybackStatus, String> {
+) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
@@ -98,7 +98,7 @@ pub fn playback_seek(
     };
 
     let mut controller = playback.0.lock().unwrap();
-    let result = controller.seek(&runtime_context, payload.position_ms);
+    let result = controller.seek(&runtime_context, payload.position_ms).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_seek: failed: {error}");
     }
@@ -111,7 +111,7 @@ pub fn playback_next(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
     playback: State<'_, PlaybackControllerState>,
-) -> Result<PlaybackStatus, String> {
+) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
@@ -120,7 +120,7 @@ pub fn playback_next(
     };
 
     let mut controller = playback.0.lock().unwrap();
-    let result = controller.next(&runtime_context);
+    let result = controller.next(&runtime_context).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_next: failed: {error}");
     }
@@ -133,7 +133,7 @@ pub fn playback_prev(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
     playback: State<'_, PlaybackControllerState>,
-) -> Result<PlaybackStatus, String> {
+) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
@@ -142,7 +142,7 @@ pub fn playback_prev(
     };
 
     let mut controller = playback.0.lock().unwrap();
-    let result = controller.prev(&runtime_context);
+    let result = controller.prev(&runtime_context).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_prev: failed: {error}");
     }

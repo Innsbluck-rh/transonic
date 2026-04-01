@@ -3,7 +3,6 @@ import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings'
 import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
 import AlbumHorizontalList from '~/components/common/list/AlbumHorizontalList';
-import { syncPlaybackState } from '~/features/playback/service';
 import { sessionStore } from '~/stores/SessionStore';
 
 type HomeAlbumSection = {
@@ -76,7 +75,6 @@ function Home() {
 
   onMount(async () => {
     await loadHomeAlbumSections();
-    await syncPlaybackState();
   });
 
   return (

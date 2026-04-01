@@ -10,7 +10,7 @@ use crate::models::{
 use super::{
     backend::{create_playback_backend, PlaybackBackend},
     queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
-    reporting::{NoopPlaybackReporter, PlaybackReporter},
+    reporting::{PlaybackEventAppHandle, PlaybackReporter, TauriPlaybackReporter},
 };
 
 pub struct PlaybackRuntimeContext<'a> {
@@ -26,10 +26,10 @@ pub struct PlaybackController {
 }
 
 impl PlaybackController {
-    pub fn with_defaults() -> Self {
+    pub(crate) fn with_tauri_reporter(app_handle: PlaybackEventAppHandle) -> Self {
         Self::new(
             create_playback_backend(),
-            Box::new(NoopPlaybackReporter),
+            Box::new(TauriPlaybackReporter::new(app_handle)),
             Box::new(NoopQueueSyncGateway),
         )
     }
@@ -70,7 +70,8 @@ impl PlaybackController {
             PlaybackState::Stopped
         };
 
-        let _ = self.queue_sync.sync_queue(&self.status);
+        self.sync_queue_state();
+        self.report_status();
         Ok(self.state())
     }
 
@@ -78,7 +79,7 @@ impl PlaybackController {
         let index = self.ensure_current_index()?;
         let requested_position_ms = self.status.current_position_ms;
         self.load_track_at_index(context, index, requested_position_ms, true)?;
-        let _ = self.reporter.report_state(&self.status);
+        self.report_status();
         Ok(self.state())
     }
 
@@ -86,7 +87,7 @@ impl PlaybackController {
         self.backend.pause()?;
         self.status.state = PlaybackState::Paused;
         self.status.error = None;
-        let _ = self.reporter.report_state(&self.status);
+        self.report_status();
         Ok(self.state())
     }
 
@@ -95,7 +96,7 @@ impl PlaybackController {
         self.status.state = PlaybackState::Stopped;
         self.status.current_position_ms = 0;
         self.status.error = None;
-        let _ = self.reporter.report_state(&self.status);
+        self.report_status();
         Ok(self.state())
     }
 
@@ -120,7 +121,7 @@ impl PlaybackController {
             self.status.error = None;
         }
 
-        let _ = self.reporter.report_state(&self.status);
+        self.report_status();
         Ok(self.state())
     }
 
@@ -150,7 +151,7 @@ impl PlaybackController {
             self.status.error = None;
         }
 
-        let _ = self.reporter.report_state(&self.status);
+        self.report_status();
         Ok(self.state())
     }
 
@@ -175,7 +176,7 @@ impl PlaybackController {
             self.status.error = None;
         }
 
-        let _ = self.reporter.report_state(&self.status);
+        self.report_status();
         Ok(self.state())
     }
 
@@ -184,7 +185,18 @@ impl PlaybackController {
         self.status.state = PlaybackState::Stopped;
         self.status.current_position_ms = 0;
         self.status.error = None;
-        let _ = self.reporter.report_state(&self.status);
+        self.report_status();
+        self.state()
+    }
+
+    pub fn reset(&mut self) -> PlaybackStatus {
+        if let Err(error) = self.backend.stop() {
+            log::warn!("controller.reset: failed to stop backend: {error}");
+        }
+
+        self.status = PlaybackStatus::empty();
+        self.sync_queue_state();
+        self.report_status();
         self.state()
     }
 
@@ -233,26 +245,36 @@ impl PlaybackController {
         self.status.current_song_id = Some(song_id.clone());
         self.status.current_position_ms = normalized_position_ms;
         self.status.error = None;
+        self.report_status();
 
-        let raw_stream =
-            build_stream_request(context.client, &song_id, stream_offset_seconds, true)?;
-        if let Err(raw_error) = self.backend.load(raw_stream, autoplay) {
-            log::warn!(
-                "controller.load_track_at_index: raw stream load failed for song_id={song_id}: {raw_error}"
-            );
-            let fallback_stream =
-                build_stream_request(context.client, &song_id, stream_offset_seconds, false)?;
-            if let Err(fallback_error) = self.backend.load(fallback_stream, autoplay) {
-                let message = format!(
-                    "Failed to load playback stream. raw stream failed: {raw_error}; fallback stream failed: {fallback_error}"
+        let load_result = (|| {
+            let raw_stream =
+                build_stream_request(context.client, &song_id, stream_offset_seconds, true)?;
+            if let Err(raw_error) = self.backend.load(raw_stream, autoplay) {
+                log::warn!(
+                    "controller.load_track_at_index: raw stream load failed for song_id={song_id}: {raw_error}"
                 );
-                log::error!(
-                    "controller.load_track_at_index: fallback stream load failed for song_id={song_id}: {fallback_error}"
-                );
-                self.status.state = PlaybackState::Error;
-                self.status.error = Some(message.clone());
-                return Err(message);
+                let fallback_stream =
+                    build_stream_request(context.client, &song_id, stream_offset_seconds, false)?;
+                if let Err(fallback_error) = self.backend.load(fallback_stream, autoplay) {
+                    let message = format!(
+                        "Failed to load playback stream. raw stream failed: {raw_error}; fallback stream failed: {fallback_error}"
+                    );
+                    log::error!(
+                        "controller.load_track_at_index: fallback stream load failed for song_id={song_id}: {fallback_error}"
+                    );
+                    return Err(message);
+                }
             }
+
+            Ok(())
+        })();
+
+        if let Err(error) = load_result {
+            self.status.state = PlaybackState::Error;
+            self.status.error = Some(error.clone());
+            self.report_status();
+            return Err(error);
         }
 
         self.status.state = if autoplay {
@@ -265,6 +287,14 @@ impl PlaybackController {
         self.status.error = None;
 
         Ok(())
+    }
+
+    fn sync_queue_state(&mut self) {
+        let _ = self.queue_sync.sync_queue(&self.status);
+    }
+
+    fn report_status(&mut self) {
+        let _ = self.reporter.report_state(&self.status);
     }
 }
 
@@ -365,7 +395,7 @@ mod tests {
         playback::{
             backend::PlaybackBackend,
             queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
-            reporting::{NoopPlaybackReporter, PlaybackReporter},
+            reporting::PlaybackReporter,
         },
     };
 
@@ -373,13 +403,23 @@ mod tests {
     struct MockBackendState {
         load_calls: Vec<String>,
         fail_first_load: bool,
+        always_fail_load: bool,
         has_failed_first_load: bool,
         pause_calls: usize,
         stop_calls: usize,
     }
 
+    #[derive(Debug, Default)]
+    struct MockReporterState {
+        reported_states: Vec<PlaybackStatus>,
+    }
+
     struct MockBackend {
         state: Arc<Mutex<MockBackendState>>,
+    }
+
+    struct MockReporter {
+        state: Arc<Mutex<MockReporterState>>,
     }
 
     impl PlaybackBackend for MockBackend {
@@ -390,6 +430,9 @@ mod tests {
         ) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
             state.load_calls.push(request.url.to_string());
+            if state.always_fail_load {
+                return Err("stream rejected".to_string());
+            }
             if state.fail_first_load && !state.has_failed_first_load {
                 state.has_failed_first_load = true;
                 return Err("raw stream rejected".to_string());
@@ -405,6 +448,17 @@ mod tests {
 
         fn stop(&mut self) -> Result<(), String> {
             self.state.lock().unwrap().stop_calls += 1;
+            Ok(())
+        }
+    }
+
+    impl PlaybackReporter for MockReporter {
+        fn report_state(&mut self, status: &PlaybackStatus) -> Result<(), String> {
+            self.state
+                .lock()
+                .unwrap()
+                .reported_states
+                .push(status.clone());
             Ok(())
         }
     }
@@ -429,18 +483,37 @@ mod tests {
 
     fn controller_with_mock_backend(
         fail_first_load: bool,
-    ) -> (PlaybackController, Arc<Mutex<MockBackendState>>) {
+    ) -> (
+        PlaybackController,
+        Arc<Mutex<MockBackendState>>,
+        Arc<Mutex<MockReporterState>>,
+    ) {
+        controller_with_mock_backend_config(fail_first_load, false)
+    }
+
+    fn controller_with_mock_backend_config(
+        fail_first_load: bool,
+        always_fail_load: bool,
+    ) -> (
+        PlaybackController,
+        Arc<Mutex<MockBackendState>>,
+        Arc<Mutex<MockReporterState>>,
+    ) {
         let state = Arc::new(Mutex::new(MockBackendState {
             fail_first_load,
+            always_fail_load,
             ..MockBackendState::default()
         }));
+        let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
         let backend = Box::new(MockBackend {
             state: state.clone(),
         });
-        let reporter: Box<dyn PlaybackReporter> = Box::new(NoopPlaybackReporter);
+        let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
+            state: reporter_state.clone(),
+        });
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
         let controller = PlaybackController::new(backend, reporter, queue_sync);
-        (controller, state)
+        (controller, state, reporter_state)
     }
 
     fn queue_entries(song_ids: &[&str]) -> Vec<PlaybackQueueEntry> {
@@ -454,7 +527,7 @@ mod tests {
 
     #[test]
     fn set_queue_rejects_out_of_range_current_index() {
-        let (mut controller, _) = controller_with_mock_backend(false);
+        let (mut controller, _, _) = controller_with_mock_backend(false);
 
         let result = controller.set_queue(PlaybackSetQueueRequest {
             entries: queue_entries(&["song-a"]),
@@ -466,7 +539,7 @@ mod tests {
 
     #[test]
     fn duplicate_song_ids_are_distinguished_by_index() {
-        let (mut controller, _) = controller_with_mock_backend(false);
+        let (mut controller, _, _) = controller_with_mock_backend(false);
         let status = controller
             .set_queue(PlaybackSetQueueRequest {
                 entries: queue_entries(&["song-a", "song-a", "song-b"]),
@@ -480,7 +553,7 @@ mod tests {
 
     #[test]
     fn next_prev_enforce_queue_boundaries() {
-        let (mut controller, _) = controller_with_mock_backend(false);
+        let (mut controller, _, _) = controller_with_mock_backend(false);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -503,7 +576,7 @@ mod tests {
 
     #[test]
     fn play_pause_seek_stop_follow_consistent_state_transitions() {
-        let (mut controller, _) = controller_with_mock_backend(false);
+        let (mut controller, _, _) = controller_with_mock_backend(false);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -529,7 +602,7 @@ mod tests {
 
     #[test]
     fn on_track_finished_does_not_auto_advance_index() {
-        let (mut controller, _) = controller_with_mock_backend(false);
+        let (mut controller, _, _) = controller_with_mock_backend(false);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -550,7 +623,7 @@ mod tests {
 
     #[test]
     fn raw_stream_falls_back_to_standard_stream_when_backend_rejects_raw() {
-        let (mut controller, backend_state) = controller_with_mock_backend(true);
+        let (mut controller, backend_state, _) = controller_with_mock_backend(true);
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -573,7 +646,7 @@ mod tests {
 
     #[test]
     fn stream_offset_is_not_sent_when_transcode_offset_extension_is_missing() {
-        let (mut controller, backend_state) = controller_with_mock_backend(false);
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
         let (client, capability_matrix) = runtime_context(false);
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
@@ -619,5 +692,122 @@ mod tests {
     #[test]
     fn default_status_is_idle() {
         assert_eq!(PlaybackStatus::empty().state, PlaybackState::Idle);
+    }
+
+    #[test]
+    fn reporter_receives_discrete_state_snapshots_for_mutations() {
+        let (mut controller, _, reporter_state) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a", "song-b"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller.pause().unwrap();
+        controller.seek(&runtime_context, 8_000).unwrap();
+        controller.next(&runtime_context).unwrap();
+        controller.prev(&runtime_context).unwrap();
+        controller.stop().unwrap();
+
+        let reported_states = reporter_state.lock().unwrap().reported_states.clone();
+        let states = reported_states
+            .iter()
+            .map(|status| status.state.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            states,
+            vec![
+                PlaybackState::Stopped,
+                PlaybackState::Loading,
+                PlaybackState::Playing,
+                PlaybackState::Paused,
+                PlaybackState::Loading,
+                PlaybackState::Paused,
+                PlaybackState::Loading,
+                PlaybackState::Paused,
+                PlaybackState::Loading,
+                PlaybackState::Paused,
+                PlaybackState::Stopped,
+            ]
+        );
+        assert_eq!(reported_states[4].current_position_ms, 8_000);
+        assert_eq!(reported_states[6].current_index, Some(1));
+        assert_eq!(reported_states[9].current_index, Some(0));
+    }
+
+    #[test]
+    fn load_failures_are_reported_as_error_snapshots() {
+        let (mut controller, _, reporter_state) = controller_with_mock_backend_config(false, true);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+
+        let result = controller.play(&runtime_context);
+        assert!(result.is_err());
+
+        let reported_states = reporter_state.lock().unwrap().reported_states.clone();
+        let states = reported_states
+            .iter()
+            .map(|status| status.state.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            states,
+            vec![
+                PlaybackState::Stopped,
+                PlaybackState::Loading,
+                PlaybackState::Error,
+            ]
+        );
+        assert!(
+            reported_states
+                .last()
+                .and_then(|status| status.error.as_deref())
+                .is_some_and(|message| message.contains("Failed to load playback stream."))
+        );
+    }
+
+    #[test]
+    fn reset_clears_status_and_reports_idle() {
+        let (mut controller, _, reporter_state) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        let status = controller.reset();
+        assert_eq!(status, PlaybackStatus::empty());
+
+        let reported_states = reporter_state.lock().unwrap().reported_states.clone();
+        assert_eq!(
+            reported_states.last().cloned(),
+            Some(PlaybackStatus::empty())
+        );
     }
 }

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use tauri_specta::Event;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
@@ -30,7 +31,7 @@ pub struct PlaybackSeekRequest {
     pub position_ms: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackStatus {
     pub state: PlaybackState,

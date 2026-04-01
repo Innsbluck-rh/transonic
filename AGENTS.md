@@ -4,6 +4,7 @@
 - Please be sure to refer to the latest (open)subsonic API documentation regarding API compatibility.
 - READ THE LATEST CODE. You are supposed to find out potential information, issues, and solutions. You are NOT supposed to report what your thought ONLY from user's prompt or TODO list.
 - When you assigned to "research"(「調査」), "consider"(「検討」) or "investigate", you MUST NOT change anything.
+- Unless there are special circumstances, do not use commands that include building the Tauri app. It will take a considerably long time. Most errors should be detectable with tsc+cargo check+tests.
 
 ## ADR
 

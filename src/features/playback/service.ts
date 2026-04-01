@@ -1,21 +1,37 @@
-import { commands, PlaybackStatus, Result } from '~/bindings';
+import { commands, events, PlaybackStatus } from '~/bindings';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
 
-// TODO: !! consider replacing calling this with listening the backend events !!
-export async function syncPlaybackState() {
-  const stateResult = await commands.playbackGetState();
+type PlaybackCommandResult = { status: 'ok' } | { status: 'error'; error: string };
 
-  if (stateResult.status === 'error') {
-    console.error(stateResult.error);
-    return;
-  }
-  setPlaybackStore('status', stateResult.data);
+function applyPlaybackState(status: PlaybackStatus) {
+  setPlaybackStore('status', status);
 }
 
-export async function setPlaybackStateWithResult(result: Result<PlaybackStatus, string>) {
+export async function startPlaybackStateSync() {
+  let receivedEvent = false;
+  const unlisten = await events.playbackStatus.listen((event) => {
+    receivedEvent = true;
+    applyPlaybackState(event.payload);
+  });
+
+  const stateResult = await commands.playbackGetState();
+  if (stateResult.status === 'error') {
+    console.error(stateResult.error);
+    return unlisten;
+  }
+
+  if (!receivedEvent) {
+    applyPlaybackState(stateResult.data);
+  }
+
+  return unlisten;
+}
+
+export function hasPlaybackCommandError(result: PlaybackCommandResult) {
   if (result.status === 'error') {
     console.error(result.error);
-    return;
+    return true;
   }
-  setPlaybackStore('status', result.data);
+
+  return false;
 }

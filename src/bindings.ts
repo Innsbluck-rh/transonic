@@ -117,7 +117,7 @@ async playbackGetState() : Promise<Result<PlaybackStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async playbackSetQueue(payload: PlaybackSetQueueRequest) : Promise<Result<PlaybackStatus, string>> {
+async playbackSetQueue(payload: PlaybackSetQueueRequest) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_set_queue", { payload }) };
 } catch (e) {
@@ -125,7 +125,7 @@ async playbackSetQueue(payload: PlaybackSetQueueRequest) : Promise<Result<Playba
     else return { status: "error", error: e  as any };
 }
 },
-async playbackPlay() : Promise<Result<PlaybackStatus, string>> {
+async playbackPlay() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_play") };
 } catch (e) {
@@ -133,7 +133,7 @@ async playbackPlay() : Promise<Result<PlaybackStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async playbackPause() : Promise<Result<PlaybackStatus, string>> {
+async playbackPause() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_pause") };
 } catch (e) {
@@ -141,7 +141,7 @@ async playbackPause() : Promise<Result<PlaybackStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async playbackStop() : Promise<Result<PlaybackStatus, string>> {
+async playbackStop() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_stop") };
 } catch (e) {
@@ -149,7 +149,7 @@ async playbackStop() : Promise<Result<PlaybackStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async playbackSeek(payload: PlaybackSeekRequest) : Promise<Result<PlaybackStatus, string>> {
+async playbackSeek(payload: PlaybackSeekRequest) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_seek", { payload }) };
 } catch (e) {
@@ -157,7 +157,7 @@ async playbackSeek(payload: PlaybackSeekRequest) : Promise<Result<PlaybackStatus
     else return { status: "error", error: e  as any };
 }
 },
-async playbackNext() : Promise<Result<PlaybackStatus, string>> {
+async playbackNext() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_next") };
 } catch (e) {
@@ -165,7 +165,7 @@ async playbackNext() : Promise<Result<PlaybackStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async playbackPrev() : Promise<Result<PlaybackStatus, string>> {
+async playbackPrev() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_prev") };
 } catch (e) {
@@ -178,6 +178,11 @@ async playbackPrev() : Promise<Result<PlaybackStatus, string>> {
 /** user-defined events **/
 
 
+export const events = __makeEvents__<{
+playbackStatus: PlaybackStatus
+}>({
+playbackStatus: "playback-status"
+})
 
 /** user-defined constants **/
 

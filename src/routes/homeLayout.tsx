@@ -1,13 +1,33 @@
 import { useLocation } from '@solidjs/router';
-import { ParentComponent, Show } from 'solid-js';
+import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import Header from '~/components/common/header/Header';
 import PlayerBar from '~/components/player/PlayerBar';
 import IndexSideBar from '~/components/sidebar/index/IndexSideBar';
 import QueueSideBar from '~/components/sidebar/queue/QueueSideBar';
+import { startPlaybackStateSync } from '~/features/playback/service';
 import { sessionStore } from '~/stores/SessionStore';
 
 const HomeLayout: ParentComponent = (props) => {
   const location = useLocation();
+
+  onMount(() => {
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+
+    void startPlaybackStateSync().then((nextUnlisten) => {
+      if (disposed) {
+        nextUnlisten();
+        return;
+      }
+
+      unlisten = nextUnlisten;
+    });
+
+    onCleanup(() => {
+      disposed = true;
+      unlisten?.();
+    });
+  });
 
   return (
     <div class='w-dvw h-dvh bg-primary-plane'>

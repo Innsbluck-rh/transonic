@@ -4,7 +4,7 @@ import { commands, PlaybackQueueEntry, type AlbumListItem, type MusicDirectoryRe
 import Heading3 from '~/components/common/Heading3';
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/AlbumGrid';
-import { setPlaybackStateWithResult } from '~/features/playback/service';
+import { hasPlaybackCommandError } from '~/features/playback/service';
 import { sessionStore } from '~/stores/SessionStore';
 
 function BrowseArtistAlbums() {
@@ -97,9 +97,11 @@ function BrowseArtistAlbums() {
             });
             // TODO: consider batch this?
             const setQueueResult = await commands.playbackSetQueue({ currentIndex: 0, entries });
-            await setPlaybackStateWithResult(setQueueResult);
+            if (hasPlaybackCommandError(setQueueResult)) {
+              return;
+            }
             const playResult = await commands.playbackPlay();
-            await setPlaybackStateWithResult(playResult);
+            hasPlaybackCommandError(playResult);
           }}
         />
       </Show>

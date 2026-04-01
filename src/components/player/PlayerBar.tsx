@@ -1,6 +1,6 @@
 import { Component, createEffect, createMemo, createSignal, onCleanup, Show } from 'solid-js';
 import { commands, PlaybackState, SongResponse } from '~/bindings';
-import { setPlaybackStateWithResult } from '~/features/playback/service';
+import { hasPlaybackCommandError } from '~/features/playback/service';
 import { playbackStore } from '~/stores/PlaybackStore';
 import LoadCircle from '../common/LoadCircle';
 import PlayerIcon from './PlayerIcon';
@@ -91,8 +91,9 @@ const PlayerBar: Component = () => {
     setSeekPreviewMs(nextPositionMs);
 
     const result = await commands.playbackSeek({ positionMs: nextPositionMs });
-    await setPlaybackStateWithResult(result);
-    setSeekPreviewMs(null);
+    if (hasPlaybackCommandError(result)) {
+      setSeekPreviewMs(null);
+    }
   };
 
   createEffect(() => {
@@ -115,6 +116,7 @@ const PlayerBar: Component = () => {
       setBasePositionMs(status.currentPositionMs);
       setPositionSyncedAtMs(Date.now());
       setNowMs(Date.now());
+      setSeekPreviewMs(null);
 
       if (status.currentSongId) {
         // get song info
@@ -136,13 +138,13 @@ const PlayerBar: Component = () => {
         <PlayerSlider progressRatio={progressRatio()} disabled={!canSeek()} onSeekPreview={handleSeekPreview} onSeekCommit={handleSeekCommit} />
       </div>
       <div class='flex flex-row w-full h-full px-4 gap-2 items-center'>
-        <div class='flex flex-row gap-2'>
+        <div class='flex flex-row gap-2 items-center'>
           <PlayerIcon
             type='prev'
             disabled={isInactive()}
             onClick={async () => {
               const result = await commands.playbackPrev();
-              await setPlaybackStateWithResult(result);
+              hasPlaybackCommandError(result);
             }}
           />
           <Show when={!isLoading()} fallback={<LoadCircle />}>
@@ -152,10 +154,10 @@ const PlayerBar: Component = () => {
               onClick={async () => {
                 if (state() === 'playing') {
                   const result = await commands.playbackPause();
-                  await setPlaybackStateWithResult(result);
+                  hasPlaybackCommandError(result);
                 } else {
                   const result = await commands.playbackPlay();
-                  await setPlaybackStateWithResult(result);
+                  hasPlaybackCommandError(result);
                 }
               }}
             />
@@ -165,7 +167,7 @@ const PlayerBar: Component = () => {
             disabled={isInactive()}
             onClick={async () => {
               const result = await commands.playbackNext();
-              await setPlaybackStateWithResult(result);
+              hasPlaybackCommandError(result);
             }}
           />
         </div>

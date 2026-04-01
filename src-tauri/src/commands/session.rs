@@ -4,18 +4,29 @@ use crate::{
     models::{
         AppBootstrap, ConnectServerProfileRequest, ConnectServerProfileResult, ProfileIdRequest,
     },
-    ActiveSessionState,
+    ActiveSessionState, PlaybackControllerState,
 };
 
 use super::common::service;
+
+fn reset_playback_state(playback: &State<'_, PlaybackControllerState>, source: &str) {
+    let mut controller = playback.0.lock().unwrap();
+    controller.reset();
+    log::info!("{source}: reset playback state to idle");
+}
 
 #[tauri::command]
 #[specta::specta]
 pub async fn bootstrap_app_state(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    playback: State<'_, PlaybackControllerState>,
 ) -> Result<AppBootstrap, String> {
-    service(&app)?.bootstrap_app_state(&state.0).await
+    let result = service(&app)?.bootstrap_app_state(&state.0).await?;
+    if result.active_session.is_none() {
+        reset_playback_state(&playback, "bootstrap_app_state");
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -23,11 +34,16 @@ pub async fn bootstrap_app_state(
 pub async fn connect_server_profile(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    playback: State<'_, PlaybackControllerState>,
     payload: ConnectServerProfileRequest,
 ) -> Result<ConnectServerProfileResult, String> {
-    service(&app)?
+    let result = service(&app)?
         .connect_server_profile(&state.0, payload)
-        .await
+        .await?;
+    if matches!(result, ConnectServerProfileResult::Connected { .. }) {
+        reset_playback_state(&playback, "connect_server_profile");
+    }
+    Ok(result)
 }
 
 #[tauri::command]
@@ -35,7 +51,12 @@ pub async fn connect_server_profile(
 pub fn delete_server_profile(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    playback: State<'_, PlaybackControllerState>,
     payload: ProfileIdRequest,
 ) -> Result<AppBootstrap, String> {
-    service(&app)?.delete_server_profile(&state.0, &payload.profile_id)
+    let result = service(&app)?.delete_server_profile(&state.0, &payload.profile_id)?;
+    if result.active_session.is_none() {
+        reset_playback_state(&playback, "delete_server_profile");
+    }
+    Ok(result)
 }
