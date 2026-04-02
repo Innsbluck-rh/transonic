@@ -222,7 +222,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
 
   return (
-    <div class='flex flex-col relative w-full h-18 shadow-[0_0_8px_rgba(128,128,128,0.1)]'>
+    <div class='flex flex-col relative w-full h-18 shadow-[0_4px_10px_rgba(128,128,128,0.5)]'>
       <div class='absolute w-full translate-y-[-50%] z-30'>
         <PlayerSlider
           valueMs={currentPositionMs()}
@@ -234,10 +234,10 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       </div>
 
       <Show when={coverArt()}>
-        {(dataUrl) => <img class='absolute w-full h-full object-cover' src={dataUrl()} loading='lazy' decoding='async' />}
+        {(dataUrl) => <img class='absolute w-full h-full object-cover object-center' src={dataUrl()} loading='lazy' decoding='async' />}
       </Show>
       <div class='absolute z-0 w-full h-full  backdrop-blur-xs'></div>
-      <div class='absolute z-0 w-full h-full bg-primary-plane opacity-50'></div>
+      <div class='absolute z-0 w-full h-full bg-primary-plane opacity-75'></div>
       <div class='absolute z-0 w-full h-full  from-primary-plane to-transparent bg-linear-to-r'></div>
 
       <div class='flex flex-row w-full h-full px-4 gap-2 items-center shadow-xl z-10'>

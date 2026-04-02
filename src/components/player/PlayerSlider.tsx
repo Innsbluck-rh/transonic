@@ -21,7 +21,7 @@ const PlayerSlider: Component<PlayerSliderProps> = (props) => {
       hitAreaClass='absolute top-1/2 left-0 w-full h-(--player-bar-detect-height) -translate-y-1/2'
       trackClass='absolute top-1/2 left-0 w-full h-(--player-bar-height) -translate-y-1/2 bg-secondary-border'
       progressClass='absolute top-1/2 left-0 h-(--player-bar-height) -translate-y-1/2 bg-accent'
-      handleClass='absolute top-1/2 origin-center w-(--player-bar-detect-height) h-(--player-bar-detect-height) rounded-full bg-accent transition-opacity translate-x-[-50%] -translate-y-1/2 opacity-0 group-hover:opacity-100'
+      handleClass='absolute top-1/2 origin-center w-(--player-bar-handle-size) h-(--player-bar-handle-size) rounded-full bg-accent transition-opacity translate-x-[-50%] -translate-y-1/2 opacity-0 group-hover:opacity-100'
     />
   );
 };

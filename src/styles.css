@@ -50,7 +50,8 @@
 
 :root {
   --player-bar-height: 0.15rem;
-  --player-bar-detect-height: 1.5rem;
+  --player-bar-detect-height: 1rem;
+  --player-bar-handle-size: 0.5rem;
 }
 
 .sp-top-space {

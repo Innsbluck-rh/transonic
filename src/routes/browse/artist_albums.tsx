@@ -77,7 +77,7 @@ function BrowseArtistAlbums() {
   });
 
   return (
-    <div class='home-surface-root p-4'>
+    <div class='home-surface-root p-3'>
       <Show when={error()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
       <Show when={!isLoading()} fallback={<LoadCircle class='self-center justify-self-center' />}>
