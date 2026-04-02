@@ -29,7 +29,9 @@
   --color-secondary-border: var(--color-zinc-300);
 
   --color-primary-text: var(--color-zinc-800);
-  --color-secondary-text: var(--color-zinc-500); */
+  --color-secondary-text: var(--color-zinc-500);
+
+  --color-sp-nav-space: var(--color-zinc-500); */
 
   --color-primary-plane: var(--color-zinc-900);
   --color-primary-surface: var(--color-zinc-800);
@@ -44,9 +46,9 @@
   --color-primary-text: var(--color-zinc-100);
   --color-secondary-text: var(--color-zinc-500);
 
-  --color-accent: var(--color-emerald-400);
+  --color-sp-nav-space: var(--color-black);
 
-  --color-sp-nav-space: var(--color-zinc-500);
+  --color-accent: var(--color-emerald-400);
 }
 
 :root {
