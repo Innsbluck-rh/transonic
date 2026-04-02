@@ -19,3 +19,17 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# Tauri mobile plugins rely on reflection/serialization for command args and responses.
+# Keep the Android playback plugin surface stable in release builds.
+-keep @app.tauri.annotation.TauriPlugin class * { *; }
+-keepclassmembers class * {
+    @app.tauri.annotation.Command <methods>;
+}
+-keep @app.tauri.annotation.InvokeArg class * { *; }
+
+-keep class com.innsb.transonic.playback.AndroidPlaybackPlugin { *; }
+-keep class com.innsb.transonic.playback.AndroidPlaybackHeader { *; }
+-keep class com.innsb.transonic.playback.LoadPreparedMediaArgs { *; }
+-keep class com.innsb.transonic.playback.SeekToArgs { *; }
+-keep class com.innsb.transonic.playback.CurrentPositionResponse { *; }

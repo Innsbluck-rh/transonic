@@ -3,6 +3,7 @@ package com.innsb.transonic.playback
 import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
+import android.os.Bundle
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -16,9 +17,14 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
+import androidx.media3.session.MediaSession.ConnectionResult
 import androidx.media3.session.MediaSessionService
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import com.innsb.transonic.MainActivity
-import com.innsb.transonic.R
+import com.google.common.util.concurrent.Futures
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.SettableFuture
 
 private data class PendingLoad(
   val mediaId: String,
@@ -120,9 +126,9 @@ class PlaybackService : MediaSessionService(), Player.Listener {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
       )
     mediaSession = MediaSession.Builder(this, sessionPlayer)
+      .setCallback(PlaybackSessionCallback(this))
       .setSessionActivity(sessionActivityIntent)
       .build()
-    PlaybackServiceHost.publish(this)
   }
 
   override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? {
@@ -132,7 +138,6 @@ class PlaybackService : MediaSessionService(), Player.Listener {
   override fun onDestroy() {
     pendingLoad?.callback?.invoke(Result.failure(IllegalStateException("Android playback service was destroyed.")))
     pendingLoad = null
-    PlaybackServiceHost.clear(this)
     mediaSession?.release()
     player.removeListener(this)
     player.release()
@@ -178,23 +183,6 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     player.setMediaSource(mediaSource, request.localStartPositionMs)
     player.playWhenReady = request.autoplay
     player.prepare()
-  }
-
-  fun pause() {
-    player.pause()
-  }
-
-  fun stopPlayback() {
-    pendingLoad?.callback?.invoke(Result.failure(IllegalStateException("Android playback was interrupted.")))
-    pendingLoad = null
-    player.stop()
-    player.clearMediaItems()
-    loadedStreamBasePositionMs = 0
-  }
-
-  fun seekToAbsolutePosition(positionMs: Long) {
-    val localPositionMs = (positionMs - loadedStreamBasePositionMs).coerceAtLeast(0)
-    player.seekTo(localPositionMs)
   }
 
   fun currentAbsolutePositionMs(): Long {
@@ -249,5 +237,51 @@ class PlaybackService : MediaSessionService(), Player.Listener {
       currentAbsolutePositionMs(),
       error.message ?: "Android playback failed.",
     )
+  }
+}
+
+@UnstableApi
+private class PlaybackSessionCallback(
+  private val service: PlaybackService,
+) : MediaSession.Callback {
+  override fun onConnect(
+    session: MediaSession,
+    controller: MediaSession.ControllerInfo,
+  ): ConnectionResult {
+    val sessionCommands = ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
+    if (controller.packageName == service.packageName) {
+      sessionCommands.add(SessionCommand(COMMAND_LOAD_PREPARED_MEDIA, Bundle.EMPTY))
+    }
+
+    return ConnectionResult.AcceptedResultBuilder(session)
+      .setAvailableSessionCommands(sessionCommands.build())
+      .build()
+  }
+
+  override fun onCustomCommand(
+    session: MediaSession,
+    controller: MediaSession.ControllerInfo,
+    customCommand: SessionCommand,
+    args: Bundle,
+  ): ListenableFuture<SessionResult> {
+    if (customCommand.customAction != COMMAND_LOAD_PREPARED_MEDIA) {
+      return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+    }
+
+    val request =
+      args.toLoadPreparedMediaArgs()
+        ?: return Futures.immediateFailedFuture(
+          IllegalArgumentException("Missing Media3 custom command payload for playback load."),
+        )
+
+    val future = SettableFuture.create<SessionResult>()
+    service.loadPreparedMedia(request) { result ->
+      result.onSuccess {
+        future.set(SessionResult(SessionResult.RESULT_SUCCESS))
+      }.onFailure { error ->
+        future.setException(error)
+      }
+    }
+    return future
   }
 }

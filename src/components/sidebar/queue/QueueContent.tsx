@@ -42,7 +42,7 @@ const QueueContent: Component = () => {
 
             return (
               <div
-                class='col-span-2 grid w-full cursor-pointer grid-cols-subgrid items-center gap-x-2 px-3 py-2 hover:bg-primary-hover'
+                class='col-span-2 grid w-full cursor-pointer grid-cols-subgrid items-center gap-x-3 px-3 py-2 hover:bg-primary-hover'
                 classList={{
                   'bg-primary-playing': isPlaying,
                 }}

@@ -6,6 +6,7 @@ type PlayerIconTypes = 'play' | 'pause' | 'next' | 'prev';
 
 interface PlayerIconProps {
   type: PlayerIconTypes;
+  iconClass?: string;
   disabled?: boolean;
   loading?: boolean;
   onClick?: (e: MouseEvent) => void;
@@ -24,7 +25,10 @@ const PlayerIcon: Component<PlayerIconProps> = (props) => {
       }}
     >
       <Show when={!props.loading} fallback={<LoadCircle />}>
-        <Icon icon={`${getIconForType(props.type)}`} class={`${props.disabled ? 'text-secondary-text' : 'text-primary-text'} scale-150`} />
+        <Icon
+          icon={`${getIconForType(props.type)}`}
+          class={`${props.disabled ? 'text-secondary-text' : 'text-primary-text'} scale-150 ${props.iconClass}`}
+        />
       </Show>
     </div>
   );

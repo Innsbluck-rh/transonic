@@ -12,6 +12,8 @@ import HomeLayout from './routes/homeLayout';
 import HomeLayoutSP from './routes/homeLayoutSP';
 import InitLoad from './routes/init_load';
 import InitLogin from './routes/init_login';
+import Layout from './routes/layout';
+import SPPlayer from './routes/sp/player';
 
 export default function App() {
   const pf = platform();
@@ -30,18 +32,21 @@ export default function App() {
         </MetaProvider>
       )}
     >
-      <Route path='/' component={() => <Navigate href={HOME_ROUTE} />} />
-      <Route component={InitLoad}>
-        <Route path='/home/error' component={AppError} />
-        <Route component={homeLayout}>
-          <Route path='/home' component={Home} />
-          <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
-          <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
-          <Route path='/browse/artists/:id' component={BrowseArtistAlbums} />
+      <Route component={Layout}>
+        <Route path='/' component={() => <Navigate href={HOME_ROUTE} />} />
+        <Route component={InitLoad}>
+          <Route path='/home/error' component={AppError} />
+          <Route component={homeLayout}>
+            <Route path='/home' component={Home} />
+            <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
+            <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
+            <Route path='/browse/artists/:id' component={BrowseArtistAlbums} />
+            <Route path='/sp/player' component={SPPlayer} />
+          </Route>
         </Route>
+        <Route path='/init_login' component={InitLogin} />
+        <Route path='*404' component={AppError} />
       </Route>
-      <Route path='/init_login' component={InitLogin} />
-      <Route path='*404' component={AppError} />
     </Router>
   );
 }

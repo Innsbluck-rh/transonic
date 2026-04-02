@@ -48,7 +48,7 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
       <Show when={open()}>
         <div
           ref={(ref) => (popupRef = ref)}
-          class='absolute right-0 flex flex-col z-10 px-3 py-2 bg-primary-plane border border-primary-border rounded-md shadow'
+          class='absolute right-0 flex flex-col z-100 px-3 py-2 bg-primary-plane border border-primary-border rounded-md shadow'
         >
           <div class='flex flex-col items-end'>
             <p>{activeProfile()?.displayName}</p>

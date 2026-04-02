@@ -44,7 +44,7 @@
   --color-primary-text: var(--color-zinc-100);
   --color-secondary-text: var(--color-zinc-500);
 
-  --color-accent: var(--color-sky-600);
+  --color-accent: var(--color-emerald-400);
 
   --color-sp-nav-space: var(--color-zinc-500);
 }
@@ -52,7 +52,7 @@
 :root {
   --player-bar-height: 0.15rem;
   --player-bar-detect-height: 1rem;
-  --player-bar-handle-size: 0.5rem;
+  --player-bar-handle-size: 0.75rem;
 }
 
 .sp-top-space {

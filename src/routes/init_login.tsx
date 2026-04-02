@@ -85,10 +85,10 @@ function InitLogin() {
   }
 
   return (
-    <div class='flex flex-col w-dvw h-dvh'>
+    <div class='flex flex-col w-full min-h-0 flex-1'>
       <Header title='Login to server' shouldShowProfiles={false} />
-      <div class='flex flex-col w-full h-full items-center justify-center bg-zinc-200'>
-        <div class='flex flex-col p-7 gap-3 bg-primary-plane border border-zinc-600 rounded-md'>
+      <div class='flex flex-col w-full h-full items-center justify-center bg-primary-surface'>
+        <div class='flex flex-col p-7 gap-3 bg-primary-plane border border-primary-border rounded-md'>
           <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
 
           <Show when={submitError()}>

@@ -41,6 +41,7 @@ type PlayerIcons = 'prev' | 'playpause' | 'next';
 
 interface PlayerBarProps {
   iconsVisibility?: Record<PlayerIcons, boolean>;
+  onClickRestArea?: () => void;
 }
 
 const PlayerBar: Component<PlayerBarProps> = (props) => {
@@ -192,7 +193,13 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       <div class='absolute z-0 w-full h-full bg-primary-plane opacity-75'></div>
       <div class='absolute z-0 w-full h-full  from-primary-plane to-transparent bg-linear-to-r'></div>
 
-      <div class='flex flex-row w-full h-full px-4 gap-2 items-center shadow-xl z-10'>
+      <div class='relative flex flex-row w-full h-full px-4 gap-2 items-center shadow-xl z-10'>
+        <div
+          class='absolute z-0 w-full h-full'
+          onClick={() => {
+            props.onClickRestArea?.();
+          }}
+        ></div>
         <div class='flex flex-row gap-2 items-center'>
           <Show when={iconsVisibility.prev}>
             <PlayerIcon type='prev' disabled={isDisabled()} onClick={handlePrev} />
