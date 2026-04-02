@@ -57,26 +57,26 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
 
   return (
-    <div class='flex flex-col relative w-full h-18 shadow-[0_4px_10px_rgba(128,128,128,0.5)]'>
-      <div class='absolute w-full translate-y-[-50%] z-30'>
+    <div class='relative flex w-full flex-col shadow-[0_4px_10px_rgba(128,128,128,0.5)]'>
+      <div class='absolute z-30 w-full translate-y-[-50%]'>
         <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
       </div>
 
       <Show when={coverArt()}>
-        {(dataUrl) => <img class='absolute w-full h-full object-cover object-center' src={dataUrl()} loading='lazy' decoding='async' />}
+        {(dataUrl) => <img class='absolute h-full w-full object-cover object-center' src={dataUrl()} loading='lazy' decoding='async' />}
       </Show>
-      <div class='absolute z-0 w-full h-full  backdrop-blur-xs'></div>
-      <div class='absolute z-0 w-full h-full bg-primary-plane opacity-75'></div>
-      <div class='absolute z-0 w-full h-full  from-primary-plane to-transparent bg-linear-to-r'></div>
+      <div class='absolute z-0 h-full w-full backdrop-blur-xs'></div>
+      <div class='bg-primary-plane absolute z-0 h-full w-full opacity-75'></div>
+      <div class='from-primary-plane absolute z-0 h-full w-full bg-linear-to-r to-transparent'></div>
 
-      <div class='relative flex flex-row w-full h-full px-4 gap-2 items-center shadow-xl z-10'>
+      <div class='relative z-10 flex h-full w-full flex-row items-center gap-2 p-4 shadow-xl'>
         <div
-          class='absolute z-0 w-full h-full'
+          class='absolute z-0 h-full w-full'
           onClick={() => {
             props.onClickRestArea?.();
           }}
         ></div>
-        <div class='flex flex-row gap-2 items-center'>
+        <div class='flex flex-row items-center gap-2'>
           <Show when={iconsVisibility.prev}>
             <PlayerIcon type='prev' disabled={isControlDisabled()} onClick={prev} />
           </Show>
@@ -96,11 +96,11 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
         <Switch
           fallback={
             <>
-              <div class='flex min-w-0 flex-col flex-1 ml-2'>
+              <div class='ml-2 flex min-w-0 flex-1 flex-col'>
                 <MarqueeParagraph text={currentEntry()?.title || '[unknown]'} class='archivo font-bold' />
-                <MarqueeParagraph text={subtitleText()} class='archivo italic text-xs leading-none text-secondary-text' pixelsPerSecond={40} />
+                <MarqueeParagraph text={subtitleText()} class='archivo text-secondary-text text-xs leading-none italic' pixelsPerSecond={40} />
               </div>
-              <div class='flex flex-col gap-1 mr-1'>
+              <div class='mx-1 flex flex-col gap-1'>
                 <p class='archivo text-xs'>
                   {currentPositionText()} / {durationText()}
                 </p>
@@ -109,13 +109,13 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
           }
         >
           <Match when={playingState() === 'error'}>
-            <div class='flex-1 ml-2'>
-              <p class='archivo italic text-secondary-text'>[error occured]</p>
+            <div class='ml-2 flex-1'>
+              <p class='archivo text-secondary-text italic'>[error occured]</p>
             </div>
           </Match>
           <Match when={playingState() === 'idle'}>
-            <div class='flex-1 ml-2'>
-              <p class='archivo italic text-secondary-text'>[nothing played]</p>
+            <div class='ml-2 flex-1'>
+              <p class='archivo text-secondary-text italic'>[nothing played]</p>
             </div>
           </Match>
         </Switch>

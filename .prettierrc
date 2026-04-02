@@ -6,5 +6,5 @@
   "jsxSingleQuote": true,
   "endOfLine": "auto",
   "printWidth": 150,
-  "plugins": ["prettier-plugin-organize-imports"]
+  "plugins": ["prettier-plugin-organize-imports", "prettier-plugin-tailwindcss"]
 }
