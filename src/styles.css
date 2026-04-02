@@ -130,39 +130,3 @@
 .home-surface-root {
   @apply flex flex-col gap-2 flex-1 min-h-0 w-full overflow-x-hidden overflow-y-auto bg-primary-surface;
 }
-
-.marquee-paragraph {
-  @apply min-w-0 max-w-full;
-}
-
-.marquee-paragraph__viewport {
-  display: block;
-  overflow: hidden;
-  white-space: nowrap;
-  width: 100%;
-}
-
-.marquee-paragraph__track {
-  display: inline-flex;
-  min-width: max-content;
-  white-space: nowrap;
-  will-change: transform;
-}
-
-.marquee-paragraph__track--animate {
-  animation: marquee-paragraph-scroll var(--marquee-duration, 10s) linear infinite;
-}
-
-.marquee-paragraph__content--duplicate {
-  margin-left: var(--marquee-gap, 2rem);
-}
-
-@keyframes marquee-paragraph-scroll {
-  from {
-    transform: translateX(0);
-  }
-
-  to {
-    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
-  }
-}

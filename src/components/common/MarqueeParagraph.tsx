@@ -1,5 +1,7 @@
 import { Component, createEffect, createMemo, createSignal, JSX, onCleanup, onMount, Show, splitProps } from 'solid-js';
 
+import styles from './MarqueeParagraph.module.css';
+
 interface MarqueeParagraphProps extends JSX.HTMLAttributes<HTMLParagraphElement> {
   text: string;
   gapPx?: number;
@@ -56,22 +58,20 @@ const MarqueeParagraph: Component<MarqueeParagraphProps> = (props) => {
   });
 
   return (
-    <p {...rest} ref={rootRef} class={`marquee-paragraph ${local.class ?? ''}`.trim()}>
-      <span class='marquee-paragraph__viewport'>
+    <p {...rest} ref={rootRef} class={`min-w-0 max-w-full ${local.class ?? ''}`.trim()}>
+      <span class={`block w-full overflow-hidden whitespace-nowrap ${styles.typographyInherit}`}>
         <span
-          class='marquee-paragraph__track'
-          classList={{ 'marquee-paragraph__track--animate': isOverflowing() }}
+          class='inline-flex min-w-max whitespace-nowrap will-change-transform'
+          classList={{ [styles.trackAnimated]: isOverflowing() }}
           style={{
             '--marquee-gap': `${gapPx()}px`,
             '--marquee-distance': `${distancePx()}px`,
             '--marquee-duration': durationSeconds(),
           }}
         >
-          <span ref={contentRef} class='marquee-paragraph__content'>
-            {local.text}
-          </span>
+          <span ref={contentRef}>{local.text}</span>
           <Show when={isOverflowing()}>
-            <span class='marquee-paragraph__content marquee-paragraph__content--duplicate' aria-hidden='true'>
+            <span class={styles.duplicateContent} aria-hidden='true'>
               {local.text}
             </span>
           </Show>

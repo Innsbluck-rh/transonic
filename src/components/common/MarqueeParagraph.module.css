@@ -1,0 +1,31 @@
+.typographyInherit,
+.typographyInherit * {
+  color: inherit;
+  font-family: inherit;
+  font-optical-sizing: inherit;
+  font-size: inherit;
+  font-style: inherit;
+  font-variation-settings: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: inherit;
+}
+
+.trackAnimated {
+  animation: marquee-paragraph-scroll var(--marquee-duration, 10s) linear infinite;
+}
+
+.duplicateContent {
+  margin-left: var(--marquee-gap, 2rem);
+}
+
+@keyframes marquee-paragraph-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+  }
+}
