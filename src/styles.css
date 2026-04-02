@@ -69,7 +69,7 @@
 @layer base {
   html,
   body {
-    @apply box-border bg-primary-plane;
+    @apply bg-primary-plane box-border;
     font-family: 'Public Sans', sans-serif;
     line-height: 1;
     width: 100dvw;
@@ -108,18 +108,18 @@
   span,
   input,
   label {
-    @apply text-sm text-primary-text;
+    @apply text-primary-text text-sm;
   }
 
   select {
-    @apply text-sm px-0 py-0 border border-zinc-600 rounded-sm;
+    @apply rounded-sm border border-zinc-600 px-0 py-0 text-sm;
   }
   input {
-    @apply text-sm px-0 py-0 border-b border-zinc-600;
+    @apply border-b border-zinc-600 px-0 py-0 text-sm;
   }
 
   button {
-    @apply text-sm font-bold px-1.5 py-0.5 border border-zinc-600 rounded-sm cursor-pointer hover:bg-primary-hover;
+    @apply hover:bg-primary-hover cursor-pointer rounded-sm border border-zinc-600 px-1.5 py-0.5 text-sm font-bold;
 
     &:disabled {
       @apply cursor-none;
@@ -128,5 +128,5 @@
 }
 
 .home-surface-root {
-  @apply flex flex-col gap-2 flex-1 min-h-0 w-full overflow-x-hidden overflow-y-auto bg-primary-surface;
+  @apply bg-primary-surface flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
 }

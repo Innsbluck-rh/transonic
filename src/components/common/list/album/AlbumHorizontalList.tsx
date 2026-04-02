@@ -15,7 +15,7 @@ interface AlbumHorizontalListProps {
 const AlbumHorizontalList: Component<AlbumHorizontalListProps> = (props) => {
   return (
     <Show when={props.albums.length > 0} fallback={<div class='px-2 py-6 text-sm text-zinc-400'>{props.emptyMessage ?? 'No albums available.'}</div>}>
-      <div class={`flex flex-row h-auto gap-3  overflow-y-hidden overflow-x-auto py-2 ${props.class}`}>
+      <div class={`flex h-auto flex-row gap-3 overflow-x-auto overflow-y-hidden py-2 ${props.class}`}>
         <For each={props.albums}>
           {(album) => (
             <AlbumGridItem

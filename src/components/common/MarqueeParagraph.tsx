@@ -58,7 +58,7 @@ const MarqueeParagraph: Component<MarqueeParagraphProps> = (props) => {
   });
 
   return (
-    <p {...rest} ref={rootRef} class={`min-w-0 max-w-full ${local.class ?? ''}`.trim()}>
+    <p {...rest} ref={rootRef} class={`max-w-full min-w-0 ${local.class ?? ''}`.trim()}>
       <span class={`block w-full overflow-hidden whitespace-nowrap ${styles.typographyInherit}`}>
         <span
           class='inline-flex min-w-max whitespace-nowrap will-change-transform'

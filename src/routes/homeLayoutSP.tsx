@@ -43,16 +43,16 @@ const HomeLayoutSP: ParentComponent = (props) => {
         </div>
       }
     >
-      <div class='flex flex-col min-h-0 flex-1'>
+      <div class='flex min-h-0 flex-1 flex-col'>
         <Header shouldShowProfiles={true} titleHref='/home' />
 
-        <div class='flex flex-row w-full min-h-0 flex-1 overflow-hidden'>
+        <div class='flex min-h-0 w-full flex-1 flex-row overflow-hidden'>
           <Switch>
             <Match when={SPNavStore.state === 'index'}>
               <IndexContent />
             </Match>
             <Match when={SPNavStore.state === 'main'}>
-              <div class='flex flex-col min-w-0 flex-1 h-full'>
+              <div class='flex h-full min-w-0 flex-1 flex-col'>
                 {/* <div class='flex flex-row w-full h-6 items-center bg-primary-plane border-b border-secondary-border'>
                     <p class='archivo text-[10px] text-secondary-text mx-3'>{location.pathname}</p>
                   </div> */}

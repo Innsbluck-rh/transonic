@@ -28,7 +28,7 @@ const IndexSideBar: Component = () => {
   });
 
   return (
-    <div class='index-sidebar flex flex-col min-w-40 w-56 max-w-96 border-r border-primary-border'>
+    <div class='index-sidebar border-primary-border flex w-56 max-w-96 min-w-40 flex-col border-r'>
       <IndexContent />
     </div>
   );

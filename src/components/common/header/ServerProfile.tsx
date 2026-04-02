@@ -27,10 +27,10 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
   });
 
   return (
-    <div class='overflow-visible relative'>
+    <div class='relative overflow-visible'>
       <div
         ref={(ref) => (triggerRef = ref)}
-        class='flex flex-row cursor-pointer items-center p-2 gap-2 rounded-full bg-primary-plane hover:bg-primary-hover'
+        class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2'
         onClick={() => setOpen(!open())}
       >
         <Icon class='text-primary-text' icon='pixelarticons:server' />
@@ -48,15 +48,15 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
       <Show when={open()}>
         <div
           ref={(ref) => (popupRef = ref)}
-          class='absolute right-0 flex flex-col z-100 px-3 py-2 bg-primary-plane border border-primary-border rounded-md shadow'
+          class='bg-primary-plane border-primary-border absolute right-0 z-100 flex flex-col rounded-md border px-3 py-2 shadow'
         >
           <div class='flex flex-col items-end'>
             <p>{activeProfile()?.displayName}</p>
-            <p class='text-xs text-secondary-text'>
+            <p class='text-secondary-text text-xs'>
               {activeProfile()?.normalizedServerUrl} ({activeProfile()?.username})
             </p>
             <a
-              class='underline text-red-500 text-xs w-fit'
+              class='w-fit text-xs text-red-500 underline'
               href='#'
               onClick={() => {
                 const profileToDelete = activeProfile();
@@ -67,7 +67,7 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
             </a>
           </div>
           <Show when={props.profiles.length > 1}>
-            <p class='archivo font-black text-xs'>others</p>
+            <p class='archivo text-xs font-black'>others</p>
             <For each={props.profiles}>
               {(profile, i) => {
                 if (i() === 0) return <></>;

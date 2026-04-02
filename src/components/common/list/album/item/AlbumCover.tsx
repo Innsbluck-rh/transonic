@@ -24,9 +24,9 @@ const AlbumCover: Component<AlbumCoverProps> = (props) => {
   const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
 
   return (
-    <div class='aspect-square object-cover border border-secondary-border'>
+    <div class='border-secondary-border aspect-square border object-cover'>
       <Show when={coverArt()} fallback={<PseudoAlbumCover coverArtId={props.coverArtId} year={props.year} />}>
-        {(dataUrl) => <img class='w-full h-full object-cover' src={dataUrl()} alt={`${props.albumName} cover art`} loading='lazy' decoding='async' />}
+        {(dataUrl) => <img class='h-full w-full object-cover' src={dataUrl()} alt={`${props.albumName} cover art`} loading='lazy' decoding='async' />}
       </Show>
     </div>
   );

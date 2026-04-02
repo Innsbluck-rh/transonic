@@ -2,7 +2,7 @@ import { Component, JSX } from 'solid-js';
 
 const Title: Component<JSX.HTMLAttributes<HTMLParagraphElement>> = (props) => {
   return (
-    <p {...props} class={`archivo-black w-fit text-lg italic font-extrabold tracking-tighter scale-x-150 origin-top-left ${props.class}`}>
+    <p {...props} class={`archivo-black w-fit origin-top-left scale-x-150 text-lg font-extrabold tracking-tighter italic ${props.class}`}>
       {props.children}
     </p>
   );

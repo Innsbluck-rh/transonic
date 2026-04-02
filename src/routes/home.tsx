@@ -96,7 +96,7 @@ function Home() {
         <Show when={!isLoadingAlbums()} fallback={<p class='text-sm text-zinc-400'>Loading album lists...</p>}>
           <For each={albumSections()}>
             {(section) => (
-              <div class='flex flex-col gap-1 w-full overflow-x-hidden'>
+              <div class='flex w-full flex-col gap-1 overflow-x-hidden'>
                 <Heading2 class='px-3'>{section.heading}</Heading2>
                 <AlbumHorizontalList
                   class='px-4'

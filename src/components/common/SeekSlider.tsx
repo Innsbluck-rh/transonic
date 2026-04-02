@@ -121,20 +121,20 @@ const SeekSlider: Component<SeekSliderProps> = (props) => {
   return (
     <div
       ref={sliderRef}
-      class={props.rootClass ?? 'group relative w-full h-2 touch-none'}
+      class={props.rootClass ?? 'group relative h-2 w-full touch-none'}
       classList={{ 'cursor-pointer': !props.disabled, 'cursor-default': !!props.disabled }}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
     >
-      <div class={props.hitAreaClass ?? 'absolute top-1/2 left-0 w-full h-2 -translate-y-1/2'}></div>
-      <div class={props.trackClass ?? 'absolute top-1/2 left-0 w-full h-0.5 -translate-y-1/2 bg-secondary-border'}></div>
-      <div class={props.progressClass ?? 'absolute top-1/2 left-0 h-0.5 -translate-y-1/2 bg-accent'} style={{ width: progressWidth() }}></div>
+      <div class={props.hitAreaClass ?? 'absolute top-1/2 left-0 h-2 w-full -translate-y-1/2'}></div>
+      <div class={props.trackClass ?? 'bg-secondary-border absolute top-1/2 left-0 h-0.5 w-full -translate-y-1/2'}></div>
+      <div class={props.progressClass ?? 'bg-accent absolute top-1/2 left-0 h-0.5 -translate-y-1/2'} style={{ width: progressWidth() }}></div>
       <div
         class={
           props.handleClass ??
-          'absolute top-1/2 origin-center w-2 h-2 rounded-full bg-accent transition-opacity translate-x-[-50%] -translate-y-1/2 opacity-0 group-hover:opacity-100'
+          'bg-accent absolute top-1/2 h-2 w-2 origin-center translate-x-[-50%] -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100'
         }
         classList={{ 'opacity-100': isDragging() }}
         style={{ left: progressWidth() }}

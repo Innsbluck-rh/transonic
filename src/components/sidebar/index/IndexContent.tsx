@@ -14,7 +14,7 @@ const IndexContent: Component = () => {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Folder Structures');
 
   return (
-    <div class='flex flex-col w-full overflow-y-hidden'>
+    <div class='flex w-full flex-col overflow-y-hidden'>
       <IndexModeSelect
         defaultMode={browseMode()}
         onSelect={(mode) => {

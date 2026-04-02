@@ -27,9 +27,9 @@ const QueueSideBar: Component = () => {
     },
   });
   return (
-    <div class='queue-sidebar flex flex-col min-w-40 w-56 max-w-96 bg-primary-plane border-l border-primary-border'>
-      <div class='flex h-6 w-full flex-row items-center px-1 border-b border-secondary-border'>
-        <p class='archivo text-[10px] text-secondary-text'>Playback Queue</p>
+    <div class='queue-sidebar bg-primary-plane border-primary-border flex w-56 max-w-96 min-w-40 flex-col border-l'>
+      <div class='border-secondary-border flex h-6 w-full flex-row items-center border-b px-1'>
+        <p class='archivo text-secondary-text text-[10px]'>Playback Queue</p>
       </div>
       <QueueContent />
     </div>

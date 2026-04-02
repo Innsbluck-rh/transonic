@@ -43,7 +43,7 @@ const ArtistList: Component<ArtistListProps> = (props) => {
     <Show
       when={!loading()}
       fallback={
-        <div class='flex justify-self-center my-8'>
+        <div class='my-8 flex justify-self-center'>
           <LoadCircle />
         </div>
       }

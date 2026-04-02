@@ -37,7 +37,7 @@ const MusicDirectoryList: Component<MusicDirectoryListProps> = (props) => {
                   <p class='truncate text-sm text-zinc-800' title={item.title}>
                     {item.title}
                   </p>
-                  <span class='shrink-0 text-[10px] uppercase tracking-[0.2em] text-zinc-400'>{item.isDirectory ? 'dir' : 'file'}</span>
+                  <span class='shrink-0 text-[10px] tracking-[0.2em] text-zinc-400 uppercase'>{item.isDirectory ? 'dir' : 'file'}</span>
                 </div>
 
                 <Show when={itemSubtitle}>

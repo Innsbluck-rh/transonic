@@ -63,9 +63,9 @@ function AppError() {
   };
 
   return (
-    <div class='flex flex-col gap-4 items-center justify-center h-dvh w-dvw bg-primary-surface'>
-      <div class='flex flex-col gap-4 p-4 min-w-[40%] bg-primary-surface'>
-        <Icon icon={pickRandomIcon()} class='text-8xl w-fit text-zinc-700' />
+    <div class='bg-primary-surface flex h-dvh w-dvw flex-col items-center justify-center gap-4'>
+      <div class='bg-primary-surface flex min-w-[40%] flex-col gap-4 p-4'>
+        <Icon icon={pickRandomIcon()} class='w-fit text-8xl text-zinc-700' />
         <Heading1>Oops!</Heading1>
         <p class='archivo italic opacity-75'>{model().message}</p>
         <button class='w-fit' onClick={model().action}>

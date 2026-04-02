@@ -6,13 +6,13 @@ const QueueContent: Component = () => {
   const { queue, isQueueIndexActive, playQueueIndex } = usePlayback();
 
   return (
-    <div class='flex flex-1 min-h-0 overflow-x-hidden overflow-y-auto'>
+    <div class='flex min-h-0 flex-1 overflow-x-hidden overflow-y-auto'>
       <div class='grid h-fit w-full grid-cols-[max-content_minmax(0,1fr)]'>
         <For
           each={queue()}
           fallback={
             <div class='col-span-2 flex w-full p-2'>
-              <p class='px-1 text-xs text-secondary-text italic'>[nothing in queue]</p>
+              <p class='text-secondary-text px-1 text-xs italic'>[nothing in queue]</p>
             </div>
           }
         >
@@ -25,14 +25,14 @@ const QueueContent: Component = () => {
 
             return (
               <div
-                class='col-span-2 grid w-full cursor-pointer grid-cols-subgrid items-center gap-x-3 px-3 py-2 hover:bg-primary-hover'
+                class='hover:bg-primary-hover col-span-2 grid w-full cursor-pointer grid-cols-subgrid items-center gap-x-3 px-3 py-2'
                 classList={{
                   'bg-primary-playing': isPlaying,
                 }}
                 onClick={onClickEntry}
               >
                 <div class='flex flex-row items-start'>
-                  <Show when={!isPlaying} fallback={<Icon class='-ml-0.5 text-xs w-fit scale-125 text-accent' icon='material-symbols:play-arrow' />}>
+                  <Show when={!isPlaying} fallback={<Icon class='text-accent -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />}>
                     <p class='archivo text-xs font-bold'>{i() + 1}</p>
                   </Show>
                 </div>

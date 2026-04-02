@@ -44,14 +44,14 @@ function SPPlayer() {
   const navigate = useNavigate();
 
   return (
-    <div class='flex flex-col flex-1 min-h-0'>
-      <div class='relative flex flex-col w-full h-auto items-center shadow-[0_0_16px_rgba(128,128,128,0.25)]'>
-        <div class='flex flex-col w-full h-full items-center z-10 mt-10 mb-2'>
-          <div class='flex flex-col w-full h-full items-center px-8'>
+    <div class='flex min-h-0 flex-1 flex-col'>
+      <div class='relative flex h-auto w-full flex-col items-center shadow-[0_0_16px_rgba(128,128,128,0.25)]'>
+        <div class='z-10 mt-10 mb-2 flex h-full w-full flex-col items-center'>
+          <div class='flex h-full w-full flex-col items-center px-8'>
             <Show when={coverArt()}>
               {(dataUrl) => (
                 <img
-                  class='w-1/2 h-auto shadow-[0_0_24px_rgba(128,128,128,0.25)] aspect-square object-cover object-center mb-4'
+                  class='mb-4 aspect-square h-auto w-1/2 object-cover object-center shadow-[0_0_24px_rgba(128,128,128,0.25)]'
                   src={dataUrl()}
                   loading='lazy'
                   decoding='async'
@@ -70,7 +70,7 @@ function SPPlayer() {
               }}
             />
 
-            <div class='flex flex-row w-full gap-10 px-12 items-center justify-evenly border-secondary-border mt-8'>
+            <div class='border-secondary-border mt-8 flex w-full flex-row items-center justify-evenly gap-10 px-12'>
               <PlayerIcon iconClass='scale-250' type='prev' disabled={isControlDisabled()} onClick={prev} />
               <PlayerIcon
                 iconClass='scale-350'
@@ -82,24 +82,24 @@ function SPPlayer() {
               <PlayerIcon iconClass='scale-250' type='next' disabled={isControlDisabled()} onClick={next} />
             </div>
           </div>
-          <div class='flex flex-row w-full justify-between mt-10 px-2'>
-            <p class='archivo text-xs font-bold text-accent'>{currentPositionText()}</p>
+          <div class='mt-10 flex w-full flex-row justify-between px-2'>
+            <p class='archivo text-accent text-xs font-bold'>{currentPositionText()}</p>
             <p class='archivo text-xs font-bold'>{durationText()}</p>
           </div>
         </div>
 
         <Show when={coverArt()}>
-          {(dataUrl) => <img class='absolute w-full h-full object-cover object-center' src={dataUrl()} loading='lazy' decoding='async' />}
+          {(dataUrl) => <img class='absolute h-full w-full object-cover object-center' src={dataUrl()} loading='lazy' decoding='async' />}
         </Show>
-        <div class='absolute z-0 w-full h-full  backdrop-blur-[5px]' />
-        <div class='absolute z-0 w-full h-full bg-primary-plane opacity-60' />
+        <div class='absolute z-0 h-full w-full backdrop-blur-[5px]' />
+        <div class='bg-primary-plane absolute z-0 h-full w-full opacity-60' />
 
-        <div class='absolute bottom-0 w-full translate-y-[50%] z-30'>
+        <div class='absolute bottom-0 z-30 w-full translate-y-[50%]'>
           <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
         </div>
       </div>
 
-      <div class='flex flex-row items-center bg-primary-plane border-b border-secondary-border p-2'>
+      <div class='bg-primary-plane border-secondary-border flex flex-row items-center border-b p-2'>
         <Heading3>queue</Heading3>
       </div>
       <QueueContent />

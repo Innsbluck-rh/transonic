@@ -8,7 +8,7 @@ interface SPBottomNavigationProps {
 
 const SPBottomNavigation: Component<SPBottomNavigationProps> = (props) => {
   return (
-    <div class='flex flex-row border-t border-primary-border bg-primary-plane z-20'>
+    <div class='border-primary-border bg-primary-plane z-20 flex flex-row border-t'>
       <SPBottomNavigationItem
         onClick={(nav) => props.onClickNav?.(nav)}
         navState={'index'}
@@ -34,7 +34,7 @@ const SPBottomNavigationItem: Component<SPBottomNavigationItemProps> = (props) =
   const selected = createMemo<boolean>(() => SPNavStore.state === props.navState);
   return (
     <div
-      class='flex flex-col items-center flex-1 py-2.5 cursor-pointer hover:bg-primary-hover'
+      class='hover:bg-primary-hover flex flex-1 cursor-pointer flex-col items-center py-2.5'
       classList={{ 'bg-primary-hover': selected() }}
       onClick={() => {
         props.onClick?.(props.navState);

@@ -16,7 +16,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
 
   return (
     <div
-      class={`group flex flex-col shrink-0 gap-0.5 ${props.class}`}
+      class={`group flex shrink-0 flex-col gap-0.5 ${props.class}`}
       onClick={(e) => props.onArtClick?.(e)}
       onDblClick={(e) => props.onArtDblClick?.(e)}
     >
@@ -30,7 +30,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
       >
         <AlbumCover albumName={props.album.name} coverArtId={props.album.coverArtId} year={props.album.year} />
         <div
-          class='absolute top-0 bottom-0 left-0 right-0  bg-[#00000020] hidden'
+          class='absolute top-0 right-0 bottom-0 left-0 hidden bg-[#00000020]'
           classList={{
             'group-hover:flex': isClickable,
           }}
@@ -42,7 +42,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         <p class='truncate text-sm' title={props.album.name}>
           {props.album.name}
         </p>
-        <p class='truncate text-xs text-secondary-text' title={props.album.artist ?? undefined}>
+        <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>
           {props.album.artist ?? 'unknown artist'}
         </p>
       </div>

@@ -14,7 +14,7 @@ const Header: Component<HeaderProps> = (props) => {
   const navigate = useNavigate();
 
   return (
-    <div class='flex flex-row items-center h-12 bg-primary-plane border-b border-primary-border px-2.5'>
+    <div class='bg-primary-plane border-primary-border flex h-12 flex-row items-center border-b px-2.5'>
       <Show when={props.titleHref} fallback={<Title>{props.title ?? 'Transonic'}</Title>}>
         <Title class='cursor-pointer' onClick={() => navigate(props.titleHref!)}>
           {props.title ?? 'Transonic'}

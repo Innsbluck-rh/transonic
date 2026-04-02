@@ -30,7 +30,7 @@ const HomeLayout: ParentComponent = (props) => {
   });
 
   return (
-    <div class='w-dvw h-dvh bg-primary-plane border-t border-secondary-border'>
+    <div class='bg-primary-plane border-secondary-border h-dvh w-dvw border-t'>
       <Show
         when={sessionStore.activeSession}
         fallback={
@@ -39,14 +39,14 @@ const HomeLayout: ParentComponent = (props) => {
           </div>
         }
       >
-        <div class='flex flex-col h-full'>
+        <div class='flex h-full flex-col'>
           <Header shouldShowProfiles={true} titleHref='/home' />
 
-          <div class='flex flex-row w-full h-full overflow-hidden'>
+          <div class='flex h-full w-full flex-row overflow-hidden'>
             <IndexSideBar />
-            <div class='flex flex-col min-w-0 flex-1 h-full'>
-              <div class='flex flex-row w-full h-6 items-center bg-primary-plane border-b border-secondary-border'>
-                <p class='archivo text-[10px] text-secondary-text mx-4'>{location.pathname}</p>
+            <div class='flex h-full min-w-0 flex-1 flex-col'>
+              <div class='bg-primary-plane border-secondary-border flex h-6 w-full flex-row items-center border-b'>
+                <p class='archivo text-secondary-text mx-4 text-[10px]'>{location.pathname}</p>
               </div>
               {props.children}
             </div>

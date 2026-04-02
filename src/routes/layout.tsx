@@ -5,7 +5,7 @@ const Layout: ParentComponent = (props) => {
   const pf = platform();
   const isSP = pf === 'android' || pf === 'ios';
   return (
-    <div class='flex flex-col w-dvw h-dvh bg-primary-plane'>
+    <div class='bg-primary-plane flex h-dvh w-dvw flex-col'>
       <Show when={isSP}>
         <div class='sp-top-space' />
       </Show>
