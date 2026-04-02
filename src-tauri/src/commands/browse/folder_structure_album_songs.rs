@@ -126,7 +126,7 @@ impl RawChild {
 }
 
 #[async_trait]
-trait AlbumSongsApi: Send + Sync {
+pub(crate) trait AlbumSongsApi: Send + Sync {
     async fn get_music_directory(
         &self,
         req: GetMusicDirectoryRequest,
@@ -169,7 +169,7 @@ pub async fn get_folder_structure_album_songs(
     }
 
     let client = client(&app, &state.0)?;
-    load_album_songs(&client, library_id, node_id, album_id)
+    load_album_songs_from_client(&client, library_id, node_id, album_id)
         .await
         .map_err(format_api_error)
 }
@@ -179,7 +179,7 @@ fn parse_directory(payload: Value) -> Result<RawDirectory, String> {
         .map_err(|error| format!("Failed to parse the music directory payload: {error}"))
 }
 
-async fn load_album_songs<C>(
+pub(crate) async fn load_album_songs_from_client<C>(
     client: &C,
     library_id: &str,
     node_id: &str,
@@ -290,7 +290,9 @@ mod tests {
     use opensubsonic_client::{ApiError, ResponseMeta, ResponseStatus};
     use serde_json::json;
 
-    use super::{load_album_songs, AlbumSongsApi, ApiDirectoryResponse, GetMusicDirectoryRequest};
+    use super::{
+        load_album_songs_from_client, AlbumSongsApi, ApiDirectoryResponse, GetMusicDirectoryRequest,
+    };
     use opensubsonic_client::Envelope;
 
     #[derive(Debug, Clone)]
@@ -381,7 +383,7 @@ mod tests {
                 })),
             );
 
-        let response = load_album_songs(&api, "library-1", "root", "album-a")
+        let response = load_album_songs_from_client(&api, "library-1", "root", "album-a")
             .await
             .unwrap();
 
@@ -404,7 +406,7 @@ mod tests {
                 })),
             );
 
-        let response = load_album_songs(&api, "library-1", "root", key)
+        let response = load_album_songs_from_client(&api, "library-1", "root", key)
             .await
             .unwrap();
 
@@ -425,7 +427,7 @@ mod tests {
             })),
         );
 
-        let response = load_album_songs(&api, "library-1", "root", "unknown_album")
+        let response = load_album_songs_from_client(&api, "library-1", "root", "unknown_album")
             .await
             .unwrap();
 

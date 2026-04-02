@@ -3,11 +3,12 @@ import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { commands, type AlbumListItem, type MusicDirectoryResponse } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
-import { replaceQueueWithAlbumAndPlay } from '~/features/playback/album';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
 function BrowseArtistAlbums() {
   const params = useParams();
+  const { playAlbum } = usePlayback();
 
   const [directory, setDirectory] = createSignal<MusicDirectoryResponse | null>(null);
   const [isLoading, setIsLoading] = createSignal(true);
@@ -86,7 +87,7 @@ function BrowseArtistAlbums() {
           albums={albums()}
           emptyMessage={emptyMessage()}
           onItemClick={async (album) => {
-            replaceQueueWithAlbumAndPlay(album.id);
+            await playAlbum(album.id);
           }}
         />
       </Show>

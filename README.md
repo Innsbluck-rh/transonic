@@ -12,4 +12,5 @@ pnpm tauri icon ./public/icon.svg -o ./src-tauri/icons
 
 ```
 pnpm tauri android build --apk --target aarch64
+adb install -r "C:\Users\innsb\Documents\transonic\src-tauri\gen/android\app/build/outputs/apk/universal/release/app-universal-release.apk"
 ```

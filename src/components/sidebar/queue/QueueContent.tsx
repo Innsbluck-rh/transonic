@@ -1,15 +1,9 @@
 import { Icon } from '@iconify-icon/solid';
-import { Component, createEffect, createSignal, For, Show } from 'solid-js';
-import { commands, PlaybackQueueEntry } from '~/bindings';
-import { hasPlaybackCommandError } from '~/features/playback/service';
-import { playbackStore } from '~/stores/PlaybackStore';
+import { Component, For, Show } from 'solid-js';
+import { usePlayback } from '~/features/playback/usePlayback';
 
 const QueueContent: Component = () => {
-  const [queue, setQueue] = createSignal<PlaybackQueueEntry[] | undefined>(playbackStore.status?.queue);
-
-  createEffect(() => {
-    setQueue(playbackStore.status?.queue);
-  });
+  const { queue, isQueueIndexActive, playQueueIndex } = usePlayback();
 
   return (
     <div class='flex flex-1 min-h-0 overflow-x-hidden overflow-y-auto'>
@@ -24,21 +18,10 @@ const QueueContent: Component = () => {
         >
           {(queueEntry, i) => {
             const onClickEntry = async () => {
-              const entries = queue();
-              const jumpIndex = i();
-              if (!entries) return;
-              const sqResult = await commands.playbackSetQueue({
-                currentIndex: jumpIndex,
-                entries,
-              });
-              if (hasPlaybackCommandError(sqResult)) {
-                return;
-              }
-              const playResult = await commands.playbackPlay();
-              hasPlaybackCommandError(playResult);
+              await playQueueIndex(i());
             };
 
-            const isPlaying = playbackStore.status?.currentIndex === i();
+            const isPlaying = isQueueIndexActive(i());
 
             return (
               <div

@@ -125,9 +125,33 @@ async playbackSetQueue(payload: PlaybackSetQueueRequest) : Promise<Result<null, 
     else return { status: "error", error: e  as any };
 }
 },
+async playbackPlayQueueIndex(payload: PlaybackPlayQueueIndexRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_play_queue_index", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async playbackPlay() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_play") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackPlayAlbum(payload: PlaybackPlayAlbumRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_play_album", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackPlayFolderAlbum(payload: PlaybackPlayFolderAlbumRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_play_folder_album", { payload }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -225,7 +249,10 @@ export type MusicDirectoryResponse = { id: string; name: string; children: Music
 export type MusicFolderSummary = { id: string; name: string }
 export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
-export type PlaybackQueueEntry = { songId: string; title: string; path: string | null; artist: string | null; album: string | null; duration: number | null; coverArtId: string | null }
+export type PlaybackPlayAlbumRequest = { albumId: string }
+export type PlaybackPlayFolderAlbumRequest = { libraryId: string; nodeId: string; albumId: string }
+export type PlaybackPlayQueueIndexRequest = { index: number }
+export type PlaybackQueueEntry = { songId: string; title: string; path: string | null; artist: string | null; artistId: string | null; album: string | null; albumId: string | null; duration: number | null; coverArtId: string | null }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { entries: PlaybackQueueEntry[]; currentIndex: number | null }
 export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; queue: PlaybackQueueEntry[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }

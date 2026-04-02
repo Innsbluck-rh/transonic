@@ -86,19 +86,30 @@ pub async fn get_album_songs(
     }
 
     let client = client(&app, &state.0)?;
+    load_album_songs_from_client(&client, album_id)
+        .await
+        .map_err(format_api_error)
+}
+
+pub(crate) async fn load_album_songs_from_client<C>(
+    client: &C,
+    album_id: &str,
+) -> Result<AlbumSongsResponse, opensubsonic_client::ApiError>
+where
+    C: BrowsingApi + Send + Sync,
+{
     let response = BrowsingApi::get_album(
-        &client,
+        client,
         GetAlbumRequest {
             id: album_id.to_string(),
         },
     )
-    .await
-    .map_err(format_api_error)?;
+    .await?;
 
-    parse_album(response.payload.album)
+    parse_album(response.payload.album).map_err(opensubsonic_client::ApiError::Protocol)
 }
 
-fn parse_album(payload: Value) -> Result<AlbumSongsResponse, String> {
+pub(crate) fn parse_album(payload: Value) -> Result<AlbumSongsResponse, String> {
     let payload: RawAlbum =
         value_as(payload).map_err(|error| format!("Failed to parse the album payload: {error}"))?;
 

@@ -3,7 +3,7 @@ import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings'
 import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
 import AlbumHorizontalList from '~/components/common/list/album/AlbumHorizontalList';
-import { replaceQueueWithAlbumAndPlay } from '~/features/playback/album';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
 type HomeAlbumSection = {
@@ -18,6 +18,7 @@ const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> 
 ];
 
 function Home() {
+  const { playAlbum } = usePlayback();
   const [albumSections, setAlbumSections] = createSignal<HomeAlbumSection[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = createSignal(false);
   const [albumError, setAlbumError] = createSignal<string | null>(null);
@@ -102,7 +103,7 @@ function Home() {
                   albums={section.albums}
                   emptyMessage={`No albums returned for ${section.heading}.`}
                   onItemClick={async (album) => {
-                    replaceQueueWithAlbumAndPlay(album.id);
+                    await playAlbum(album.id);
                   }}
                 />
               </div>

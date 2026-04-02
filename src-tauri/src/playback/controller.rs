@@ -117,6 +117,32 @@ impl PlaybackController {
         Ok(self.state())
     }
 
+    pub fn play_queue_index(
+        &mut self,
+        context: &PlaybackRuntimeContext<'_>,
+        index: u32,
+    ) -> Result<PlaybackStatus, String> {
+        if match usize::try_from(index).ok() {
+            Some(idx) => idx >= self.status.queue.len(),
+            None => true,
+        } {
+            return Err("Playback queue index is out of range.".to_string());
+        }
+
+        self.backend.stop()?;
+        self.clear_native_events();
+        self.status.current_index = Some(index);
+        self.status.current_song_id = current_song_id(&self.status.queue, Some(index));
+        self.status.current_position_ms = 0;
+        self.status.playing_state = PlayingState::Stopped;
+        self.status.error = None;
+        self.status.interrupt_reason = None;
+        self.status.pending_seek_position_ms = None;
+        self.interrupted_resume_state = None;
+
+        self.play(context)
+    }
+
     pub fn pause(&mut self) -> Result<PlaybackStatus, String> {
         self.sync_current_position_from_backend()?;
         self.backend.pause()?;
@@ -1061,7 +1087,9 @@ mod tests {
                 title: (*song_id).to_string(),
                 path: None,
                 artist: None,
+                artist_id: None,
                 album: None,
+                album_id: None,
                 duration: None,
                 cover_art_id: None,
             })
@@ -1485,6 +1513,52 @@ mod tests {
             Some("song-a")
         );
         assert_eq!(current_song_id(&entries, Some(2)), None);
+    }
+
+    #[test]
+    fn play_queue_index_rejects_out_of_range_index() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(false);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+
+        let result = controller.play_queue_index(&runtime_context, 1);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn play_queue_index_starts_selected_track_from_zero() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(false);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+        };
+
+        controller
+            .set_queue(PlaybackSetQueueRequest {
+                entries: queue_entries(&["song-a", "song-b"]),
+                current_index: Some(0),
+            })
+            .unwrap();
+        controller.seek(&runtime_context, 5_000).unwrap();
+
+        let status = controller.play_queue_index(&runtime_context, 1).unwrap();
+
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id.as_deref(), Some("song-b"));
+        assert_eq!(status.current_position_ms, 0);
+        assert_eq!(status.playing_state, PlayingState::Playing);
     }
 
     #[test]

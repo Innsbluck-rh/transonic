@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use tauri_specta::Event;
 
+use super::SongResponse;
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayingState {
@@ -28,7 +30,9 @@ pub struct PlaybackQueueEntry {
     pub title: String,
     pub path: Option<String>,
     pub artist: Option<String>,
+    pub artist_id: Option<String>,
     pub album: Option<String>,
+    pub album_id: Option<String>,
     pub duration: Option<u32>,
     pub cover_art_id: Option<String>,
 }
@@ -44,6 +48,26 @@ pub struct PlaybackSetQueueRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackSeekRequest {
     pub position_ms: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackPlayQueueIndexRequest {
+    pub index: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackPlayAlbumRequest {
+    pub album_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackPlayFolderAlbumRequest {
+    pub library_id: String,
+    pub node_id: String,
+    pub album_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
@@ -71,5 +95,27 @@ impl PlaybackStatus {
             current_song_id: None,
             error: None,
         }
+    }
+}
+
+impl From<&SongResponse> for PlaybackQueueEntry {
+    fn from(value: &SongResponse) -> Self {
+        Self {
+            song_id: value.id.clone(),
+            title: value.title.clone(),
+            path: value.path.clone(),
+            artist: value.artist.clone(),
+            artist_id: value.artist_id.clone(),
+            album: value.album.clone(),
+            album_id: value.album_id.clone(),
+            duration: value.duration,
+            cover_art_id: value.cover_art_id.clone(),
+        }
+    }
+}
+
+impl From<SongResponse> for PlaybackQueueEntry {
+    fn from(value: SongResponse) -> Self {
+        Self::from(&value)
     }
 }

@@ -3,7 +3,7 @@ import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { commands, type AlbumListItem, type FolderStructureAlbumsResponse, type FolderStructureRootsResponse } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
-import { replaceQueueWithFolderAlbumAndPlay } from '~/features/playback/album';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
 function decodePathParam(value?: string) {
@@ -33,6 +33,7 @@ function readInvokeErrorMessage(invokeError: unknown) {
 
 function BrowseFolderStructure() {
   const params = useParams();
+  const { playFolderAlbum } = usePlayback();
 
   const [rootsResponse, setRootsResponse] = createSignal<FolderStructureRootsResponse | null>(null);
   const [albumsResponse, setAlbumsResponse] = createSignal<FolderStructureAlbumsResponse | null>(null);
@@ -134,7 +135,7 @@ function BrowseFolderStructure() {
             emptyMessage='No albums available in this folder.'
             onItemClick={async (album) => {
               if (!params.libraryId || !params.nodeId) return;
-              replaceQueueWithFolderAlbumAndPlay(params.libraryId, params.nodeId, album.id);
+              await playFolderAlbum(params.libraryId, params.nodeId, album.id);
             }}
           />
         </Show>

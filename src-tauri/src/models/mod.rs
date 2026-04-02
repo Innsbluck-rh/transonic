@@ -22,8 +22,9 @@ pub use browse::{
 pub use cover_art::{CoverArtRequest, CoverArtResponse};
 #[allow(unused_imports)]
 pub use playback::{
-    InterruptReason, PlaybackQueueEntry, PlaybackSeekRequest, PlaybackSetQueueRequest,
-    PlaybackStatus, PlayingState,
+    InterruptReason, PlaybackPlayAlbumRequest, PlaybackPlayFolderAlbumRequest,
+    PlaybackPlayQueueIndexRequest, PlaybackQueueEntry, PlaybackSeekRequest,
+    PlaybackSetQueueRequest, PlaybackStatus, PlayingState,
 };
 #[allow(unused_imports)]
 pub use session::{
