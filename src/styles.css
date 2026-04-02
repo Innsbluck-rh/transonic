@@ -40,7 +40,7 @@
 
   --color-primary-hover: var(--color-zinc-700);
 
-  --color-primary-border: var(--color-zinc-500);
+  --color-primary-border: var(--color-zinc-600);
   --color-secondary-border: var(--color-zinc-700);
 
   --color-primary-text: var(--color-zinc-100);
@@ -48,7 +48,7 @@
 
   --color-sp-nav-space: var(--color-black);
 
-  --color-accent: var(--color-emerald-400);
+  --color-accent: var(--color-sky-600);
 }
 
 :root {
@@ -119,7 +119,7 @@
   }
 
   button {
-    @apply hover:bg-primary-hover cursor-pointer rounded-sm border border-zinc-600 px-1.5 py-0.5 text-sm font-bold;
+    @apply bg-primary-surface hover:bg-primary-hover active:bg-primary-hover text-primary-text cursor-pointer rounded-sm border border-zinc-600 px-1.5 py-0.5 text-sm font-bold;
 
     &:disabled {
       @apply cursor-none;

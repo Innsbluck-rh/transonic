@@ -20,6 +20,7 @@ const PlayerIcon: Component<PlayerIconProps> = (props) => {
         'cursor-pointer hover:bg-primary-hover': !props.disabled,
       }}
       onClick={(e) => {
+        e.stopPropagation();
         if (props.disabled) return;
         props.onClick?.(e);
       }}

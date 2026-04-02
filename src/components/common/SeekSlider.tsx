@@ -81,6 +81,7 @@ const SeekSlider: Component<SeekSliderProps> = (props) => {
     }
 
     event.preventDefault();
+    event.stopPropagation();
     updateDragValue(event.clientX);
     setActivePointerId(event.pointerId);
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -90,6 +91,7 @@ const SeekSlider: Component<SeekSliderProps> = (props) => {
     if (props.disabled || activePointerId() !== event.pointerId) {
       return;
     }
+    event.stopPropagation();
 
     updateDragValue(event.clientX);
   };
@@ -127,6 +129,7 @@ const SeekSlider: Component<SeekSliderProps> = (props) => {
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onClick={(e) => e.stopPropagation()}
     >
       <div class={props.hitAreaClass ?? 'absolute top-1/2 left-0 h-2 w-full -translate-y-1/2'}></div>
       <div class={props.trackClass ?? 'bg-secondary-border absolute top-1/2 left-0 h-0.5 w-full -translate-y-1/2'}></div>

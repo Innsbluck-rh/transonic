@@ -57,7 +57,12 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
 
   return (
-    <div class='relative flex w-full flex-col shadow-[0_4px_10px_rgba(128,128,128,0.5)]'>
+    <div
+      class='relative flex w-full flex-col shadow-[0_4px_10px_rgba(128,128,128,0.5)]'
+      onClick={() => {
+        props.onClickRestArea?.();
+      }}
+    >
       <div class='absolute z-30 w-full translate-y-[-50%]'>
         <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
       </div>
@@ -70,13 +75,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       <div class='from-primary-plane absolute z-0 h-full w-full bg-linear-to-r to-transparent'></div>
 
       <div class='relative z-10 flex h-full w-full flex-row items-center gap-2 p-4 shadow-xl'>
-        <div
-          class='absolute z-0 h-full w-full'
-          onClick={() => {
-            props.onClickRestArea?.();
-          }}
-        ></div>
-        <div class='flex flex-row items-center gap-2'>
+        <div class='z-10 flex flex-row items-center gap-2'>
           <Show when={iconsVisibility.prev}>
             <PlayerIcon type='prev' disabled={isControlDisabled()} onClick={prev} />
           </Show>
@@ -96,8 +95,8 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
         <Switch
           fallback={
             <>
-              <div class='ml-2 flex min-w-0 flex-1 flex-col'>
-                <MarqueeParagraph text={currentEntry()?.title || '[unknown]'} class='archivo font-bold' />
+              <div class='mt-1 ml-2 flex min-w-0 flex-1 flex-col gap-1'>
+                <MarqueeParagraph text={currentEntry()?.title || '[unknown]'} class='archivo leading-none font-bold' />
                 <MarqueeParagraph text={subtitleText()} class='archivo text-secondary-text text-xs leading-none italic' pixelsPerSecond={40} />
               </div>
               <div class='mx-1 flex flex-col gap-1'>

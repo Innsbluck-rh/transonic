@@ -3,7 +3,6 @@ import { Match, onCleanup, onMount, ParentComponent, Show, Switch } from 'solid-
 import Header from '~/components/common/header/Header';
 import PlayerBar from '~/components/player/PlayerBar';
 import IndexContent from '~/components/sidebar/index/IndexContent';
-import QueueContent from '~/components/sidebar/queue/QueueContent';
 import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
 import { startPlaybackStateSync } from '~/features/playback/service';
 import { sessionStore } from '~/stores/SessionStore';
@@ -59,9 +58,9 @@ const HomeLayoutSP: ParentComponent = (props) => {
                 {props.children}
               </div>
             </Match>
-            <Match when={SPNavStore.state === 'queue'}>
+            {/* <Match when={SPNavStore.state === 'queue'}>
               <QueueContent />
-            </Match>
+            </Match> */}
           </Switch>
         </div>
 

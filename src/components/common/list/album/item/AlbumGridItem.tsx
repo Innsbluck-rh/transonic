@@ -38,8 +38,8 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
           {/* <Icon class='m-auto text-white text-2xl' icon='material-symbols:play-arrow' /> */}
         </div>
       </div>
-      <div class='flex flex-col gap-0'>
-        <p class='truncate text-sm' title={props.album.name}>
+      <div class='mt-1 flex flex-col gap-0'>
+        <p class='truncate text-sm font-bold' title={props.album.name}>
           {props.album.name}
         </p>
         <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>
