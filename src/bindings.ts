@@ -179,10 +179,8 @@ async playbackPrev() : Promise<Result<null, string>> {
 
 
 export const events = __makeEvents__<{
-playbackNativeDirty: PlaybackNativeDirty,
 playbackStatus: PlaybackStatus
 }>({
-playbackNativeDirty: "playback-native-dirty",
 playbackStatus: "playback-status"
 })
 
@@ -219,6 +217,7 @@ export type FolderStructureRootNode = { id: string; name: string }
 export type FolderStructureRootsRequest = { libraryId: string }
 export type FolderStructureRootsResponse = { libraryId: string; libraryName: string; source: FolderStructureSource; rootNodes: FolderStructureRootNode[] }
 export type FolderStructureSource = "directory" | "indexes"
+export type InterruptReason = "initial_load" | "stream_buffering_stall" | "seeking" | "full_reload"
 export type LastConnectionState = "never" | "ok" | "offline" | "reauth_required"
 export type MusicDirectoryChild = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; isDirectory: boolean; mediaType: string | null }
 export type MusicDirectoryRequest = { id: string }
@@ -226,13 +225,11 @@ export type MusicDirectoryResponse = { id: string; name: string; children: Music
 export type MusicFolderSummary = { id: string; name: string }
 export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
-export type PlaybackLoadingReason = "buffering" | "seeking"
-export type PlaybackNativeDirty = null
 export type PlaybackQueueEntry = { songId: string; title: string; path: string | null; artist: string | null; album: string | null; duration: number | null; coverArtId: string | null }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { entries: PlaybackQueueEntry[]; currentIndex: number | null }
-export type PlaybackState = "idle" | "loading" | "playing" | "paused" | "stopped" | "error"
-export type PlaybackStatus = { state: PlaybackState; loadingReason: PlaybackLoadingReason | null; queue: PlaybackQueueEntry[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
+export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; queue: PlaybackQueueEntry[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
+export type PlayingState = "idle" | "playing" | "paused" | "stopped" | "interrupted" | "error"
 export type ProfileIdRequest = { profileId: string }
 export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"
 export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }

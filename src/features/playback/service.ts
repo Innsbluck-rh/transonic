@@ -1,7 +1,7 @@
 import { commands, events, PlaybackStatus } from '~/bindings';
 import { playbackStore, setPlaybackStore } from '~/stores/PlaybackStore';
 
-const PLAYBACK_STATE_POLL_MS = 1000;
+const PLAYBACK_STATE_POLL_MS = 500;
 
 type PlaybackCommandResult = { status: 'ok' } | { status: 'error'; error: string };
 
@@ -33,10 +33,6 @@ export async function startPlaybackStateSync() {
     applyAuthoritativeState(event.payload);
   });
 
-  const unlistenNativeDirty = await events.playbackNativeDirty.listen(() => {
-    refreshIfIdle();
-  });
-
   const refreshPlaybackState = async () => {
     const startedAtGeneration = stateGeneration;
     const stateResult = await commands.playbackGetState();
@@ -55,7 +51,7 @@ export async function startPlaybackStateSync() {
   await refreshPlaybackState();
 
   const intervalId = window.setInterval(() => {
-    if (pollInFlight || playbackStore.status?.state !== 'playing') {
+    if (pollInFlight || playbackStore.status?.playingState !== 'playing') {
       return;
     }
 
@@ -65,7 +61,6 @@ export async function startPlaybackStateSync() {
   return () => {
     window.clearInterval(intervalId);
     unlistenStatus();
-    unlistenNativeDirty();
   };
 }
 

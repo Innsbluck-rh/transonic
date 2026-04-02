@@ -17,8 +17,9 @@
 }
 
 @theme {
-  --color-primary-plane: var(--color-zinc-50);
+  /* --color-primary-plane: var(--color-zinc-50);
   --color-primary-surface: var(--color-zinc-100);
+  --color-primary-inner-surface: var(--color-zinc-200);
   --color-primary-selected: var(--color-zinc-200);
   --color-primary-playing: var(--color-zinc-200);
 
@@ -28,20 +29,20 @@
   --color-secondary-border: var(--color-zinc-300);
 
   --color-primary-text: var(--color-zinc-800);
-  --color-secondary-text: var(--color-zinc-500);
+  --color-secondary-text: var(--color-zinc-500); */
 
-  /* --color-primary-plane: var(--color-zinc-900);
+  --color-primary-plane: var(--color-zinc-900);
   --color-primary-surface: var(--color-zinc-800);
   --color-primary-selected: var(--color-zinc-800);
   --color-primary-playing: var(--color-zinc-800);
 
   --color-primary-hover: var(--color-zinc-700);
 
-  --color-primary-border: var(--color-zinc-600);
+  --color-primary-border: var(--color-zinc-500);
   --color-secondary-border: var(--color-zinc-700);
 
   --color-primary-text: var(--color-zinc-100);
-  --color-secondary-text: var(--color-zinc-500); */
+  --color-secondary-text: var(--color-zinc-500);
 
   --color-accent: var(--color-sky-600);
 
@@ -126,4 +127,40 @@
 
 .home-surface-root {
   @apply flex flex-col gap-2 flex-1 min-h-0 w-full overflow-x-hidden overflow-y-auto bg-primary-surface;
+}
+
+.marquee-paragraph {
+  @apply min-w-0 max-w-full;
+}
+
+.marquee-paragraph__viewport {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.marquee-paragraph__track {
+  display: inline-flex;
+  min-width: max-content;
+  white-space: nowrap;
+  will-change: transform;
+}
+
+.marquee-paragraph__track--animate {
+  animation: marquee-paragraph-scroll var(--marquee-duration, 10s) linear infinite;
+}
+
+.marquee-paragraph__content--duplicate {
+  margin-left: var(--marquee-gap, 2rem);
+}
+
+@keyframes marquee-paragraph-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-1 * var(--marquee-distance, 0px)));
+  }
 }

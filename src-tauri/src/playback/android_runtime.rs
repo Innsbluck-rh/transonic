@@ -6,12 +6,9 @@ use jni::{
     JNIEnv,
 };
 use tauri::{AppHandle, Manager, Wry};
-use tauri_specta::Event;
 
 use crate::{
-    commands::common::client,
-    models::{CapabilityMatrix, PlaybackNativeDirty},
-    ActiveSessionState, PlaybackControllerState,
+    commands::common::client, models::CapabilityMatrix, ActiveSessionState, PlaybackControllerState,
 };
 
 use super::{
@@ -67,10 +64,6 @@ fn cloned_app_handle() -> Option<AppHandle<Wry>> {
         .and_then(|storage| storage.lock().unwrap().clone())
 }
 
-fn emit_native_dirty(app: &AppHandle<Wry>) {
-    let _ = PlaybackNativeDirty.emit(app);
-}
-
 fn enqueue_native_event(event: PlaybackNativeEvent) {
     let Some(app) = cloned_app_handle() else {
         return;
@@ -79,13 +72,8 @@ fn enqueue_native_event(event: PlaybackNativeEvent) {
         return;
     };
 
-    let should_process_now = matches!(event, PlaybackNativeEvent::Ended);
     runtime_state.event_hub.push(event);
-    emit_native_dirty(&app);
-
-    if should_process_now {
-        spawn_controller_action(AndroidControllerAction::ProcessNativeEvents);
-    }
+    spawn_controller_action(AndroidControllerAction::ProcessNativeEvents);
 }
 
 fn spawn_controller_action(action: AndroidControllerAction) {
@@ -163,6 +151,7 @@ pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_enqu
         "ready" => PlaybackNativeEvent::Ready { position_ms },
         "playing" => PlaybackNativeEvent::Playing { position_ms },
         "paused" => PlaybackNativeEvent::Paused { position_ms },
+        "seek_processed" => PlaybackNativeEvent::SeekProcessed { position_ms },
         "error" => PlaybackNativeEvent::Error {
             message: message.unwrap_or_else(|| "Android playback failed.".to_string()),
         },

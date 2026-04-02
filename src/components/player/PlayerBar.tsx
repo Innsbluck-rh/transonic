@@ -1,12 +1,11 @@
-import { Component, createEffect, createMemo, createResource, createSignal, Match, onCleanup, Show, Switch } from 'solid-js';
-import { commands, PlaybackLoadingReason, PlaybackState, SongResponse } from '~/bindings';
+import { Component, createEffect, createMemo, createResource, createSignal, Match, Show, Switch } from 'solid-js';
+import { commands, InterruptReason, PlayingState, SongResponse } from '~/bindings';
+import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import { fetchCoverArtDataUrl } from '~/features/albums/service';
 import { hasPlaybackCommandError } from '~/features/playback/service';
 import { playbackStore } from '~/stores/PlaybackStore';
 import PlayerIcon from './PlayerIcon';
 import PlayerSlider from './PlayerSlider';
-
-const PLAYBACK_PROGRESS_TICK_MS = 500;
 
 function formatTime(totalSeconds: number) {
   const safeSeconds = Math.max(0, Math.floor(totalSeconds));
@@ -21,8 +20,12 @@ function formatTime(totalSeconds: number) {
   return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
 }
 
-function isInactivePlaybackState(state?: PlaybackState) {
-  return !state || state === 'loading' || state === 'error' || state === 'idle';
+function isControlDisabled(state?: PlayingState) {
+  return !state || state === 'idle' || state === 'error' || state === 'interrupted';
+}
+
+function isSeekDisabled(state?: PlayingState) {
+  return !state || state === 'idle' || state === 'error' || state === 'interrupted';
 }
 
 function clampPositionMs(positionMs: number, durationMs: number) {
@@ -33,7 +36,7 @@ function clampPositionMs(positionMs: number, durationMs: number) {
   return Math.min(Math.max(0, positionMs), durationMs);
 }
 
-// this may include
+// this may include fast_prev and fast_next later
 type PlayerIcons = 'prev' | 'playpause' | 'next';
 
 interface PlayerBarProps {
@@ -48,44 +51,33 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   const [playingSong, setPlayingSong] = createSignal<SongResponse | null>(null);
-  const [syncedPositionMs, setSyncedPositionMs] = createSignal<number>(0);
-  const [positionSyncedAtMs, setPositionSyncedAtMs] = createSignal<number>(Date.now());
-  const [nowMs, setNowMs] = createSignal<number>(Date.now());
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
-  const [pendingSeekPositionMs, setPendingSeekPositionMs] = createSignal<number | null>(null);
-  const [seeking, setSeeking] = createSignal<boolean>(false);
-  const [canAnimatePlayingProgress, setCanAnimatePlayingProgress] = createSignal<boolean>(false);
 
   const status = createMemo(() => playbackStore.status);
-  const playbackState = createMemo(() => status()?.state);
-  const loadingReason = createMemo<PlaybackLoadingReason | null>(() => status()?.loadingReason ?? null);
-  const isLoading = createMemo(() => playbackState() === 'loading');
-  const isInactive = createMemo(() => isInactivePlaybackState(playbackState()));
+  const playingState = createMemo(() => status()?.playingState);
+  const interruptReason = createMemo<InterruptReason | null>(() => status()?.interruptReason ?? null);
+  const pendingSeekPositionMs = createMemo(() => status()?.pendingSeekPositionMs ?? null);
+  const isInterrupted = createMemo(() => playingState() === 'interrupted');
+  const isDisabled = createMemo(() => isControlDisabled(playingState()));
   const currentSongId = createMemo(() => status()?.currentSongId ?? null);
-  const loadingLabel = createMemo(() => {
-    switch (loadingReason()) {
+  const interruptLabel = createMemo(() => {
+    switch (interruptReason()) {
+      case 'initial_load':
+        return '[loading...]';
+      case 'stream_buffering_stall':
+        return '[buffering...]';
       case 'seeking':
         return '[seeking...]';
-      case 'buffering':
-        return '[buffering...]';
+      case 'full_reload':
+        return '[reloading...]';
       default:
-        return '[loading...]';
+        return '';
     }
   });
   const subtitleText = createMemo(() => {
     const artist = playingSong()?.artist || '[unknown]';
-    return isLoading() ? `${artist} ${loadingLabel()}` : artist;
+    return isInterrupted() ? `${artist} ${interruptLabel()}` : artist;
   });
-
-  const syncPlaybackPosition = (positionMs: number) => {
-    const syncedAtMs = Date.now();
-    setSyncedPositionMs(positionMs);
-    setPositionSyncedAtMs(syncedAtMs);
-    setNowMs(syncedAtMs);
-    setPreviewPositionMs(null);
-    setPendingSeekPositionMs(null);
-    setSeeking(false);
-  };
 
   const songDurationMs = createMemo(() => {
     const durationSeconds = playingSong()?.duration ?? 0;
@@ -103,42 +95,24 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       return clampPositionMs(nextPendingSeekPositionMs, songDurationMs());
     }
 
-    const currentStatus = status();
-    if (!currentStatus) {
-      return 0;
-    }
-
-    const durationMs = songDurationMs();
-    const basePositionMs = syncedPositionMs();
-    if (currentStatus.state !== 'playing' || !canAnimatePlayingProgress()) {
-      return clampPositionMs(basePositionMs, durationMs);
-    }
-
-    const elapsedMs = Math.max(0, nowMs() - positionSyncedAtMs());
-    return clampPositionMs(basePositionMs + elapsedMs, durationMs);
+    return clampPositionMs(status()?.currentPositionMs ?? 0, songDurationMs());
   });
 
   const canSeek = createMemo(() => {
-    return !isInactive() && songDurationMs() > 0;
+    return !isSeekDisabled(playingState()) && songDurationMs() > 0;
   });
 
   const handleSeekCommit = async (nextPositionMs: number) => {
     const durationMs = songDurationMs();
-    if (durationMs <= 0 || seeking()) {
+    if (durationMs <= 0) {
       setPreviewPositionMs(null);
       return;
     }
 
     const clampedPositionMs = clampPositionMs(nextPositionMs, durationMs);
     setPreviewPositionMs(null);
-    setPendingSeekPositionMs(clampedPositionMs);
-    setSeeking(true);
-
     const result = await commands.playbackSeek({ positionMs: clampedPositionMs });
-    if (hasPlaybackCommandError(result)) {
-      setPendingSeekPositionMs(null);
-      setSeeking(false);
-    }
+    hasPlaybackCommandError(result);
   };
 
   const handlePrev = async () => {
@@ -147,7 +121,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   const handlePlayPause = async () => {
-    if (playbackState() === 'playing') {
+    if (playingState() === 'playing') {
       const result = await commands.playbackPause();
       hasPlaybackCommandError(result);
       return;
@@ -161,28 +135,6 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
     const result = await commands.playbackNext();
     hasPlaybackCommandError(result);
   };
-
-  createEffect(() => {
-    const intervalId = window.setInterval(() => {
-      setNowMs(Date.now());
-    }, PLAYBACK_PROGRESS_TICK_MS);
-
-    onCleanup(() => window.clearInterval(intervalId));
-  });
-
-  createEffect((previousPlaybackState?: PlaybackState) => {
-    const currentStatus = status();
-    if (!currentStatus) {
-      setCanAnimatePlayingProgress(false);
-      syncPlaybackPosition(0);
-      return undefined;
-    }
-
-    syncPlaybackPosition(currentStatus.currentPositionMs);
-    const confirmedPlayingUpdate = currentStatus.state === 'playing' && (previousPlaybackState === 'playing' || currentStatus.currentPositionMs > 0);
-    setCanAnimatePlayingProgress(confirmedPlayingUpdate);
-    return currentStatus.state;
-  });
 
   createEffect(() => {
     const songId = currentSongId();
@@ -227,7 +179,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
         <PlayerSlider
           valueMs={currentPositionMs()}
           maxMs={songDurationMs()}
-          disabled={!canSeek() || seeking()}
+          disabled={!canSeek()}
           onPreview={(valueMs) => setPreviewPositionMs(valueMs)}
           onCommit={handleSeekCommit}
         />
@@ -243,27 +195,27 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       <div class='flex flex-row w-full h-full px-4 gap-2 items-center shadow-xl z-10'>
         <div class='flex flex-row gap-2 items-center'>
           <Show when={iconsVisibility.prev}>
-            <PlayerIcon type='prev' disabled={isInactive()} onClick={handlePrev} />
+            <PlayerIcon type='prev' disabled={isDisabled()} onClick={handlePrev} />
           </Show>
           <Show when={iconsVisibility.playpause}>
             <PlayerIcon
-              type={playbackState() === 'playing' ? 'pause' : 'play'}
-              disabled={isInactive()}
-              loading={isLoading()}
+              type={playingState() === 'playing' ? 'pause' : 'play'}
+              disabled={isDisabled()}
+              loading={isInterrupted()}
               onClick={handlePlayPause}
             />
           </Show>
           <Show when={iconsVisibility.next}>
-            <PlayerIcon type='next' disabled={isInactive()} onClick={handleNext} />
+            <PlayerIcon type='next' disabled={isDisabled()} onClick={handleNext} />
           </Show>
         </div>
 
         <Switch
           fallback={
             <>
-              <div class='flex flex-col flex-1 ml-2'>
-                <p class='archivo bold'>{playingSong()?.title || '[unknown]'}</p>
-                <p class='archivo italic text-xs leading-none text-secondary-text'>{subtitleText()}</p>
+              <div class='flex min-w-0 flex-col flex-1 ml-2'>
+                <MarqueeParagraph text={playingSong()?.title || '[unknown]'} class='archivo font-bold' />
+                <MarqueeParagraph text={subtitleText()} class='archivo italic text-xs leading-none text-secondary-text' pixelsPerSecond={40} />
               </div>
               <div class='flex flex-col gap-1 mr-1'>
                 <p class='archivo text-xs'>
@@ -273,12 +225,12 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
             </>
           }
         >
-          <Match when={playbackState() === 'error'}>
+          <Match when={playingState() === 'error'}>
             <div class='flex-1 ml-2'>
               <p class='archivo italic text-secondary-text'>[error occured]</p>
             </div>
           </Match>
-          <Match when={playbackState() === 'idle'}>
+          <Match when={playingState() === 'idle'}>
             <div class='flex-1 ml-2'>
               <p class='archivo italic text-secondary-text'>[nothing played]</p>
             </div>

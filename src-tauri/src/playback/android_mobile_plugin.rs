@@ -1,8 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri::{
     plugin::{Builder as PluginBuilder, PluginHandle, TauriPlugin},
-    Manager,
-    Wry,
+    Manager, Wry,
 };
 
 use super::native_events::AndroidPlaybackEventHub;

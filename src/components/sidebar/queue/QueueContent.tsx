@@ -18,7 +18,7 @@ const QueueContent: Component = () => {
           each={queue()}
           fallback={
             <div class='col-span-2 flex w-full p-2'>
-              <p class='px-1 text-xs italic'>[nothing in queue]</p>
+              <p class='px-1 text-xs text-secondary-text italic'>[nothing in queue]</p>
             </div>
           }
         >

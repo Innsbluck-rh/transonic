@@ -15,10 +15,7 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
 
   return (
     <div class='flex flex-col'>
-      <div
-        class='flex flex-row w-full cursor-pointer border-b border-primary-border px-3 py-2 text-left hover:bg-primary-hover'
-        onClick={() => setOpen((current) => !current)}
-      >
+      <div class='flex flex-row w-full cursor-pointer px-3 py-2 text-left hover:bg-primary-hover' onClick={() => setOpen((current) => !current)}>
         <p class='archivo font-bold text-xs'>{browseMode()}</p>
 
         <div
@@ -29,10 +26,13 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
           classList={{ [selectStates['is-open']]: open() }}
         ></div>
       </div>
-      <div class={`grid ${selectStates.panel}`} classList={{ [selectStates['is-open']]: open() }}>
+      <div class={`grid bg-primary-surface ${selectStates.panel}`} classList={{ [selectStates['is-open']]: open() }}>
         <div class={`relative flex flex-col ${selectStates['panel-inner']}`}>
+          <Show when={open()}>
+            <div class='h-0 w-full border-t border-secondary-border' />
+          </Show>
           {/* top shadow */}
-          <div class='pointer-events-none absolute top-0 h-3 w-full bg-linear-to-t from-transparent to-zinc-500 opacity-10' />
+          {/* <div class='pointer-events-none absolute top-0 h-3 w-full bg-linear-to-t from-transparent to-zinc-500 opacity-10' /> */}
           <For each={otherModes()}>
             {(mode) => (
               <div
@@ -47,14 +47,12 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
             )}
           </For>
           {/* bottom shadow (w/safety margin) */}
-          <div class='pointer-events-none absolute -bottom-4 h-8 w-full bg-linear-to-b from-transparent to-zinc-500 opacity-20' />
+          {/* <div class='pointer-events-none absolute -bottom-4 h-8 w-full bg-linear-to-b from-transparent to-zinc-500 opacity-20' /> */}
         </div>
       </div>
 
       {/* border */}
-      <Show when={open()}>
-        <div class='w-full h-0 border-b border-primary-border' />
-      </Show>
+      <div class='w-full h-0 border-b border-primary-border' />
     </div>
   );
 };

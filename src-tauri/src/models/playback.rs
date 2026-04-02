@@ -3,20 +3,22 @@ use tauri_specta::Event;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
-pub enum PlaybackState {
+pub enum PlayingState {
     Idle,
-    Loading,
     Playing,
     Paused,
     Stopped,
+    Interrupted,
     Error,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
-pub enum PlaybackLoadingReason {
-    Buffering,
+pub enum InterruptReason {
+    InitialLoad,
+    StreamBufferingStall,
     Seeking,
+    FullReload,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
@@ -47,8 +49,9 @@ pub struct PlaybackSeekRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackStatus {
-    pub state: PlaybackState,
-    pub loading_reason: Option<PlaybackLoadingReason>,
+    pub playing_state: PlayingState,
+    pub interrupt_reason: Option<InterruptReason>,
+    pub pending_seek_position_ms: Option<u32>,
     pub queue: Vec<PlaybackQueueEntry>,
     pub current_index: Option<u32>,
     pub current_position_ms: u32,
@@ -59,8 +62,9 @@ pub struct PlaybackStatus {
 impl PlaybackStatus {
     pub fn empty() -> Self {
         Self {
-            state: PlaybackState::Idle,
-            loading_reason: None,
+            playing_state: PlayingState::Idle,
+            interrupt_reason: None,
+            pending_seek_position_ms: None,
             queue: Vec::new(),
             current_index: None,
             current_position_ms: 0,
@@ -69,6 +73,3 @@ impl PlaybackStatus {
         }
     }
 }
-
-#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, specta::Type, Event)]
-pub struct PlaybackNativeDirty;

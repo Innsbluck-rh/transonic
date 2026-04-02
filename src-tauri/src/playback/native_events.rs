@@ -11,6 +11,7 @@ pub enum PlaybackNativeEvent {
     Ready { position_ms: u32 },
     Playing { position_ms: u32 },
     Paused { position_ms: u32 },
+    SeekProcessed { position_ms: u32 },
     Error { message: String },
     Ended,
 }
@@ -19,6 +20,7 @@ pub trait NativePlaybackEventSource: Send {
     fn drain_events(&mut self) -> Vec<PlaybackNativeEvent>;
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Default)]
 pub struct NoopNativePlaybackEventSource;
 
