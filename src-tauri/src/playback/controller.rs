@@ -1,11 +1,14 @@
 use opensubsonic_client::{
-    api::retrieval::{GetCoverArtRequest, RetrievalApi, StreamRequest},
+    api::retrieval::{RetrievalApi, StreamRequest},
     ApiError, OpenSubsonicClient, PreparedBinaryRequest,
 };
 
-use crate::models::{
-    CapabilityMatrix, InterruptReason, PlaybackQueueEntry, PlaybackSetQueueRequest, PlaybackStatus,
-    PlayingState,
+use crate::{
+    cover_art_cache::CoverArtCache,
+    models::{
+        CapabilityMatrix, InterruptReason, PlaybackQueueEntry, PlaybackSetQueueRequest,
+        PlaybackStatus, PlayingState,
+    },
 };
 
 use super::{
@@ -18,6 +21,8 @@ use super::{
 pub struct PlaybackRuntimeContext<'a> {
     pub client: &'a OpenSubsonicClient,
     pub capability_matrix: &'a CapabilityMatrix,
+    pub cover_art_cache: Option<&'a CoverArtCache>,
+    pub profile_id: Option<&'a str>,
 }
 
 pub struct PlaybackController {
@@ -474,7 +479,12 @@ impl PlaybackController {
             autoplay
         );
 
-        let artwork_url = build_cover_art_url(context.client, entry.cover_art_id.as_deref())?;
+        let artwork_path = build_cover_art_path(
+            context.cover_art_cache,
+            context.client,
+            context.profile_id,
+            entry.cover_art_id.as_deref(),
+        )?;
 
         if requested_position_ms == 0 {
             let raw_stream =
@@ -485,7 +495,7 @@ impl PlaybackController {
                 title: entry.title.clone(),
                 artist: entry.artist.clone(),
                 album: entry.album.clone(),
-                artwork_url: artwork_url.clone(),
+                artwork_path: artwork_path.clone(),
                 absolute_start_position_ms: requested_position_ms,
                 local_start_position_ms,
                 autoplay,
@@ -501,7 +511,7 @@ impl PlaybackController {
                     title: entry.title.clone(),
                     artist: entry.artist.clone(),
                     album: entry.album.clone(),
-                    artwork_url,
+                    artwork_path,
                     absolute_start_position_ms: requested_position_ms,
                     local_start_position_ms,
                     autoplay,
@@ -528,7 +538,7 @@ impl PlaybackController {
                 title: entry.title.clone(),
                 artist: entry.artist.clone(),
                 album: entry.album.clone(),
-                artwork_url,
+                artwork_path,
                 absolute_start_position_ms: requested_position_ms,
                 local_start_position_ms,
                 autoplay,
@@ -724,21 +734,33 @@ fn build_stream_request(
         .map_err(format_api_error)
 }
 
-fn build_cover_art_url(
+fn build_cover_art_path(
+    cover_art_cache: Option<&CoverArtCache>,
     client: &OpenSubsonicClient,
+    profile_id: Option<&str>,
     cover_art_id: Option<&str>,
 ) -> Result<Option<String>, String> {
-    let Some(cover_art_id) = cover_art_id else {
+    let (Some(cover_art_cache), Some(profile_id), Some(cover_art_id)) =
+        (cover_art_cache, profile_id, cover_art_id)
+    else {
         return Ok(None);
     };
 
-    client
-        .get_cover_art(GetCoverArtRequest {
-            id: cover_art_id.to_string(),
-            size: Some(512),
+    let cover_art_cache = cover_art_cache.clone();
+    let client = client.clone();
+    let profile_id = profile_id.to_string();
+    let cover_art_id = cover_art_id.to_string();
+    let handle = std::thread::Builder::new()
+        .name("cover-art-playback-resolve".to_string())
+        .spawn(move || {
+            cover_art_cache.resolve_cover_art(&client, &profile_id, &cover_art_id, Some(512))
         })
-        .map(|request| Some(request.url.to_string()))
-        .map_err(format_api_error)
+        .map_err(|error| format!("Failed to start the cover art resolver thread: {error}"))?;
+
+    handle
+        .join()
+        .map_err(|_| "The cover art resolver thread panicked.".to_string())?
+        .map(|path| Some(path.to_string_lossy().to_string()))
 }
 
 fn validate_queue_index(
@@ -1129,6 +1151,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1152,6 +1176,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1184,6 +1210,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1207,6 +1235,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1229,6 +1259,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1251,6 +1283,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1279,6 +1313,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1311,6 +1347,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1341,6 +1379,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1364,6 +1404,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1390,6 +1432,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1416,6 +1460,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1449,6 +1495,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1481,6 +1529,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1522,6 +1572,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
 
         controller
@@ -1543,6 +1595,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
 
         controller
@@ -1598,6 +1652,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
 
         controller
@@ -1659,6 +1715,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1688,6 +1746,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1721,6 +1781,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1756,6 +1818,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1802,6 +1866,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
         controller
             .set_queue(PlaybackSetQueueRequest {
@@ -1831,6 +1897,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
 
         controller
@@ -1874,6 +1942,8 @@ mod tests {
         let runtime_context = PlaybackRuntimeContext {
             client: &client,
             capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
         };
 
         controller

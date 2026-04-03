@@ -5,9 +5,10 @@ import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import PlayerIcon from '~/components/player/PlayerIcon';
 import PlayerSlider from '~/components/player/PlayerSlider';
 import QueueContent from '~/components/sidebar/queue/QueueContent';
-import { fetchCoverArtDataUrl } from '~/features/albums/service';
+import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { resolveArtistRoute } from '~/features/navigation/routes';
 import { usePlayback } from '~/features/playback/usePlayback';
+import { sessionStore } from '~/stores/SessionStore';
 
 interface SPPlayerProps {
   topSectionProps?: JSX.HTMLAttributes<HTMLDivElement>;
@@ -34,17 +35,19 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
   const DEFAULT_COVER_ART_SIZE = 224;
   const request = createMemo(() => {
     const coverArtId = currentEntry()?.coverArtId;
-    if (!coverArtId) {
+    const profileId = sessionStore.activeSession?.profileId;
+    if (!coverArtId || !profileId) {
       return null;
     }
 
     return {
+      profileId,
       coverArtId,
       size: DEFAULT_COVER_ART_SIZE,
     };
   });
 
-  const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
+  const [coverArt] = createResource(request, (payload) => fetchCoverArtAssetUrl(payload));
 
   const navigate = useNavigate();
 
@@ -57,10 +60,10 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
         <div class='z-10 mt-14 mb-2 flex h-full w-full flex-col items-center'>
           <div class='flex h-full w-full flex-col items-center px-8'>
             <Show when={coverArt()}>
-              {(dataUrl) => (
+              {(assetUrl) => (
                 <img
                   class='mb-6 aspect-square h-auto w-90 max-w-[70%] min-w-1/2 object-cover object-center shadow-[0_0_24px_rgba(128,128,128,0.25)]'
-                  src={dataUrl()}
+                  src={assetUrl()}
                   loading='lazy'
                   decoding='async'
                 />
@@ -108,7 +111,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
         </div>
 
         <Show when={coverArt()}>
-          {(dataUrl) => <img class='absolute h-full w-full object-cover object-center' src={dataUrl()} loading='lazy' decoding='async' />}
+          {(assetUrl) => <img class='absolute h-full w-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
         </Show>
         <div class='absolute z-0 h-full w-full backdrop-blur-[5px]' />
         <div class='bg-primary-plane absolute z-0 h-full w-full opacity-75' />

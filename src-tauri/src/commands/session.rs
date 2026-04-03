@@ -4,7 +4,7 @@ use crate::{
     models::{
         AppBootstrap, ConnectServerProfileRequest, ConnectServerProfileResult, ProfileIdRequest,
     },
-    ActiveSessionState, PlaybackControllerState,
+    ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
 };
 
 use super::common::service;
@@ -51,9 +51,11 @@ pub async fn connect_server_profile(
 pub fn delete_server_profile(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
     payload: ProfileIdRequest,
 ) -> Result<AppBootstrap, String> {
+    cover_art_cache.0.remove_profile(&payload.profile_id)?;
     let result = service(&app)?.delete_server_profile(&state.0, &payload.profile_id)?;
     if result.active_session.is_none() {
         reset_playback_state(&playback, "delete_server_profile");

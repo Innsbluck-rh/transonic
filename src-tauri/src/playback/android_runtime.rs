@@ -8,7 +8,8 @@ use jni::{
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::{
-    commands::common::client, models::CapabilityMatrix, ActiveSessionState, PlaybackControllerState,
+    commands::common::client, models::CapabilityMatrix, ActiveSessionState, CoverArtCacheState,
+    PlaybackControllerState,
 };
 
 use super::{
@@ -33,6 +34,8 @@ enum AndroidControllerAction {
 struct OwnedPlaybackRuntimeContext {
     client: opensubsonic_client::OpenSubsonicClient,
     capability_matrix: CapabilityMatrix,
+    cover_art_cache: crate::cover_art_cache::CoverArtCache,
+    profile_id: String,
 }
 
 impl OwnedPlaybackRuntimeContext {
@@ -40,21 +43,30 @@ impl OwnedPlaybackRuntimeContext {
         PlaybackRuntimeContext {
             client: &self.client,
             capability_matrix: &self.capability_matrix,
+            cover_art_cache: Some(&self.cover_art_cache),
+            profile_id: Some(&self.profile_id),
         }
     }
 }
 
 fn playback_runtime_context(app: &AppHandle<Wry>) -> Option<OwnedPlaybackRuntimeContext> {
     let sessions = app.try_state::<ActiveSessionState>()?;
-    let capability_matrix = {
+    let (capability_matrix, profile_id) = {
         let guard = sessions.0.lock().unwrap();
-        guard.as_ref()?.capability_matrix.clone()
+        let session = guard.as_ref()?;
+        (
+            session.capability_matrix.clone(),
+            session.profile_id.clone(),
+        )
     };
+    let cover_art_cache = app.try_state::<CoverArtCacheState>()?.0.clone();
     let client = client(app, &sessions.0).ok()?;
 
     Some(OwnedPlaybackRuntimeContext {
         client,
         capability_matrix,
+        cover_art_cache,
+        profile_id,
     })
 }
 
@@ -93,7 +105,10 @@ fn execute_controller_action(
     action: AndroidControllerAction,
 ) -> Result<(), String> {
     let playback = app.state::<PlaybackControllerState>();
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let runtime_context = playback_runtime_context(app);
     let runtime_context_ref = runtime_context
         .as_ref()

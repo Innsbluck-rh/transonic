@@ -1,10 +1,9 @@
-use opensubsonic_client::api::retrieval::{GetCoverArtRequest, RetrievalApi};
 use tauri::{AppHandle, State};
 
 use crate::{
-    commands::common::{client, encode_data_url, fetch_binary_response, format_api_error},
+    commands::common::client,
     models::{CoverArtRequest, CoverArtResponse},
-    ActiveSessionState,
+    ActiveSessionState, CoverArtCacheState,
 };
 
 #[tauri::command]
@@ -12,6 +11,7 @@ use crate::{
 pub async fn get_cover_art(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     payload: CoverArtRequest,
 ) -> Result<CoverArtResponse, String> {
     let cover_art_id = payload.cover_art_id.trim();
@@ -19,28 +19,24 @@ pub async fn get_cover_art(
         return Err("coverArtId is required.".to_string());
     }
 
+    let profile_id = {
+        let guard = state.0.lock().unwrap();
+        let session = guard
+            .as_ref()
+            .ok_or_else(|| "No active session is available.".to_string())?;
+        session.profile_id.clone()
+    };
     let client = client(&app, &state.0)?;
-    let request = client
-        .get_cover_art(GetCoverArtRequest {
-            id: cover_art_id.to_string(),
-            size: payload.size,
-        })
-        .map_err(format_api_error)?;
-    let (content_type, bytes) = fetch_binary_response(request).await?;
+    let cache = cover_art_cache.0.clone();
+    let cover_art_id = cover_art_id.to_string();
+    let size = payload.size;
+    let local_path = tauri::async_runtime::spawn_blocking(move || {
+        cache.resolve_cover_art(&client, &profile_id, &cover_art_id, size)
+    })
+    .await
+    .map_err(|error| format!("Failed to join the cover art cache task: {error}"))??;
 
     Ok(CoverArtResponse {
-        data_url: encode_data_url(&content_type, &bytes),
+        local_path: local_path.to_string_lossy().to_string(),
     })
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::commands::common::encode_data_url;
-
-    #[test]
-    fn encode_data_url_uses_base64() {
-        let encoded = encode_data_url("image/png", b"abc");
-
-        assert_eq!(encoded, "data:image/png;base64,YWJj");
-    }
 }

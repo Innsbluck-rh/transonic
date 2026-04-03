@@ -8,7 +8,7 @@ pub struct PlaybackBackendLoadRequest {
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
-    pub artwork_url: Option<String>,
+    pub artwork_path: Option<String>,
     pub absolute_start_position_ms: u32,
     pub local_start_position_ms: u32,
     pub autoplay: bool,

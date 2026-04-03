@@ -29,7 +29,7 @@ private const val KEY_AUTOPLAY = "autoplay"
 private const val KEY_TITLE = "title"
 private const val KEY_ARTIST = "artist"
 private const val KEY_ALBUM = "album"
-private const val KEY_ARTWORK_URL = "artworkUrl"
+private const val KEY_ARTWORK_PATH = "artworkPath"
 
 @InvokeArg
 @Keep
@@ -50,7 +50,7 @@ class LoadPreparedMediaArgs {
   lateinit var title: String
   var artist: String? = null
   var album: String? = null
-  var artworkUrl: String? = null
+  var artworkPath: String? = null
 }
 
 @InvokeArg
@@ -81,7 +81,7 @@ private fun LoadPreparedMediaArgs.toBundle(): Bundle {
     putString(KEY_TITLE, title)
     putString(KEY_ARTIST, artist)
     putString(KEY_ALBUM, album)
-    putString(KEY_ARTWORK_URL, artworkUrl)
+    putString(KEY_ARTWORK_PATH, artworkPath)
   }
 }
 
@@ -113,7 +113,7 @@ internal fun Bundle.toLoadPreparedMediaArgs(): LoadPreparedMediaArgs? {
     this.title = title
     this.artist = getString(KEY_ARTIST)
     this.album = getString(KEY_ALBUM)
-    this.artworkUrl = getString(KEY_ARTWORK_URL)
+    this.artworkPath = getString(KEY_ARTWORK_PATH)
   }
 }
 

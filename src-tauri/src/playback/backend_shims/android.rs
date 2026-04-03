@@ -48,7 +48,7 @@ impl PlaybackBackend for AndroidPlaybackBackend {
                 title: request.title,
                 artist: request.artist,
                 album: request.album,
-                artwork_url: request.artwork_url,
+                artwork_path: request.artwork_path,
             })
     }
 
