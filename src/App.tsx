@@ -4,6 +4,7 @@ import { MetaProvider } from '@solidjs/meta';
 import { Navigate, Route, Router } from '@solidjs/router';
 import { platform } from '@tauri-apps/plugin-os';
 import { MOBILE_HOME_ROUTE, resolveHomeRoute } from './features/navigation/routes';
+import BrowseAlbum from './routes/browse/album';
 import BrowseArtist from './routes/browse/artist';
 import BrowseFolderStructure from './routes/browse/folder_structure';
 import AppError from './routes/error';
@@ -45,6 +46,7 @@ export default function App() {
             <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
             <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
             <Route path='/browse/artists/:id' component={BrowseArtist} />
+            <Route path='/browse/album/:id' component={BrowseAlbum} />
           </Route>
           <Route component={HomeLayoutSP}>
             <Route path='/sp' component={() => <Navigate href={MOBILE_HOME_ROUTE} />} />

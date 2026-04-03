@@ -1,14 +1,13 @@
 import { Component, For, Show } from 'solid-js';
-import type { AlbumListItem } from '~/bindings';
-import AlbumGridItem from './item/AlbumGridItem';
+import AlbumGridItem, { AlbumItem } from './item/AlbumGridItem';
 
 interface AlbumGridProps {
-  albums: AlbumListItem[];
+  albums: AlbumItem[];
   emptyMessage?: string;
-  onItemClick?: (album: AlbumListItem, e: MouseEvent) => void;
-  onItemDblClick?: (album: AlbumListItem, e: MouseEvent) => void;
-  onItemArtClick?: (album: AlbumListItem, e: MouseEvent) => void;
-  onItemArtDblClick?: (album: AlbumListItem, e: MouseEvent) => void;
+  onItemClick?: (album: AlbumItem, e: MouseEvent) => void;
+  onItemDblClick?: (album: AlbumItem, e: MouseEvent) => void;
+  onItemArtClick?: (album: AlbumItem, e: MouseEvent) => void;
+  onItemArtDblClick?: (album: AlbumItem, e: MouseEvent) => void;
 }
 
 const AlbumGrid: Component<AlbumGridProps> = (props) => {

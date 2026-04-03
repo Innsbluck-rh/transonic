@@ -1,5 +1,6 @@
-import { useLocation, useNavigate } from '@solidjs/router';
+import { useLocation } from '@solidjs/router';
 import { Component, For, Match, Show, Switch } from 'solid-js';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import BrowseListRow from './item/BrowseListRow';
 
 export type BrowseListItem = {
@@ -22,7 +23,7 @@ interface BrowseListProps {
  */
 const BrowseList: Component<BrowseListProps> = (props) => {
   const location = useLocation();
-  const navigate = useNavigate();
+  const navigate = useSPNavigate();
   return (
     <div class='flex flex-col'>
       <Switch>

@@ -1,69 +1,17 @@
 use opensubsonic_client::api::browsing::{BrowsingApi, GetSongRequest};
-use serde::Deserialize;
 use serde_json::Value;
 use tauri::{AppHandle, State};
 
 use crate::{
     commands::{
         common::{client, format_api_error},
-        json::{opt_boolish, opt_stringish, opt_u32ish, stringish, value_as},
+        json::value_as,
     },
     models::{SongRequest, SongResponse},
     ActiveSessionState,
 };
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawSong {
-    #[serde(deserialize_with = "stringish")]
-    id: String,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    parent: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    path: Option<String>,
-    title: String,
-    album: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    album_id: Option<String>,
-    artist: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    artist_id: Option<String>,
-    cover_art: Option<String>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    track: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    disc_number: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    year: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    duration: Option<u32>,
-    #[serde(default, deserialize_with = "opt_boolish")]
-    is_dir: Option<bool>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    media_type: Option<String>,
-}
-
-impl From<RawSong> for SongResponse {
-    fn from(value: RawSong) -> Self {
-        Self {
-            id: value.id,
-            parent_id: value.parent,
-            path: value.path,
-            title: value.title,
-            album: value.album,
-            album_id: value.album_id,
-            artist: value.artist,
-            artist_id: value.artist_id,
-            cover_art_id: value.cover_art,
-            track: value.track,
-            disc_number: value.disc_number,
-            year: value.year,
-            duration: value.duration,
-            is_directory: value.is_dir.unwrap_or(false),
-            media_type: normalize_media_type(value.media_type),
-        }
-    }
-}
+use super::RawSong;
 
 #[tauri::command]
 #[specta::specta]
@@ -95,13 +43,6 @@ fn parse_song(payload: Value) -> Result<SongResponse, String> {
         value_as(payload).map_err(|error| format!("Failed to parse the song payload: {error}"))?;
 
     Ok(SongResponse::from(payload))
-}
-
-fn normalize_media_type(media_type: Option<String>) -> Option<String> {
-    media_type.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_ascii_lowercase())
-    })
 }
 
 #[cfg(test)]

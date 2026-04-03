@@ -13,7 +13,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     commands::{
-        common::{client, format_api_error},
+        common::{client, format_api_error, normalize_text},
         json::{opt_boolish, opt_stringish, opt_u32ish, stringish, value_as, vec_or_single},
     },
     models::{
@@ -332,13 +332,6 @@ fn album_key(song: &SongRow) -> String {
     }
 
     "unknown_album".to_string()
-}
-
-fn normalize_text(value: Option<&str>) -> Option<String> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    })
 }
 
 #[cfg(test)]

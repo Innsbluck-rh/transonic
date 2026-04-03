@@ -24,6 +24,11 @@ export function resolveFolderRoute(libraryId: string, nodeId: string | null | un
   return routeVariant === 'mobile' ? `/sp/folders/${encodedLibraryId}/${encodedNodeId}` : `/browse/folders/${encodedLibraryId}/${encodedNodeId}`;
 }
 
+export function resolveAlbumRoute(albumId: string, routeVariant: RouteVariant) {
+  const encodedAlbumId = encodeURIComponent(albumId);
+  return routeVariant === 'mobile' ? `/sp/albums/${encodedAlbumId}` : `/browse/album/${encodedAlbumId}`;
+}
+
 export function resolveBrowseIndexRoute(mode: 'Artists' | 'Folder Structures', routeVariant: RouteVariant) {
   if (routeVariant === 'mobile') {
     return mode === 'Artists' ? '/sp/index/artists' : '/sp/index/folders';

@@ -219,7 +219,9 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
 
   return (
     <div ref={containerRef} class='relative flex min-h-0 w-full flex-1 flex-col overflow-hidden'>
-      <div class='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden'>{props.children}</div>
+      <div class='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden' style='view-transition-name: sp-screen'>
+        {props.children}
+      </div>
 
       <div
         class='relative z-30 shrink-0'

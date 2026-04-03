@@ -1,10 +1,12 @@
 import { Component } from 'solid-js';
-import type { AlbumListItem } from '~/bindings';
+import type { AlbumListItem, ArtistAlbum, FolderStructureAlbumItem } from '~/bindings';
 import AlbumCover from './AlbumCover';
+
+export type AlbumItem = AlbumListItem | ArtistAlbum | FolderStructureAlbumItem;
 
 interface AlbumGridItemProps {
   class?: string;
-  album: AlbumListItem;
+  album: AlbumItem;
   onClick?: (e: MouseEvent) => void;
   onDblClick?: (e: MouseEvent) => void;
   onArtClick?: (e: MouseEvent) => void;
@@ -31,7 +33,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         onClick={(e) => props.onClick?.(e)}
         onDblClick={(e) => props.onDblClick?.(e)}
       >
-        <AlbumCover albumName={props.album.name} coverArtId={props.album.coverArtId} year={props.album.year} />
+        <AlbumCover albumName={props.album.name ?? '[unknown]'} coverArtId={props.album.coverArtId} year={props.album.year} />
         {/* <div
           class='absolute top-0 right-0 bottom-0 left-0 hidden bg-[#00000000]'
           classList={{
@@ -41,7 +43,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         </div> */}
       </div>
       <div class='mt-1 flex flex-col gap-0'>
-        <p class='truncate text-sm font-bold' title={props.album.name}>
+        <p class='truncate text-sm font-bold' title={props.album.name ?? '[unknown]'}>
           {props.album.name}
         </p>
         <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>

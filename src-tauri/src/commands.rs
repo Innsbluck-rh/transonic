@@ -8,7 +8,7 @@ mod playback;
 mod session;
 
 pub use albums::get_album_list;
-pub use browse::album::get_album_songs;
+pub use browse::album::{get_album_info, get_album_songs};
 pub use browse::artist::{get_artist, get_artist_info2, get_artists, get_music_directory};
 pub use browse::folder_structure::get_folder_structure_albums;
 pub use browse::folder_structure_album_songs::get_folder_structure_album_songs;
@@ -18,15 +18,18 @@ pub use index::artist::get_artist_indexes;
 pub use index::folder_structure::{get_folder_structure_roots, get_music_folders};
 pub use playback::{
     playback_get_state, playback_next, playback_pause, playback_play, playback_play_album,
-    playback_play_folder_album, playback_play_queue_index, playback_prev, playback_seek,
-    playback_set_queue, playback_stop,
+    playback_play_folder_album, playback_play_queue_index, playback_play_songs, playback_prev,
+    playback_seek, playback_set_queue, playback_stop,
 };
 pub use session::{bootstrap_app_state, connect_server_profile, delete_server_profile};
 
 #[doc(hidden)]
 pub use albums::{__cmd__get_album_list, __specta__fn__get_album_list};
 #[doc(hidden)]
-pub use browse::album::{__cmd__get_album_songs, __specta__fn__get_album_songs};
+pub use browse::album::{
+    __cmd__get_album_info, __cmd__get_album_songs, __specta__fn__get_album_info,
+    __specta__fn__get_album_songs,
+};
 #[doc(hidden)]
 pub use browse::artist::{
     __cmd__get_artist, __cmd__get_artist_info2, __cmd__get_artists, __cmd__get_music_directory,
@@ -56,12 +59,13 @@ pub use index::folder_structure::{
 pub use playback::{
     __cmd__playback_get_state, __cmd__playback_next, __cmd__playback_pause, __cmd__playback_play,
     __cmd__playback_play_album, __cmd__playback_play_folder_album,
-    __cmd__playback_play_queue_index, __cmd__playback_prev, __cmd__playback_seek,
-    __cmd__playback_set_queue, __cmd__playback_stop, __specta__fn__playback_get_state,
-    __specta__fn__playback_next, __specta__fn__playback_pause, __specta__fn__playback_play,
-    __specta__fn__playback_play_album, __specta__fn__playback_play_folder_album,
-    __specta__fn__playback_play_queue_index, __specta__fn__playback_prev,
-    __specta__fn__playback_seek, __specta__fn__playback_set_queue, __specta__fn__playback_stop,
+    __cmd__playback_play_queue_index, __cmd__playback_play_songs, __cmd__playback_prev,
+    __cmd__playback_seek, __cmd__playback_set_queue, __cmd__playback_stop,
+    __specta__fn__playback_get_state, __specta__fn__playback_next, __specta__fn__playback_pause,
+    __specta__fn__playback_play, __specta__fn__playback_play_album,
+    __specta__fn__playback_play_folder_album, __specta__fn__playback_play_queue_index,
+    __specta__fn__playback_play_songs, __specta__fn__playback_prev, __specta__fn__playback_seek,
+    __specta__fn__playback_set_queue, __specta__fn__playback_stop,
 };
 #[doc(hidden)]
 pub use session::{

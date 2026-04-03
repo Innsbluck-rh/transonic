@@ -8,8 +8,8 @@ use tauri::{AppHandle, State};
 
 use crate::{
     commands::{
-        common::{client, format_api_error},
-        json::{opt_boolish, opt_stringish, opt_u32ish, stringish, value_as, vec_or_single},
+        common::{client, format_api_error, normalize_media_type, normalize_optional_text, normalize_roles, trim_text},
+        json::{opt_boolish, opt_stringish, opt_u32ish, opt_u64ish, stringish, value_as, vec_or_single},
     },
     models::{
         ArtistAlbum, ArtistGroup, ArtistInfo2Request, ArtistInfo2Response, ArtistRequest,
@@ -51,6 +51,16 @@ struct RawChild {
     disc_number: Option<u32>,
     #[serde(default, deserialize_with = "opt_u32ish")]
     year: Option<u32>,
+    #[serde(default, deserialize_with = "opt_u64ish")]
+    size: Option<u64>,
+    content_type: Option<String>,
+    suffix: Option<String>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    bit_rate: Option<u32>,
+    genre: Option<String>,
+    created: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    starred: Option<String>,
     #[serde(default, deserialize_with = "opt_boolish")]
     is_dir: Option<bool>,
     #[serde(default, deserialize_with = "opt_stringish")]
@@ -181,6 +191,13 @@ impl From<RawChild> for MusicDirectoryChild {
             track: value.track,
             disc_number: value.disc_number,
             year: value.year,
+            size: value.size,
+            content_type: value.content_type,
+            suffix: value.suffix,
+            bit_rate: value.bit_rate,
+            genre: value.genre,
+            created: value.created,
+            starred: value.starred,
             is_directory: value.is_dir.unwrap_or(false),
             media_type: normalize_media_type(value.media_type),
         }
@@ -401,29 +418,6 @@ fn parse_artist_info2(payload: Value) -> Result<ArtistInfo2Response, String> {
         .map_err(|error| format!("Failed to parse the artist info payload: {error}"))?;
 
     Ok(ArtistInfo2Response::from(payload))
-}
-
-fn normalize_media_type(media_type: Option<String>) -> Option<String> {
-    media_type.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_ascii_lowercase())
-    })
-}
-
-fn normalize_optional_text(value: Option<String>) -> Option<String> {
-    value.and_then(|value| trim_text(&value))
-}
-
-fn normalize_roles(roles: Vec<String>) -> Vec<String> {
-    roles
-        .into_iter()
-        .filter_map(|role| trim_text(&role))
-        .collect()
-}
-
-fn trim_text(value: &str) -> Option<String> {
-    let trimmed = value.trim();
-    (!trimmed.is_empty()).then(|| trimmed.to_string())
 }
 
 #[cfg(test)]

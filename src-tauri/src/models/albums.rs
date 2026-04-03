@@ -71,8 +71,15 @@ pub struct AlbumListItem {
     pub id: String,
     pub name: String,
     pub artist: Option<String>,
+    pub artist_id: Option<String>,
     pub cover_art_id: Option<String>,
+    pub song_count: Option<u32>,
+    pub duration: Option<u32>,
+    pub play_count: Option<u32>,
     pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub created: Option<String>,
+    pub starred: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]

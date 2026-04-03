@@ -36,6 +36,30 @@ pub(crate) fn client(
     service(app)?.build_active_client(sessions)
 }
 
+pub(crate) fn trim_text(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    (!trimmed.is_empty()).then(|| trimmed.to_string())
+}
+
+pub(crate) fn normalize_text(value: Option<&str>) -> Option<String> {
+    value.and_then(|v| trim_text(v))
+}
+
+pub(crate) fn normalize_optional_text(value: Option<String>) -> Option<String> {
+    value.and_then(|v| trim_text(&v))
+}
+
+pub(crate) fn normalize_media_type(media_type: Option<String>) -> Option<String> {
+    media_type.and_then(|value| {
+        let trimmed = value.trim();
+        (!trimmed.is_empty()).then(|| trimmed.to_ascii_lowercase())
+    })
+}
+
+pub(crate) fn normalize_roles(roles: Vec<String>) -> Vec<String> {
+    roles.into_iter().filter_map(|role| trim_text(&role)).collect()
+}
+
 pub(crate) fn format_api_error(error: ApiError) -> String {
     match error {
         ApiError::InvalidUrl(message)

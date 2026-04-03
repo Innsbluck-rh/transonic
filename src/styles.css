@@ -150,3 +150,55 @@
 .home-surface-root {
   @apply bg-primary-surface flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
 }
+
+/* SP screen page transitions via View Transitions API */
+::view-transition-image-pair(sp-screen) {
+  overflow: clip;
+}
+
+::view-transition-old(sp-screen),
+::view-transition-new(sp-screen) {
+  animation: none;
+}
+
+:root[data-nav-direction='forward']::view-transition-old(sp-screen) {
+  animation: sp-slide-out-left 220ms ease-out both;
+}
+:root[data-nav-direction='forward']::view-transition-new(sp-screen) {
+  animation: sp-slide-in-from-right 220ms ease-out both;
+}
+
+:root[data-nav-direction='backward']::view-transition-old(sp-screen) {
+  animation: sp-slide-out-right 220ms ease-out both;
+}
+:root[data-nav-direction='backward']::view-transition-new(sp-screen) {
+  animation: sp-slide-in-from-left 220ms ease-out both;
+}
+
+@keyframes sp-slide-out-left {
+  to {
+    transform: translateX(-100%);
+  }
+}
+@keyframes sp-slide-in-from-right {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes sp-slide-out-right {
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes sp-slide-in-from-left {
+  from {
+    transform: translateX(-100%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(sp-screen),
+  ::view-transition-new(sp-screen) {
+    animation-duration: 0.01ms !important;
+  }
+}

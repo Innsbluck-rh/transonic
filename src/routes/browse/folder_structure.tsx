@@ -1,8 +1,9 @@
 import { useParams } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
-import { commands, type AlbumListItem, type FolderStructureAlbumsResponse, type FolderStructureRootsResponse } from '~/bindings';
+import { commands, type FolderStructureAlbumsResponse, type FolderStructureRootsResponse } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
+import { AlbumItem } from '~/components/common/list/album/item/AlbumGridItem';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
@@ -42,15 +43,7 @@ function BrowseFolderStructure() {
 
   const libraryId = createMemo(() => decodePathParam(params.libraryId));
   const nodeId = createMemo(() => decodePathParam(params.nodeId));
-  const albums = createMemo<AlbumListItem[]>(() =>
-    (albumsResponse()?.albums ?? []).map((album) => ({
-      id: album.id,
-      name: album.name,
-      artist: album.artist,
-      coverArtId: album.coverArtId,
-      year: album.year,
-    }))
-  );
+  const albums = createMemo<AlbumItem[]>(() => albumsResponse()?.albums ?? []);
   const heading = createMemo(() => albumsResponse()?.nodeName ?? rootsResponse()?.libraryName ?? 'Folder Structure');
 
   async function loadFolderStructureView() {

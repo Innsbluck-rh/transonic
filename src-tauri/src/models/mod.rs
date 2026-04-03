@@ -11,8 +11,8 @@ pub use albums::{AlbumListContext, AlbumListItem, AlbumListRequest, AlbumListRes
 pub use auth::{AuthInput, AuthKind};
 #[allow(unused_imports)]
 pub use browse::{
-    AlbumSongsRequest, AlbumSongsResponse, ArtistAlbum, ArtistGroup, ArtistIndexItem,
-    ArtistIndexesRequest, ArtistIndexesResponse, ArtistInfo2Request, ArtistInfo2Response,
+    AlbumSongsRequest, AlbumSongsResponse, ArtistAlbum, ArtistGroup,
+    ArtistInfo2Request, ArtistInfo2Response,
     ArtistRequest, ArtistResponse, ArtistSummary, ArtistsRequest, ArtistsResponse,
     FolderStructureAlbumItem, FolderStructureAlbumSongsRequest, FolderStructureAlbumSongsResponse,
     FolderStructureAlbumsRequest, FolderStructureAlbumsResponse, FolderStructureRootNode,
@@ -25,7 +25,7 @@ pub use cover_art::{CoverArtRequest, CoverArtResponse};
 #[allow(unused_imports)]
 pub use playback::{
     InterruptReason, PlaybackPlayAlbumRequest, PlaybackPlayFolderAlbumRequest,
-    PlaybackPlayQueueIndexRequest, PlaybackQueueEntry, PlaybackSeekRequest,
+    PlaybackPlayQueueIndexRequest, PlaybackPlaySongsRequest, PlaybackQueueEntry, PlaybackSeekRequest,
     PlaybackSetQueueRequest, PlaybackStatus, PlayingState,
 };
 #[allow(unused_imports)]

@@ -1,14 +1,15 @@
 import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createResource, createSignal, Show } from 'solid-js';
-import { commands, type AlbumListItem, type ArtistInfo2Response, type ArtistResponse } from '~/bindings';
+import { commands, type ArtistInfo2Response, type ArtistResponse } from '~/bindings';
 import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
+import { AlbumItem } from '~/components/common/list/album/item/AlbumGridItem';
 import { type BrowseListItem } from '~/components/common/list/index/BrowseList';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
-import { resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
-import { usePlayback } from '~/features/playback/usePlayback';
+import { resolveAlbumRoute, resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { sessionStore } from '~/stores/SessionStore';
 
 const ARTIST_COVER_ART_SIZE = 320;
@@ -20,7 +21,7 @@ interface BrowseArtistProps extends Partial<RouteSectionProps<unknown>> {
 
 function BrowseArtist(props: BrowseArtistProps) {
   const params = useParams();
-  const { playAlbum } = usePlayback();
+  const navigate = useSPNavigate();
 
   const [artist, setArtist] = createSignal<ArtistResponse | null>(null);
   const [artistInfo, setArtistInfo] = createSignal<ArtistInfo2Response | null>(null);
@@ -28,15 +29,7 @@ function BrowseArtist(props: BrowseArtistProps) {
   const [error, setError] = createSignal<string | null>(null);
   let latestLoadId = 0;
 
-  const albums = createMemo<AlbumListItem[]>(() =>
-    (artist()?.albums ?? []).map((album) => ({
-      id: album.id,
-      name: album.title ?? album.album ?? album.name ?? '[Untitled album]',
-      artist: album.artist ?? artist()?.name ?? null,
-      coverArtId: album.coverArtId,
-      year: album.year,
-    }))
-  );
+  const albums = createMemo<AlbumItem[]>(() => artist()?.albums ?? []);
 
   const similarArtists = createMemo<BrowseListItem[]>(() =>
     (artistInfo()?.similarArtists ?? []).map((similarArtist) => ({
@@ -74,7 +67,13 @@ function BrowseArtist(props: BrowseArtistProps) {
   });
 
   const [coverArt] = createResource(coverArtRequest, (payload) => fetchCoverArtAssetUrl(payload));
-  const heroImageSrc = createMemo(() => heroImageUrl() ?? coverArt() ?? null);
+  const artistImageSrc = createMemo(() => heroImageUrl() ?? coverArt() ?? null);
+
+  const [failedSrc, setFailedSrc] = createSignal<string | null>(null);
+  const effectiveArtistImageSrc = createMemo(() => {
+    const src = artistImageSrc();
+    return src !== null && src === failedSrc() ? null : src;
+  });
 
   async function loadArtistPage(rawArtistId: string) {
     const loadId = ++latestLoadId;
@@ -150,54 +149,42 @@ function BrowseArtist(props: BrowseArtistProps) {
   });
 
   return (
-    <div class='home-surface-root p-3'>
+    <div class='home-surface-root p-0'>
       <Show when={error()}>{(message) => <p class='px-1 text-sm text-red-500'>{message()}</p>}</Show>
 
-      <Show when={!isLoading()} fallback={<LoadCircle class='self-center justify-self-center' />}>
+      <Show when={!isLoading()} fallback={<LoadCircle class='m-3 self-center justify-self-center' />}>
         <Show when={artist()}>
           {(artistValue) => (
-            <div class='flex flex-col gap-5'>
-              <div class='flex flex-row items-center gap-3'>
-                {/* <Show
-                  when={heroImageSrc()}
-                  fallback={
-                    <div class='border-secondary-border bg-primary-selected flex aspect-square w-full max-w-12 items-center justify-center rounded-lg border text-xs text-zinc-500'>
-                      No art
-                    </div>
-                  }
-                >
-                  {(src) => (
-                    <img class='aspect-square h-full max-w-12 rounded-lg object-cover object-center' src={src()} loading='lazy' decoding='async' />
-                  )}
-                </Show> */}
-
-                <div class='flex min-w-0 flex-1 flex-col gap-1'>
-                  <Heading1>{artistValue().name}</Heading1>
-
-                  <Show when={artistInfo()?.lastFmUrl}>
-                    {(lastFmUrl) => (
-                      <a class='text-accent text-xs underline-offset-2 hover:underline' href={lastFmUrl()} target='_blank' rel='noreferrer'>
-                        last.fm
-                      </a>
+            <div class='flex flex-col gap-2'>
+              <div class='relative flex h-42 w-full flex-col'>
+                <div class='border-primary-border absolute top-0 right-0 bottom-0 left-0 h-full w-full border-b'>
+                  <Show
+                    when={effectiveArtistImageSrc()}
+                    fallback={<div class='bg-primary-inner-surface flex h-full w-full items-center justify-center text-xs'>No art</div>}
+                  >
+                    {(src) => (
+                      <img
+                        class='h-full w-full object-cover object-center'
+                        src={src()}
+                        onError={() => setFailedSrc(src())}
+                        loading='lazy'
+                        decoding='async'
+                      />
                     )}
                   </Show>
                 </div>
+                <div class='bg-primary-inner-surface absolute top-0 right-0 bottom-0 left-0 flex h-full w-full opacity-75' />
+                <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full shadow-[inset_0_-2px_8px_rgba(128,128,128,0.5)]' />
+                <Heading1 class='text-primary-text absolute bottom-0 left-0 z-10 m-3 w-full'>{artistValue().name}</Heading1>
               </div>
 
-              {/* <Show when={similarArtists().length > 0}>
-                <div class='border-secondary-border bg-primary-plane/50 rounded-xl border py-2'>
-                  <Heading2 class='px-4 py-2'>similar artists</Heading2>
-                  <BrowseList items={similarArtists()} emptyMessage='' />
-                </div>
-              </Show> */}
-
-              <div class='flex flex-col gap-2'>
+              <div class='flex flex-col gap-2 p-3'>
                 <Heading2>albums</Heading2>
                 <AlbumGrid
                   albums={albums()}
                   emptyMessage='No ID3 albums returned for this artist.'
-                  onItemClick={async (album) => {
-                    await playAlbum(album.id);
+                  onItemClick={(album) => {
+                    navigate(resolveAlbumRoute(album.id, props.routeVariant ?? 'desktop'));
                   }}
                 />
               </div>

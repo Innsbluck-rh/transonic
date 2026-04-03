@@ -70,6 +70,13 @@ pub struct PlaybackPlayFolderAlbumRequest {
     pub album_id: String,
 }
 
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackPlaySongsRequest {
+    pub songs: Vec<super::SongResponse>,
+    pub start_index: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackStatus {

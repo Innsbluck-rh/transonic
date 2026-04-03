@@ -70,13 +70,6 @@ pub struct FolderStructureAlbumsResponse {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct ArtistIndexItem {
-    pub id: String,
-    pub name: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
-#[serde(rename_all = "camelCase")]
 pub struct ArtistSummary {
     pub id: String,
     pub name: String,
@@ -101,18 +94,6 @@ pub struct ArtistGroup {
 pub struct ArtistsResponse {
     pub ignored_articles: Option<String>,
     pub indexes: Vec<ArtistGroup>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ArtistIndexesResponse {
-    pub artists: Vec<ArtistIndexItem>,
-}
-
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ArtistIndexesRequest {
-    pub music_folder_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -222,6 +203,14 @@ pub struct MusicDirectoryChild {
     pub track: Option<u32>,
     pub disc_number: Option<u32>,
     pub year: Option<u32>,
+    #[specta(type = Option<f64>)]
+    pub size: Option<u64>,
+    pub content_type: Option<String>,
+    pub suffix: Option<String>,
+    pub bit_rate: Option<u32>,
+    pub genre: Option<String>,
+    pub created: Option<String>,
+    pub starred: Option<String>,
     pub is_directory: bool,
     pub media_type: Option<String>,
 }
@@ -250,6 +239,14 @@ pub struct SongResponse {
     pub disc_number: Option<u32>,
     pub year: Option<u32>,
     pub duration: Option<u32>,
+    #[specta(type = Option<f64>)]
+    pub size: Option<u64>,
+    pub content_type: Option<String>,
+    pub suffix: Option<String>,
+    pub bit_rate: Option<u32>,
+    pub genre: Option<String>,
+    pub created: Option<String>,
+    pub starred: Option<String>,
     pub is_directory: bool,
     pub media_type: Option<String>,
 }
@@ -257,7 +254,18 @@ pub struct SongResponse {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AlbumSongsResponse {
-    pub album_id: String,
+    pub id: String,
+    pub name: Option<String>,
+    pub artist: Option<String>,
+    pub artist_id: Option<String>,
+    pub cover_art_id: Option<String>,
+    pub song_count: Option<u32>,
+    pub duration: Option<u32>,
+    pub play_count: Option<u32>,
+    pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub created: Option<String>,
+    pub starred: Option<String>,
     pub songs: Vec<SongResponse>,
 }
 

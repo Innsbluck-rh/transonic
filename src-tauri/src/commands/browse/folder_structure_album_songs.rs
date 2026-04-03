@@ -13,7 +13,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     commands::{
-        common::{client, format_api_error},
+        common::{client, format_api_error, normalize_media_type, normalize_text},
         json::{opt_boolish, opt_stringish, opt_u32ish, stringish, value_as, vec_or_single},
     },
     models::{FolderStructureAlbumSongsRequest, FolderStructureAlbumSongsResponse, SongResponse},
@@ -119,6 +119,13 @@ impl RawChild {
             disc_number: self.disc_number,
             year: self.year,
             duration: self.duration,
+            size: None,
+            content_type: None,
+            suffix: None,
+            bit_rate: None,
+            genre: None,
+            created: None,
+            starred: None,
             is_directory: self.is_dir.unwrap_or(false),
             media_type: normalize_media_type(self.media_type),
         }
@@ -265,20 +272,6 @@ fn album_key(song: &RawChild) -> String {
     }
 
     "unknown_album".to_string()
-}
-
-fn normalize_text(value: Option<&str>) -> Option<String> {
-    value.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_string())
-    })
-}
-
-fn normalize_media_type(media_type: Option<String>) -> Option<String> {
-    media_type.and_then(|value| {
-        let trimmed = value.trim();
-        (!trimmed.is_empty()).then(|| trimmed.to_ascii_lowercase())
-    })
 }
 
 #[cfg(test)]

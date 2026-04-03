@@ -9,8 +9,8 @@ use crate::{
     models::{
         AlbumSongsRequest, CapabilityMatrix, FolderStructureAlbumSongsRequest,
         PlaybackPlayAlbumRequest, PlaybackPlayFolderAlbumRequest, PlaybackPlayQueueIndexRequest,
-        PlaybackQueueEntry, PlaybackSeekRequest, PlaybackSetQueueRequest, PlaybackStatus,
-        SongResponse,
+        PlaybackPlaySongsRequest, PlaybackQueueEntry, PlaybackSeekRequest, PlaybackSetQueueRequest,
+        PlaybackStatus, SongResponse,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
@@ -163,7 +163,7 @@ pub async fn playback_play_album(
         .0
         .lock()
         .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-    let result = replace_queue_and_play(&mut controller, &runtime_context, songs).map(|_| ());
+    let result = replace_queue_and_play(&mut controller, &runtime_context, songs, None).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_play_album: failed: {error}");
     }
@@ -217,7 +217,7 @@ pub async fn playback_play_folder_album(
         .0
         .lock()
         .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-    let result = replace_queue_and_play(&mut controller, &runtime_context, songs).map(|_| ());
+    let result = replace_queue_and_play(&mut controller, &runtime_context, songs, None).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_play_folder_album: failed: {error}");
     }
@@ -242,13 +242,50 @@ fn queue_entries_from_songs(songs: Vec<SongResponse>) -> Vec<PlaybackQueueEntry>
     songs.into_iter().map(PlaybackQueueEntry::from).collect()
 }
 
+#[tauri::command]
+#[specta::specta]
+pub fn playback_play_songs(
+    app: AppHandle,
+    sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
+    playback: State<'_, PlaybackControllerState>,
+    payload: PlaybackPlaySongsRequest,
+) -> Result<(), String> {
+    let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
+    let active_client = client(&app, &sessions.0)?;
+    let runtime_context = PlaybackRuntimeContext {
+        client: &active_client,
+        capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
+    };
+
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+    let result = replace_queue_and_play(
+        &mut controller,
+        &runtime_context,
+        payload.songs,
+        Some(payload.start_index),
+    )
+    .map(|_| ());
+    if let Err(error) = &result {
+        log::error!("playback_play_songs: failed: {error}");
+    }
+    result
+}
+
 fn replace_queue_and_play(
     controller: &mut crate::playback::PlaybackController,
     runtime_context: &PlaybackRuntimeContext<'_>,
     songs: Vec<SongResponse>,
+    start_index: Option<u32>,
 ) -> Result<PlaybackStatus, String> {
     let entries = queue_entries_from_songs(songs);
-    let current_index = (!entries.is_empty()).then_some(0);
+    let current_index = start_index.or_else(|| (!entries.is_empty()).then_some(0));
 
     controller.set_queue(PlaybackSetQueueRequest {
         entries,
@@ -278,6 +315,13 @@ mod tests {
             disc_number: Some(1),
             year: Some(2024),
             duration: Some(180),
+            size: None,
+            content_type: None,
+            suffix: None,
+            bit_rate: None,
+            genre: None,
+            created: None,
+            starred: None,
             is_directory: false,
             media_type: Some("song".to_string()),
         }

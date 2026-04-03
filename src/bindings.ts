@@ -69,7 +69,7 @@ async getArtists(payload: ArtistsRequest | null) : Promise<Result<ArtistsRespons
     else return { status: "error", error: e  as any };
 }
 },
-async getArtistIndexes(payload: ArtistIndexesRequest | null) : Promise<Result<ArtistIndexesResponse, string>> {
+async getArtistIndexes(payload: ArtistsRequest | null) : Promise<Result<ArtistsResponse, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_artist_indexes", { payload }) };
 } catch (e) {
@@ -96,6 +96,14 @@ async getArtistInfo2(payload: ArtistInfo2Request) : Promise<Result<ArtistInfo2Re
 async getMusicDirectory(payload: MusicDirectoryRequest) : Promise<Result<MusicDirectoryResponse, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_music_directory", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getAlbumInfo(payload: AlbumSongsRequest) : Promise<Result<AlbumSongsResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_album_info", { payload }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -181,6 +189,14 @@ async playbackPlayFolderAlbum(payload: PlaybackPlayFolderAlbumRequest) : Promise
     else return { status: "error", error: e  as any };
 }
 },
+async playbackPlaySongs(payload: PlaybackPlaySongsRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_play_songs", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async playbackPause() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_pause") };
@@ -240,17 +256,14 @@ playbackStatus: "playback-status"
 
 export type ActiveSession = { profileId: string; normalizedServerUrl: string; username: string; authKind: AuthKind; apiVersion: string; serverType: string | null; serverVersion: string | null; capabilityMatrix: CapabilityMatrix }
 export type AlbumListContext = "random" | "newest" | "frequent" | "recent" | "starred" | "alphabetical_by_name" | "alphabetical_by_artist" | "by_year" | "by_genre"
-export type AlbumListItem = { id: string; name: string; artist: string | null; coverArtId: string | null; year: number | null }
+export type AlbumListItem = { id: string; name: string; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; created: string | null; starred: string | null }
 export type AlbumListRequest = { context: AlbumListContext; size: number | null; offset: number | null; fromYear: number | null; toYear: number | null; genre: string | null; musicFolderId: string | null }
 export type AlbumListResponse = { context: AlbumListContext; albums: AlbumListItem[] }
 export type AlbumSongsRequest = { id: string }
-export type AlbumSongsResponse = { albumId: string; songs: SongResponse[] }
+export type AlbumSongsResponse = { id: string; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; created: string | null; starred: string | null; songs: SongResponse[] }
 export type AppBootstrap = { profiles: SavedProfileSummary[]; activeSession: ActiveSession | null; restoreStatus: RestoreStatus; message: string | null }
 export type ArtistAlbum = { id: string; parentId: string | null; title: string | null; album: string | null; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; starred: string | null }
 export type ArtistGroup = { name: string; artists: ArtistSummary[] }
-export type ArtistIndexItem = { id: string; name: string }
-export type ArtistIndexesRequest = { musicFolderId: string | null }
-export type ArtistIndexesResponse = { artists: ArtistIndexItem[] }
 export type ArtistInfo2Request = { id: string; count: number | null; includeNotPresent: boolean | null }
 export type ArtistInfo2Response = { biography: string | null; musicBrainzId: string | null; lastFmUrl: string | null; smallImageUrl: string | null; mediumImageUrl: string | null; largeImageUrl: string | null; similarArtists: ArtistSummary[] }
 export type ArtistRequest = { id: string }
@@ -276,7 +289,7 @@ export type FolderStructureRootsResponse = { libraryId: string; libraryName: str
 export type FolderStructureSource = "directory" | "indexes"
 export type InterruptReason = "initial_load" | "stream_buffering_stall" | "seeking" | "full_reload"
 export type LastConnectionState = "never" | "ok" | "offline" | "reauth_required"
-export type MusicDirectoryChild = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; isDirectory: boolean; mediaType: string | null }
+export type MusicDirectoryChild = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; size: number | null; contentType: string | null; suffix: string | null; bitRate: number | null; genre: string | null; created: string | null; starred: string | null; isDirectory: boolean; mediaType: string | null }
 export type MusicDirectoryRequest = { id: string }
 export type MusicDirectoryResponse = { id: string; name: string; children: MusicDirectoryChild[] }
 export type MusicFolderSummary = { id: string; name: string }
@@ -285,6 +298,7 @@ export type OpenSubsonicExtension = { name: string; versions: number[] }
 export type PlaybackPlayAlbumRequest = { albumId: string }
 export type PlaybackPlayFolderAlbumRequest = { libraryId: string; nodeId: string; albumId: string }
 export type PlaybackPlayQueueIndexRequest = { index: number }
+export type PlaybackPlaySongsRequest = { songs: SongResponse[]; startIndex: number }
 export type PlaybackQueueEntry = { songId: string; title: string; path: string | null; artist: string | null; artistId: string | null; album: string | null; albumId: string | null; duration: number | null; coverArtId: string | null }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { entries: PlaybackQueueEntry[]; currentIndex: number | null }
@@ -294,7 +308,7 @@ export type ProfileIdRequest = { profileId: string }
 export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"
 export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }
 export type SongRequest = { id: string }
-export type SongResponse = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; duration: number | null; isDirectory: boolean; mediaType: string | null }
+export type SongResponse = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; duration: number | null; size: number | null; contentType: string | null; suffix: string | null; bitRate: number | null; genre: string | null; created: string | null; starred: string | null; isDirectory: boolean; mediaType: string | null }
 
 /** tauri-specta globals **/
 

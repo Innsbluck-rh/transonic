@@ -1,4 +1,3 @@
-import { useNavigate } from '@solidjs/router';
 import { Component, createMemo, createResource, JSX, Show } from 'solid-js';
 import Heading3 from '~/components/common/Heading3';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
@@ -7,6 +6,7 @@ import PlayerSlider from '~/components/player/PlayerSlider';
 import QueueContent from '~/components/sidebar/queue/QueueContent';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { resolveArtistRoute } from '~/features/navigation/routes';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
@@ -49,7 +49,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
 
   const [coverArt] = createResource(request, (payload) => fetchCoverArtAssetUrl(payload));
 
-  const navigate = useNavigate();
+  const navigate = useSPNavigate();
 
   return (
     <div class='flex h-full min-h-0 flex-1 flex-col'>
@@ -70,10 +70,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               )}
             </Show>
 
-            <MarqueeParagraph
-              text={currentEntry()?.title || ''}
-              class='archivo-black w-full text-center text-2xl font-black tracking-tighter italic'
-            />
+            <MarqueeParagraph text={currentEntry()?.title || ''} class='archivo-black w-full text-center text-2xl font-black italic' />
             <MarqueeParagraph
               text={currentEntry()?.artist || ''}
               class='archivo text-secondary-text mt-1'

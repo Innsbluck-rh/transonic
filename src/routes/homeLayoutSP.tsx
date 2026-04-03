@@ -1,12 +1,16 @@
-import { useNavigate } from '@solidjs/router';
-import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
+import { useLocation } from '@solidjs/router';
+import { createMemo, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import Header from '~/components/common/header/Header';
 import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
 import SPExpandablePlayerBar from '~/components/sp/SPExpandablePlayerBar';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { startPlaybackStateSync } from '~/features/playback/service';
 import { sessionStore } from '~/stores/SessionStore';
 
 const HomeLayoutSP: ParentComponent = (props) => {
+  const location = useLocation();
+  const spNavigate = useSPNavigate();
+
   let disposed = false;
   let unlisten: (() => void) | undefined;
 
@@ -26,7 +30,7 @@ const HomeLayoutSP: ParentComponent = (props) => {
     unlisten?.();
   });
 
-  const navigate = useNavigate();
+  const canBack = createMemo<boolean>(() => !(location.pathname === '/sp' || location.pathname.startsWith('/sp/index')));
 
   return (
     <Show
@@ -39,12 +43,31 @@ const HomeLayoutSP: ParentComponent = (props) => {
     >
       <div class='flex min-h-0 flex-1 flex-col'>
         <Header shouldShowProfiles={true} titleHref={'/sp'} />
-        <SPExpandablePlayerBar>{props.children}</SPExpandablePlayerBar>
+        <SPExpandablePlayerBar>
+          <div class='flex min-h-0 flex-1 flex-col'>
+            {/* <div class='border-primary-border flex h-12 w-full flex-row items-center gap-3 border-b px-3'>
+              <Show when={canBack()}>
+                <Icon
+                  class='scale-200'
+                  icon='material-symbols:arrow-back'
+                  onClick={() => {
+                    if (canBack()) spNavigate(-1);
+                  }}
+                />
+              </Show>
+              <Heading3>{location.pathname}</Heading3>
+            </div> */}
+            <div class='flex min-h-0 flex-1 flex-col'>{props.children}</div>
+          </div>
+        </SPExpandablePlayerBar>
         <SPBottomNavigation
           onClickNav={(n) => {
             switch (n) {
               case 'index':
-                navigate('/sp');
+                if (location.pathname !== '/sp')
+                  spNavigate('/sp', {
+                    replace: true,
+                  });
                 break;
               case 'setting':
                 // stab

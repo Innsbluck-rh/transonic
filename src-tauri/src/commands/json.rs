@@ -96,6 +96,34 @@ where
     }
 }
 
+pub(crate) fn opt_u64ish<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Value::deserialize(deserializer)?;
+
+    match value {
+        Value::Null => Ok(None),
+        Value::Number(value) => value
+            .as_u64()
+            .map(Some)
+            .ok_or_else(|| serde::de::Error::custom(format!("unexpected number payload: {value}"))),
+        Value::String(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+
+            trimmed.parse::<u64>().map(Some).map_err(|error| {
+                serde::de::Error::custom(format!("unexpected number payload: {error}"))
+            })
+        }
+        other => Err(serde::de::Error::custom(format!(
+            "unexpected number payload: {other}"
+        ))),
+    }
+}
+
 pub(crate) fn opt_u32ish<'de, D>(deserializer: D) -> Result<Option<u32>, D::Error>
 where
     D: serde::Deserializer<'de>,
