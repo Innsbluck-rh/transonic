@@ -1,7 +1,8 @@
 import { Component, createMemo, createResource, JSX, Match, Show, Switch } from 'solid-js';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
-import { fetchCoverArtDataUrl } from '~/features/albums/service';
+import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { usePlayback } from '~/features/playback/usePlayback';
+import { sessionStore } from '~/stores/SessionStore';
 import PlayerIcon from './PlayerIcon';
 import PlayerSlider from './PlayerSlider';
 
@@ -46,16 +47,18 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   const DEFAULT_COVER_ART_SIZE = 224;
   const request = createMemo(() => {
     const coverArtId = currentEntry()?.coverArtId;
-    if (!coverArtId) {
+    const profileId = sessionStore.activeSession?.profileId;
+    if (!coverArtId || !profileId) {
       return null;
     }
 
     return {
+      profileId,
       coverArtId,
       size: DEFAULT_COVER_ART_SIZE,
     };
   });
-  const [coverArt] = createResource(request, (payload) => fetchCoverArtDataUrl(payload));
+  const [coverArt] = createResource(request, (payload) => fetchCoverArtAssetUrl(payload));
   const restAreaClass = createMemo(() => props.restAreaProps?.class);
 
   const onClickRestArea: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent> = (event) => {
@@ -70,9 +73,9 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       </div>
 
       <Show when={coverArt()}>
-        {(dataUrl) => <img class='absolute h-full w-full object-cover object-center' src={dataUrl()} loading='lazy' decoding='async' />}
+        {(assetUrl) => <img class='absolute h-full w-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
       </Show>
-      <div class='absolute z-0 h-full w-full backdrop-blur-xs'></div>
+      <div class='absolute z-0 h-full w-full backdrop-blur-[5px]'></div>
       <div class='bg-primary-plane absolute z-0 h-full w-full opacity-75'></div>
       <div class='from-primary-plane absolute z-0 h-full w-full bg-linear-to-r to-transparent'></div>
 

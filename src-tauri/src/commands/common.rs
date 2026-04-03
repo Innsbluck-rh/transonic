@@ -1,7 +1,6 @@
 use std::sync::Mutex;
 
-use base64::{engine::general_purpose::STANDARD as BASE64_STANDARD, Engine as _};
-use opensubsonic_client::{ApiError, OpenSubsonicClient, PreparedBinaryRequest};
+use opensubsonic_client::{ApiError, OpenSubsonicClient};
 use tauri::{AppHandle, Manager};
 
 use crate::{
@@ -53,48 +52,4 @@ pub(crate) fn format_api_error(error: ApiError) -> String {
             format!("Missing extension: {extension}")
         }
     }
-}
-
-pub(crate) async fn fetch_binary_response(
-    request: PreparedBinaryRequest,
-) -> Result<(String, Vec<u8>), String> {
-    let response = reqwest::Client::new()
-        .get(request.url)
-        .headers(request.headers)
-        .send()
-        .await
-        .map_err(|error| format!("Failed to fetch binary data: {error}"))?;
-    let status = response.status();
-    if !status.is_success() {
-        return Err(format!(
-            "The server returned HTTP {} for the binary request.",
-            status.as_u16()
-        ));
-    }
-
-    let content_type = response
-        .headers()
-        .get(reqwest::header::CONTENT_TYPE)
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or("image/jpeg")
-        .to_string();
-    if !content_type.starts_with("image/") {
-        return Err(format!(
-            "Unexpected binary content type for cover art: {content_type}"
-        ));
-    }
-
-    let bytes = response
-        .bytes()
-        .await
-        .map_err(|error| format!("Failed to read binary response bytes: {error}"))?
-        .to_vec();
-    Ok((content_type, bytes))
-}
-
-pub(crate) fn encode_data_url(content_type: &str, bytes: &[u8]) -> String {
-    format!(
-        "data:{content_type};base64,{}",
-        BASE64_STANDARD.encode(bytes)
-    )
 }

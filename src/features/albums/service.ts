@@ -1,33 +1,23 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { commands, type CoverArtRequest } from '~/bindings';
 
-const coverArtCache = new Map<string, Promise<string | null>>();
-
-function coverArtCacheKey(payload: CoverArtRequest) {
-  return `${payload.coverArtId}:${payload.size ?? 'full'}`;
+export interface CoverArtResourceRequest extends CoverArtRequest {
+  profileId: string;
 }
 
-export function fetchCoverArtDataUrl(payload: CoverArtRequest) {
-  const cacheKey = coverArtCacheKey(payload);
-  const cached = coverArtCache.get(cacheKey);
-  if (cached) {
-    return cached;
-  }
-
-  const pending = commands
-    .getCoverArt(payload)
-    .then((response) => {
-      if (response.status === 'error') {
-        throw new Error(response.error);
-      }
-
-      return response.data.dataUrl;
-    })
-    .catch((invokeError) => {
-      console.error(invokeError);
-      coverArtCache.delete(cacheKey);
-      return null;
+export async function fetchCoverArtAssetUrl(payload: CoverArtResourceRequest) {
+  try {
+    const response = await commands.getCoverArt({
+      coverArtId: payload.coverArtId,
+      size: payload.size,
     });
+    if (response.status === 'error') {
+      throw new Error(response.error);
+    }
 
-  coverArtCache.set(cacheKey, pending);
-  return pending;
+    return convertFileSrc(response.data.localPath);
+  } catch (invokeError) {
+    console.error(invokeError);
+    return null;
+  }
 }

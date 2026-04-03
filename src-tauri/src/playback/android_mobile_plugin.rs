@@ -27,7 +27,7 @@ pub struct AndroidPreparedMediaRequest {
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
-    pub artwork_url: Option<String>,
+    pub artwork_path: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

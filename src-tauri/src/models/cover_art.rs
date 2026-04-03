@@ -10,5 +10,5 @@ pub struct CoverArtRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct CoverArtResponse {
-    pub data_url: String,
+    pub local_path: String,
 }

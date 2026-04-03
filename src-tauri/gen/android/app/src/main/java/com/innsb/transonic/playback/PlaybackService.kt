@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import androidx.core.content.FileProvider
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -25,6 +26,7 @@ import com.innsb.transonic.MainActivity
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
+import java.io.File
 
 private data class PendingLoad(
   val mediaId: String,
@@ -155,9 +157,9 @@ class PlaybackService : MediaSessionService(), Player.Listener {
       .setTitle(request.title)
       .setArtist(request.artist)
       .setAlbumTitle(request.album)
-    request.artworkUrl
-      ?.takeIf { artworkUrl -> artworkUrl.isNotBlank() }
-      ?.let { artworkUrl -> metadataBuilder.setArtworkUri(Uri.parse(artworkUrl)) }
+    request.artworkPath
+      ?.let { artworkPath -> artworkContentUri(artworkPath) }
+      ?.let { artworkUri -> metadataBuilder.setArtworkUri(artworkUri) }
 
     val mediaItem = MediaItem.Builder()
       .setMediaId(request.mediaId)
@@ -236,6 +238,23 @@ class PlaybackService : MediaSessionService(), Player.Listener {
       "error",
       currentAbsolutePositionMs(),
       error.message ?: "Android playback failed.",
+    )
+  }
+
+  private fun artworkContentUri(artworkPath: String): Uri? {
+    if (artworkPath.isBlank()) {
+      return null
+    }
+
+    val artworkFile = File(artworkPath)
+    if (!artworkFile.exists()) {
+      return null
+    }
+
+    return FileProvider.getUriForFile(
+      this,
+      "${BuildConfig.APPLICATION_ID}.fileprovider",
+      artworkFile,
     )
   }
 }

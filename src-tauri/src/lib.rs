@@ -1,6 +1,7 @@
 pub mod bindings;
 mod commands;
 mod connection;
+mod cover_art_cache;
 mod models;
 mod playback;
 mod profiles;
@@ -10,11 +11,13 @@ use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
+use cover_art_cache::CoverArtCache;
 use models::ActiveSession;
 use playback::{PlaybackController, PlaybackEventAppHandle};
 
 pub(crate) struct ActiveSessionState(pub Mutex<Option<ActiveSession>>);
 pub(crate) struct PlaybackControllerState(pub Mutex<PlaybackController>);
+pub(crate) struct CoverArtCacheState(pub CoverArtCache);
 
 impl Default for ActiveSessionState {
     fn default() -> Self {
@@ -25,6 +28,12 @@ impl Default for ActiveSessionState {
 impl PlaybackControllerState {
     fn new(controller: PlaybackController) -> Self {
         Self(Mutex::new(controller))
+    }
+}
+
+impl CoverArtCacheState {
+    fn new(cache: CoverArtCache) -> Self {
+        Self(cache)
     }
 }
 
@@ -57,6 +66,16 @@ pub fn run() {
             let controller =
                 playback::create_playback_controller(&app.handle(), app_handle.clone());
             app.manage(PlaybackControllerState::new(controller));
+            let cover_art_cache_root = app
+                .path()
+                .app_cache_dir()
+                .map_err(|error| {
+                    format!("Failed to resolve the app cache directory for cover art: {error}")
+                })?
+                .join("cover-art");
+            app.manage(CoverArtCacheState::new(CoverArtCache::new(
+                cover_art_cache_root,
+            )));
 
             #[cfg(target_os = "android")]
             playback::install_android_app_handle(app.handle().clone());

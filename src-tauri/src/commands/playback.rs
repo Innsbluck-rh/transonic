@@ -13,15 +13,29 @@ use crate::{
         SongResponse,
     },
     playback::PlaybackRuntimeContext,
-    ActiveSessionState, PlaybackControllerState,
+    ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
 };
 
 fn active_capability_matrix(state: &ActiveSessionState) -> Result<CapabilityMatrix, String> {
-    let guard = state.0.lock().unwrap();
+    let guard = state
+        .0
+        .lock()
+        .map_err(|_| "The active session state is unavailable.".to_string())?;
     let session = guard
         .as_ref()
         .ok_or_else(|| "No active session is available.".to_string())?;
     Ok(session.capability_matrix.clone())
+}
+
+fn active_profile_id(state: &ActiveSessionState) -> Result<String, String> {
+    let guard = state
+        .0
+        .lock()
+        .map_err(|_| "The active session state is unavailable.".to_string())?;
+    let session = guard
+        .as_ref()
+        .ok_or_else(|| "No active session is available.".to_string())?;
+    Ok(session.profile_id.clone())
 }
 
 #[tauri::command]
@@ -29,7 +43,10 @@ fn active_capability_matrix(state: &ActiveSessionState) -> Result<CapabilityMatr
 pub fn playback_get_state(
     state: State<'_, PlaybackControllerState>,
 ) -> Result<PlaybackStatus, String> {
-    let mut controller = state.0.lock().unwrap();
+    let mut controller = state
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     controller.synced_state()
 }
 
@@ -39,7 +56,10 @@ pub fn playback_set_queue(
     state: State<'_, PlaybackControllerState>,
     payload: PlaybackSetQueueRequest,
 ) -> Result<(), String> {
-    let mut controller = state.0.lock().unwrap();
+    let mut controller = state
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller.set_queue(payload).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_set_queue: failed: {error}");
@@ -52,17 +72,24 @@ pub fn playback_set_queue(
 pub fn playback_play_queue_index(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
     payload: PlaybackPlayQueueIndexRequest,
 ) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
         client: &active_client,
         capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
     };
 
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller
         .play_queue_index(&runtime_context, payload.index)
         .map(|_| ());
@@ -77,16 +104,23 @@ pub fn playback_play_queue_index(
 pub fn playback_play(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
 ) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
         client: &active_client,
         capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
     };
 
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller.play(&runtime_context).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_play: failed: {error}");
@@ -99,6 +133,7 @@ pub fn playback_play(
 pub async fn playback_play_album(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
     payload: PlaybackPlayAlbumRequest,
 ) -> Result<(), String> {
@@ -111,6 +146,7 @@ pub async fn playback_play_album(
     }
 
     let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let songs = load_album_songs_from_client(&active_client, trimmed_album_id)
         .await
@@ -119,9 +155,14 @@ pub async fn playback_play_album(
     let runtime_context = PlaybackRuntimeContext {
         client: &active_client,
         capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
     };
 
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = replace_queue_and_play(&mut controller, &runtime_context, songs).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_play_album: failed: {error}");
@@ -134,6 +175,7 @@ pub async fn playback_play_album(
 pub async fn playback_play_folder_album(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
     payload: PlaybackPlayFolderAlbumRequest,
 ) -> Result<(), String> {
@@ -158,6 +200,7 @@ pub async fn playback_play_folder_album(
     }
 
     let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let songs = load_folder_album_songs_from_client(&active_client, library_id, node_id, album_id)
         .await
@@ -166,9 +209,14 @@ pub async fn playback_play_folder_album(
     let runtime_context = PlaybackRuntimeContext {
         client: &active_client,
         capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
     };
 
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = replace_queue_and_play(&mut controller, &runtime_context, songs).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_play_folder_album: failed: {error}");
@@ -179,7 +227,10 @@ pub async fn playback_play_folder_album(
 #[tauri::command]
 #[specta::specta]
 pub fn playback_pause(state: State<'_, PlaybackControllerState>) -> Result<(), String> {
-    let mut controller = state.0.lock().unwrap();
+    let mut controller = state
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller.pause().map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_pause: failed: {error}");
@@ -246,7 +297,10 @@ mod tests {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_stop(state: State<'_, PlaybackControllerState>) -> Result<(), String> {
-    let mut controller = state.0.lock().unwrap();
+    let mut controller = state
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller.stop().map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_stop: failed: {error}");
@@ -259,17 +313,24 @@ pub fn playback_stop(state: State<'_, PlaybackControllerState>) -> Result<(), St
 pub fn playback_seek(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
     payload: PlaybackSeekRequest,
 ) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
         client: &active_client,
         capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
     };
 
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller
         .seek(&runtime_context, payload.position_ms)
         .map(|_| ());
@@ -284,16 +345,23 @@ pub fn playback_seek(
 pub fn playback_next(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
 ) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
         client: &active_client,
         capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
     };
 
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller.next(&runtime_context).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_next: failed: {error}");
@@ -306,16 +374,23 @@ pub fn playback_next(
 pub fn playback_prev(
     app: AppHandle,
     sessions: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
     playback: State<'_, PlaybackControllerState>,
 ) -> Result<(), String> {
     let active_capability_matrix = active_capability_matrix(&sessions)?;
+    let active_profile_id = active_profile_id(&sessions)?;
     let active_client = client(&app, &sessions.0)?;
     let runtime_context = PlaybackRuntimeContext {
         client: &active_client,
         capability_matrix: &active_capability_matrix,
+        cover_art_cache: Some(&cover_art_cache.0),
+        profile_id: Some(&active_profile_id),
     };
 
-    let mut controller = playback.0.lock().unwrap();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
     let result = controller.prev(&runtime_context).map(|_| ());
     if let Err(error) = &result {
         log::error!("playback_prev: failed: {error}");

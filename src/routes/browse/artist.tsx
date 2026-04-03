@@ -6,7 +6,7 @@ import Heading2 from '~/components/common/Heading2';
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
 import { type BrowseListItem } from '~/components/common/list/index/BrowseList';
-import { fetchCoverArtDataUrl } from '~/features/albums/service';
+import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
@@ -61,17 +61,19 @@ function BrowseArtist(props: BrowseArtistProps) {
     }
 
     const coverArtId = artist()?.coverArtId;
-    if (!coverArtId) {
+    const profileId = sessionStore.activeSession?.profileId;
+    if (!coverArtId || !profileId) {
       return null;
     }
 
     return {
+      profileId,
       coverArtId,
       size: ARTIST_COVER_ART_SIZE,
     };
   });
 
-  const [coverArt] = createResource(coverArtRequest, (payload) => fetchCoverArtDataUrl(payload));
+  const [coverArt] = createResource(coverArtRequest, (payload) => fetchCoverArtAssetUrl(payload));
   const heroImageSrc = createMemo(() => heroImageUrl() ?? coverArt() ?? null);
 
   async function loadArtistPage(rawArtistId: string) {
