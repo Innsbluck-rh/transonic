@@ -3,11 +3,11 @@ import { Component, createMemo, createSignal, For, onCleanup, onMount, Show } fr
 import type { SavedProfileSummary } from '~/bindings';
 import { deleteProfile } from '~/features/session/profile';
 
-interface ProfilesProps {
+interface ServerProfileProps {
   profiles: SavedProfileSummary[];
 }
 
-const ProfilesNew: Component<ProfilesProps> = (props) => {
+const ServerProfile: Component<ServerProfileProps> = (props) => {
   const activeProfile = createMemo(() => props.profiles.find((p) => p.isActive));
   const [open, setOpen] = createSignal(false);
 
@@ -88,4 +88,4 @@ const ProfilesNew: Component<ProfilesProps> = (props) => {
   );
 };
 
-export default ProfilesNew;
+export default ServerProfile;

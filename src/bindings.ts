@@ -61,9 +61,33 @@ async getFolderStructureAlbumSongs(payload: FolderStructureAlbumSongsRequest) : 
     else return { status: "error", error: e  as any };
 }
 },
+async getArtists(payload: ArtistsRequest | null) : Promise<Result<ArtistsResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_artists", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getArtistIndexes(payload: ArtistIndexesRequest | null) : Promise<Result<ArtistIndexesResponse, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_artist_indexes", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getArtist(payload: ArtistRequest) : Promise<Result<ArtistResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_artist", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async getArtistInfo2(payload: ArtistInfo2Request) : Promise<Result<ArtistInfo2Response, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_artist_info2", { payload }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -222,9 +246,18 @@ export type AlbumListResponse = { context: AlbumListContext; albums: AlbumListIt
 export type AlbumSongsRequest = { id: string }
 export type AlbumSongsResponse = { albumId: string; songs: SongResponse[] }
 export type AppBootstrap = { profiles: SavedProfileSummary[]; activeSession: ActiveSession | null; restoreStatus: RestoreStatus; message: string | null }
+export type ArtistAlbum = { id: string; parentId: string | null; title: string | null; album: string | null; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; starred: string | null }
+export type ArtistGroup = { name: string; artists: ArtistSummary[] }
 export type ArtistIndexItem = { id: string; name: string }
 export type ArtistIndexesRequest = { musicFolderId: string | null }
 export type ArtistIndexesResponse = { artists: ArtistIndexItem[] }
+export type ArtistInfo2Request = { id: string; count: number | null; includeNotPresent: boolean | null }
+export type ArtistInfo2Response = { biography: string | null; musicBrainzId: string | null; lastFmUrl: string | null; smallImageUrl: string | null; mediumImageUrl: string | null; largeImageUrl: string | null; similarArtists: ArtistSummary[] }
+export type ArtistRequest = { id: string }
+export type ArtistResponse = { id: string; name: string; coverArtId: string | null; albumCount: number | null; artistImageUrl: string | null; starred: string | null; musicBrainzId: string | null; sortName: string | null; roles: string[]; albums: ArtistAlbum[] }
+export type ArtistSummary = { id: string; name: string; coverArtId: string | null; albumCount: number | null; artistImageUrl: string | null; starred: string | null; musicBrainzId: string | null; sortName: string | null; roles: string[] }
+export type ArtistsRequest = { musicFolderId: string | null }
+export type ArtistsResponse = { ignoredArticles: string | null; indexes: ArtistGroup[] }
 export type AuthInput = { kind: "password"; username: string; password: string } | { kind: "api_key"; apiKey: string }
 export type AuthKind = "password" | "api_key"
 export type CapabilityMatrix = { openSubsonic: boolean; rawExtensions: OpenSubsonicExtension[]; apiKeyAuth: boolean; indexBasedQueue: boolean; playbackReport: boolean; transcoding: boolean; transcodeOffset: boolean; songLyrics: boolean }

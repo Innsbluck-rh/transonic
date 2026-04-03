@@ -1,9 +1,11 @@
 import { useNavigate } from '@solidjs/router';
+import { platform } from '@tauri-apps/plugin-os';
 import { createSignal, Show } from 'solid-js';
 import { commands, type ConnectServerProfileRequest, type ConnectServerProfileResult } from '~/bindings';
 import AuthForm, { AuthFormData } from '~/components/auth/AuthForm';
 import ErrorMsg from '~/components/common/ErrorMsg';
 import Header from '~/components/common/header/Header';
+import { resolveHomeRoute } from '~/features/navigation/routes';
 import { setSessionStore } from '~/stores/SessionStore';
 
 function formatFailureMsg(result: ConnectServerProfileResult) {
@@ -23,6 +25,8 @@ function formatFailureMsg(result: ConnectServerProfileResult) {
 
 function InitLogin() {
   const navigate = useNavigate();
+  const pf = platform();
+  const homeRoute = resolveHomeRoute(pf === 'android' || pf === 'ios' ? 'mobile' : 'desktop');
 
   const [submitting, setSubmitting] = createSignal<boolean>(false);
   const [submitError, setSubmitError] = createSignal<string | undefined>();
@@ -72,7 +76,7 @@ function InitLogin() {
           return;
         case 'connected':
           setSessionStore('activeSession', result.activeSession);
-          navigate('/home');
+          navigate(homeRoute);
           break;
       }
     } catch (invokeError) {

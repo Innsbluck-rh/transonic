@@ -21,18 +21,19 @@ const QueueContent: Component = () => {
               await playQueueIndex(i());
             };
 
-            const isPlaying = isQueueIndexActive(i());
-
             return (
               <div
-                class='hover:bg-primary-hover col-span-2 grid w-full cursor-pointer grid-cols-subgrid items-center gap-x-3 px-3 py-2'
+                class='ripple hover:bg-primary-hover col-span-2 grid w-full cursor-pointer grid-cols-subgrid items-center gap-x-3 px-3 py-2'
                 classList={{
-                  'bg-primary-playing': isPlaying,
+                  'bg-primary-playing': isQueueIndexActive(i()),
                 }}
                 onClick={onClickEntry}
               >
                 <div class='flex flex-row items-start'>
-                  <Show when={!isPlaying} fallback={<Icon class='text-accent -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />}>
+                  <Show
+                    when={!isQueueIndexActive(i())}
+                    fallback={<Icon class='text-accent -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />}
+                  >
                     <p class='archivo text-xs font-bold'>{i() + 1}</p>
                   </Show>
                 </div>
@@ -40,7 +41,7 @@ const QueueContent: Component = () => {
                 <p
                   class='min-w-0 truncate text-xs'
                   classList={{
-                    'text-accent font-bold': isPlaying,
+                    'text-accent font-bold': isQueueIndexActive(i()),
                   }}
                   title={queueEntry.title}
                 >

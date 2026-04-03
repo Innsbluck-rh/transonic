@@ -2,8 +2,11 @@ import { Component, createSignal, onMount, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
 import BrowseList, { BrowseListItem } from '~/components/common/list/index/BrowseList';
+import { resolveFolderRoute, type RouteVariant } from '~/features/navigation/routes';
 
-interface FolderListProps {}
+interface FolderListProps {
+  routeVariant?: RouteVariant;
+}
 
 const FolderList: Component<FolderListProps> = (props) => {
   const [loading, setLoading] = createSignal<boolean>(false);
@@ -34,7 +37,7 @@ const FolderList: Component<FolderListProps> = (props) => {
         return {
           id: node.id,
           name: node.name,
-          href: `/browse/folders/${encodeURIComponent(library.id)}/${encodeURIComponent(node.id)}`,
+          href: resolveFolderRoute(library.id, node.id, props.routeVariant ?? 'desktop'),
         } as BrowseListItem;
       })
     );

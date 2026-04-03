@@ -15,7 +15,7 @@ interface PlayerIconProps {
 const PlayerIcon: Component<PlayerIconProps> = (props) => {
   return (
     <div
-      class='flex items-center justify-center rounded-full p-2'
+      class='flex items-center justify-center overflow-visible rounded-full p-2'
       classList={{
         'cursor-pointer hover:bg-primary-hover': !props.disabled,
       }}

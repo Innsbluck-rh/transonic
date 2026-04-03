@@ -48,11 +48,23 @@ function interruptLabelForReason(reason: InterruptReason | null) {
   }
 }
 
+function isSameQueue(q1: PlaybackQueueEntry[], q2: PlaybackQueueEntry[]) {
+  return (
+    q1.length === q2.length &&
+    q1.every((q, i) => {
+      return q.songId === q2[i].songId && q.albumId === q2[i].albumId && q.artistId === q2[i].artistId;
+    })
+  );
+}
+
 export function usePlayback() {
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
 
   const status = createMemo(() => playbackStore.status);
-  const queue = createMemo<PlaybackQueueEntry[]>(() => status()?.queue ?? []);
+  const queue = createMemo<PlaybackQueueEntry[]>((prev) => {
+    const next = playbackStore.status?.queue ?? [];
+    return isSameQueue(prev, next) ? prev : next;
+  }, []);
   const currentIndex = createMemo<number | null>(() => status()?.currentIndex ?? null);
   const currentEntry = createMemo<PlaybackQueueEntry | null>(() => {
     const index = currentIndex();

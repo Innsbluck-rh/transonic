@@ -10,7 +10,7 @@ interface BrowseListRowProps {
 const BrowseListRow: Component<BrowseListRowProps> = (props) => {
   return (
     <div
-      class='hover:bg-primary-hover w-full cursor-pointer px-3 py-2'
+      class='ripple w-full cursor-pointer px-3 py-2'
       classList={{
         'bg-primary-selected': (props.selected || props.active) ?? false,
       }}

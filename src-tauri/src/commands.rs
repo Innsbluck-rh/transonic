@@ -9,7 +9,7 @@ mod session;
 
 pub use albums::get_album_list;
 pub use browse::album::get_album_songs;
-pub use browse::artist::get_music_directory;
+pub use browse::artist::{get_artist, get_artist_info2, get_artists, get_music_directory};
 pub use browse::folder_structure::get_folder_structure_albums;
 pub use browse::folder_structure_album_songs::get_folder_structure_album_songs;
 pub use browse::song::get_song;
@@ -28,7 +28,11 @@ pub use albums::{__cmd__get_album_list, __specta__fn__get_album_list};
 #[doc(hidden)]
 pub use browse::album::{__cmd__get_album_songs, __specta__fn__get_album_songs};
 #[doc(hidden)]
-pub use browse::artist::{__cmd__get_music_directory, __specta__fn__get_music_directory};
+pub use browse::artist::{
+    __cmd__get_artist, __cmd__get_artist_info2, __cmd__get_artists, __cmd__get_music_directory,
+    __specta__fn__get_artist, __specta__fn__get_artist_info2, __specta__fn__get_artists,
+    __specta__fn__get_music_directory,
+};
 #[doc(hidden)]
 pub use browse::folder_structure::{
     __cmd__get_folder_structure_albums, __specta__fn__get_folder_structure_albums,

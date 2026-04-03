@@ -2,7 +2,8 @@ import { useNavigate } from '@solidjs/router';
 import { Component, Show } from 'solid-js';
 import { sessionStore } from '~/stores/SessionStore';
 import Title from '../Title';
-import ProfilesNew from './ServerProfile';
+import ServerProfile from './ServerProfile';
+import ThemeToggle from './ThemeToggle';
 
 interface HeaderProps {
   title?: string;
@@ -21,9 +22,10 @@ const Header: Component<HeaderProps> = (props) => {
         </Title>
       </Show>
       <div class='flex-1' />
+      <ThemeToggle />
       {/* <input class='text-xs mr-2' placeholder='search...' /> */}
       <Show when={props.shouldShowProfiles}>
-        <ProfilesNew profiles={sessionStore.profiles} />
+        <ServerProfile profiles={sessionStore.profiles} />
       </Show>
     </div>
   );

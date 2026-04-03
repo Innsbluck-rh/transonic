@@ -77,6 +77,34 @@ pub struct ArtistIndexItem {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct ArtistSummary {
+    pub id: String,
+    pub name: String,
+    pub cover_art_id: Option<String>,
+    pub album_count: Option<u32>,
+    pub artist_image_url: Option<String>,
+    pub starred: Option<String>,
+    pub music_brainz_id: Option<String>,
+    pub sort_name: Option<String>,
+    pub roles: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistGroup {
+    pub name: String,
+    pub artists: Vec<ArtistSummary>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistsResponse {
+    pub ignored_articles: Option<String>,
+    pub indexes: Vec<ArtistGroup>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct ArtistIndexesResponse {
     pub artists: Vec<ArtistIndexItem>,
 }
@@ -85,6 +113,72 @@ pub struct ArtistIndexesResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ArtistIndexesRequest {
     pub music_folder_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistsRequest {
+    pub music_folder_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistRequest {
+    pub id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistAlbum {
+    pub id: String,
+    pub parent_id: Option<String>,
+    pub title: Option<String>,
+    pub album: Option<String>,
+    pub name: Option<String>,
+    pub artist: Option<String>,
+    pub artist_id: Option<String>,
+    pub cover_art_id: Option<String>,
+    pub song_count: Option<u32>,
+    pub duration: Option<u32>,
+    pub play_count: Option<u32>,
+    pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub starred: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistResponse {
+    pub id: String,
+    pub name: String,
+    pub cover_art_id: Option<String>,
+    pub album_count: Option<u32>,
+    pub artist_image_url: Option<String>,
+    pub starred: Option<String>,
+    pub music_brainz_id: Option<String>,
+    pub sort_name: Option<String>,
+    pub roles: Vec<String>,
+    pub albums: Vec<ArtistAlbum>,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistInfo2Request {
+    pub id: String,
+    pub count: Option<u32>,
+    pub include_not_present: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistInfo2Response {
+    pub biography: Option<String>,
+    pub music_brainz_id: Option<String>,
+    pub last_fm_url: Option<String>,
+    pub small_image_url: Option<String>,
+    pub medium_image_url: Option<String>,
+    pub large_image_url: Option<String>,
+    pub similar_artists: Vec<ArtistSummary>,
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]

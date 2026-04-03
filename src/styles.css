@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import 'css-ripple-effect/dist/ripple.min.css';
 
 .archivo-black {
   font-family: 'Archivo Black', sans-serif;
@@ -11,50 +12,47 @@
 }
 .public-sans-500 {
   font-family: 'Public Sans', sans-serif;
-  /* font-optical-sizing: auto; */
   font-weight: 500;
   font-style: normal;
 }
 
 @theme {
-  /* --color-primary-plane: var(--color-zinc-50);
-  --color-primary-surface: var(--color-zinc-100);
-  --color-primary-inner-surface: var(--color-zinc-200);
-  --color-primary-selected: var(--color-zinc-200);
-  --color-primary-playing: var(--color-zinc-200);
+  --color-primary-plane: var(--theme-color-primary-plane);
+  --color-primary-surface: var(--theme-color-primary-surface);
+  --color-primary-inner-surface: var(--theme-color-primary-inner-surface);
+  --color-primary-selected: var(--theme-color-primary-selected);
+  --color-primary-playing: var(--theme-color-primary-playing);
 
-  --color-primary-hover: var(--color-zinc-200);
+  --color-primary-hover: var(--theme-color-primary-hover);
 
-  --color-primary-border: var(--color-zinc-400);
-  --color-secondary-border: var(--color-zinc-300);
+  --color-primary-border: var(--theme-color-primary-border);
+  --color-secondary-border: var(--theme-color-secondary-border);
 
-  --color-primary-text: var(--color-zinc-800);
-  --color-secondary-text: var(--color-zinc-500);
+  --color-primary-text: var(--theme-color-primary-text);
+  --color-secondary-text: var(--theme-color-secondary-text);
 
-  --color-sp-nav-space: var(--color-zinc-500); */
+  --color-sp-nav-space: var(--theme-color-sp-nav-space);
 
-  --color-primary-plane: var(--color-zinc-900);
-  --color-primary-surface: var(--color-zinc-800);
-  --color-primary-selected: var(--color-zinc-800);
-  --color-primary-playing: var(--color-zinc-800);
-
-  --color-primary-hover: var(--color-zinc-700);
-
-  --color-primary-border: var(--color-zinc-600);
-  --color-secondary-border: var(--color-zinc-700);
-
-  --color-primary-text: var(--color-zinc-100);
-  --color-secondary-text: var(--color-zinc-500);
-
-  --color-sp-nav-space: var(--color-black);
-
-  --color-accent: var(--color-sky-600);
+  --color-accent: var(--theme-color-accent);
 }
 
 :root {
+  --theme-color-primary-plane: var(--color-zinc-50);
+  --theme-color-primary-surface: var(--color-zinc-100);
+  --theme-color-primary-inner-surface: var(--color-zinc-200);
+  --theme-color-primary-selected: var(--color-zinc-200);
+  --theme-color-primary-playing: var(--color-zinc-200);
+  --theme-color-primary-hover: var(--color-zinc-200);
+  --theme-color-primary-border: var(--color-zinc-400);
+  --theme-color-secondary-border: var(--color-zinc-300);
+  --theme-color-primary-text: var(--color-zinc-700);
+  --theme-color-secondary-text: var(--color-zinc-500);
+  --theme-color-sp-nav-space: var(--color-zinc-500);
+  --theme-color-accent: var(--color-sky-600);
   --player-bar-height: 0.15rem;
   --player-bar-detect-height: 1rem;
   --player-bar-handle-size: 0.75rem;
+  color-scheme: light;
 }
 
 .sp-top-space {
@@ -92,9 +90,8 @@
       background-color: transparent;
     }
 
-    /* 3. Style the thumb (draggable handle) */
     &::-webkit-scrollbar-thumb {
-      background-color: var(--color-zinc-500);
+      background-color: var(--color-secondary-text);
     }
   }
 
@@ -112,17 +109,40 @@
   }
 
   select {
-    @apply rounded-sm border border-zinc-600 px-0 py-0 text-sm;
+    @apply border-primary-border rounded-sm border px-0 py-0 text-sm;
   }
   input {
-    @apply border-b border-zinc-600 px-0 py-0 text-sm;
+    @apply border-primary-border border-b px-0 py-0 text-sm;
   }
 
   button {
-    @apply bg-primary-surface hover:bg-primary-hover active:bg-primary-hover text-primary-text cursor-pointer rounded-sm border border-zinc-600 px-1.5 py-0.5 text-sm font-bold;
+    @apply bg-primary-surface border-primary-border hover:bg-primary-hover active:bg-primary-hover text-primary-text cursor-pointer rounded-sm border px-1.5 py-0.5 text-sm font-bold;
+    position: relative;
+    overflow: hidden;
 
     &:disabled {
       @apply cursor-none;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(circle, #000 10%, transparent 10.01%);
+      background-repeat: no-repeat;
+      background-position: 50%;
+      transform: scale(10);
+      opacity: 0;
+      transition:
+        transform 0.5s,
+        opacity 1s;
+    }
+
+    &:active::after {
+      transform: scale(0);
+      opacity: 0.2;
+      transition: 0s;
     }
   }
 }

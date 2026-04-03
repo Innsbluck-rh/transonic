@@ -11,12 +11,14 @@ pub use albums::{AlbumListContext, AlbumListItem, AlbumListRequest, AlbumListRes
 pub use auth::{AuthInput, AuthKind};
 #[allow(unused_imports)]
 pub use browse::{
-    AlbumSongsRequest, AlbumSongsResponse, ArtistIndexItem, ArtistIndexesRequest,
-    ArtistIndexesResponse, FolderStructureAlbumItem, FolderStructureAlbumSongsRequest,
-    FolderStructureAlbumSongsResponse, FolderStructureAlbumsRequest, FolderStructureAlbumsResponse,
-    FolderStructureRootNode, FolderStructureRootsRequest, FolderStructureRootsResponse,
-    FolderStructureSource, MusicDirectoryChild, MusicDirectoryRequest, MusicDirectoryResponse,
-    MusicFolderSummary, MusicFoldersResponse, SongRequest, SongResponse,
+    AlbumSongsRequest, AlbumSongsResponse, ArtistAlbum, ArtistGroup, ArtistIndexItem,
+    ArtistIndexesRequest, ArtistIndexesResponse, ArtistInfo2Request, ArtistInfo2Response,
+    ArtistRequest, ArtistResponse, ArtistSummary, ArtistsRequest, ArtistsResponse,
+    FolderStructureAlbumItem, FolderStructureAlbumSongsRequest, FolderStructureAlbumSongsResponse,
+    FolderStructureAlbumsRequest, FolderStructureAlbumsResponse, FolderStructureRootNode,
+    FolderStructureRootsRequest, FolderStructureRootsResponse, FolderStructureSource,
+    MusicDirectoryChild, MusicDirectoryRequest, MusicDirectoryResponse, MusicFolderSummary,
+    MusicFoldersResponse, SongRequest, SongResponse,
 };
 #[allow(unused_imports)]
 pub use cover_art::{CoverArtRequest, CoverArtResponse};

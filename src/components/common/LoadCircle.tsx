@@ -6,7 +6,7 @@ interface LoadCircleProps {
 }
 
 const LoadCircle: Component<LoadCircleProps> = (props) => {
-  return <Icon icon='line-md:loading-twotone-loop' class={`text-primary-text scale-150 ${props.class}`} />;
+  return <Icon icon='line-md:loading-twotone-loop' class={`text-primary-text scale-200 ${props.class}`} />;
 };
 
 export default LoadCircle;

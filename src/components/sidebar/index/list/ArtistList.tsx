@@ -2,8 +2,11 @@ import { Component, createSignal, onMount, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
 import BrowseList, { BrowseListItem } from '~/components/common/list/index/BrowseList';
+import { resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
 
-interface ArtistListProps {}
+interface ArtistListProps {
+  routeVariant?: RouteVariant;
+}
 
 const ArtistList: Component<ArtistListProps> = (props) => {
   const [loading, setLoading] = createSignal<boolean>(false);
@@ -18,21 +21,27 @@ const ArtistList: Component<ArtistListProps> = (props) => {
       return;
     }
     const mfData = mfResult.data;
-    // temporaly use first
     const library = mfData.musicFolders[0];
-    const aiResult = await commands.getArtistIndexes({ musicFolderId: library.id });
-    if (aiResult.status === 'error') {
-      console.error(aiResult.error);
+    if (!library) {
+      setItems([]);
       setLoading(false);
       return;
     }
 
+    const artistsResult = await commands.getArtists({ musicFolderId: library.id });
+    if (artistsResult.status === 'error') {
+      console.error(artistsResult.error);
+      setLoading(false);
+      return;
+    }
+
+    const artists = artistsResult.data.indexes.flatMap((index) => index.artists);
     setItems(
-      aiResult.data.artists.map((artist) => {
+      artists.map((artist) => {
         return {
           id: artist.id,
           name: artist.name,
-          href: `/browse/artists/${encodeURIComponent(artist.id)}`,
+          href: resolveArtistRoute(artist.id, props.routeVariant ?? 'desktop'),
         } as BrowseListItem;
       })
     );

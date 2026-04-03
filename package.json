@@ -30,6 +30,7 @@
     "@tauri-apps/plugin-log": "^2.8.0",
     "@tauri-apps/plugin-opener": "^2",
     "@tauri-apps/plugin-os": "^2.3.2",
+    "css-ripple-effect": "^1.0.5",
     "interactjs": "^1.10.27",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "solid-js": "^1.9.12"
