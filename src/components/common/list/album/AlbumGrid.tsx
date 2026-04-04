@@ -13,7 +13,7 @@ interface AlbumGridProps {
 const AlbumGrid: Component<AlbumGridProps> = (props) => {
   return (
     <Show when={props.albums.length > 0} fallback={<div class='px-2 py-6 text-sm text-zinc-400'>{props.emptyMessage ?? 'No albums available.'}</div>}>
-      <div class='grid w-full grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-x-3 gap-y-3'>
+      <div class='grid w-full grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-x-3 gap-y-3 lg:grid-cols-[repeat(auto-fill,minmax(144px,1fr))]'>
         <For each={props.albums}>
           {(album) => (
             <AlbumGridItem
