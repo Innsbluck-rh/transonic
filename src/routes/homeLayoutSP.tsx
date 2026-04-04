@@ -71,7 +71,7 @@ const HomeLayoutSP: ParentComponent = (props) => {
                 break;
               case 'setting':
                 // stab
-                // navigate('/sp/etting');
+                // navigate('/sp/setting');
                 break;
             }
           }}

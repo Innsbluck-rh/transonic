@@ -6,6 +6,7 @@ export type ThemeVariableName =
   | '--theme-color-primary-inner-surface'
   | '--theme-color-primary-selected'
   | '--theme-color-primary-playing'
+  | '--theme-color-primary-on-playing'
   | '--theme-color-primary-hover'
   | '--theme-color-primary-border'
   | '--theme-color-secondary-border'
@@ -33,7 +34,8 @@ export const darkTheme: ColorTheme = {
     '--theme-color-primary-surface': 'var(--color-zinc-800)',
     '--theme-color-primary-inner-surface': 'var(--color-zinc-700)',
     '--theme-color-primary-selected': 'var(--color-zinc-800)',
-    '--theme-color-primary-playing': 'var(--color-zinc-800)',
+    '--theme-color-primary-playing': 'var(--color-sky-900)',
+    '--theme-color-primary-on-playing': 'var(--color-zinc-100)',
     '--theme-color-primary-hover': 'var(--color-zinc-700)',
     '--theme-color-primary-border': 'var(--color-zinc-600)',
     '--theme-color-secondary-border': 'var(--color-zinc-700)',

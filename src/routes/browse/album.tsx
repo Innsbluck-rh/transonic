@@ -1,5 +1,6 @@
+import { Icon } from '@iconify-icon/solid';
 import { useParams, type RouteSectionProps } from '@solidjs/router';
-import { createEffect, createMemo, createResource, createSignal } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, Show } from 'solid-js';
 import { commands, type AlbumSongsResponse } from '~/bindings';
 import Heading3 from '~/components/common/Heading3';
 import SongList from '~/components/common/list/song/SongList';
@@ -67,21 +68,47 @@ function BrowseAlbum(props: BrowseAlbumProps) {
     void loadAlbum(params.id || '');
   });
 
+  const infoText = createMemo<string | null>(() => {
+    if (album() === null) return null;
+    const infoText = [album()?.year, album()?.genre, `${album()?.songCount} songs`]
+      .map((value) => {
+        if (!value) return null;
+        return String(value);
+      })
+      .filter((str) => str?.trim())
+      .join('・');
+    if (infoText.trim()) return infoText;
+    else return null;
+  });
+
   return (
-    <div class='home-surface-root p-0'>
-      <div class='bg-primary-inner-surface relative flex w-full flex-col items-center p-5'>
+    <div class='home-surface-root w-full gap-0 p-0'>
+      <div class='bg-primary-inner-surface relative flex w-full flex-col items-center px-3.5 pt-6 pb-4 lg:flex-row lg:pt-4'>
         <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full shadow-[inset_0_-2px_8px_rgba(128,128,128,0.5)]' />
 
-        <img class='border-secondary-border m-8 aspect-square h-54 w-54 border' src={coverArt() ?? undefined} />
+        <div class='group border-secondary-border relative z-10 h-auto w-52 max-w-1/2 border lg:w-42'>
+          <img
+            class='w-52 cursor-pointer hover:brightness-75 lg:w-42'
+            src={coverArt() ?? undefined}
+            onClick={() => {
+              const albumId = album()?.id;
+              if (albumId) playAlbum(albumId);
+            }}
+          />
+          <Icon class='collapse absolute top-1/2 left-1/2 -translate-1/2 scale-300 group-hover:visible' icon='material-symbols:play-arrow' />
+        </div>
 
-        <div class='flex w-full flex-col items-start'>
-          <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo-black w-full text-2xl' />
-          <MarqueeParagraph class='archivo text-secondary-text' text={album()?.artist || '[unknown]'} />
+        <div class='mt-8 flex w-full flex-col items-start lg:mt-1 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
+          <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo text-2xl font-black tracking-tighter lg:mb-1 lg:text-3xl' />
+          <MarqueeParagraph class='archivo text-secondary-text mt-1' text={album()?.artist || '[unknown]'} />
+          <Show when={infoText()}>
+            <p class='archivo text-secondary-text mt-1.5 text-[12px]'>{infoText()}</p>
+          </Show>
         </div>
       </div>
 
-      <div class='flex flex-col items-start'>
-        <div class='border-secondary-border flex w-full flex-col items-start border-b p-2'>
+      <div class='flex w-full flex-col'>
+        <div class='border-secondary-border flex w-full flex-row items-center border-b p-2'>
           <Heading3>songs</Heading3>
         </div>
         <SongList songs={album()?.songs} />

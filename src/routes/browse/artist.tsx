@@ -1,7 +1,6 @@
 import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createResource, createSignal, Show } from 'solid-js';
 import { commands, type ArtistInfo2Response, type ArtistResponse } from '~/bindings';
-import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
@@ -175,7 +174,7 @@ function BrowseArtist(props: BrowseArtistProps) {
                 </div>
                 <div class='bg-primary-inner-surface absolute top-0 right-0 bottom-0 left-0 flex h-full w-full opacity-75' />
                 <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full shadow-[inset_0_-2px_8px_rgba(128,128,128,0.5)]' />
-                <Heading1 class='text-primary-text absolute bottom-0 left-0 z-10 m-3 w-full'>{artistValue().name}</Heading1>
+                <p class='archivo text-primary-text absolute bottom-0 left-0 z-10 m-4 w-full text-2xl font-black'>{artistValue().name}</p>
               </div>
 
               <div class='flex flex-col gap-2 p-3'>

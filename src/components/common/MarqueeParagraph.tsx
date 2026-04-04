@@ -12,7 +12,7 @@ const DEFAULT_GAP_PX = 32;
 const DEFAULT_PIXELS_PER_SECOND = 48;
 
 const MarqueeParagraph: Component<MarqueeParagraphProps> = (props) => {
-  const [local, rest] = splitProps(props, ['text', 'class', 'gapPx', 'pixelsPerSecond']);
+  const [local, rest] = splitProps(props, ['text', 'class', 'classList', 'gapPx', 'pixelsPerSecond']);
 
   let rootRef: HTMLParagraphElement | undefined;
   let contentRef: HTMLSpanElement | undefined;
@@ -58,7 +58,7 @@ const MarqueeParagraph: Component<MarqueeParagraphProps> = (props) => {
   });
 
   return (
-    <p {...rest} ref={rootRef} class={`max-w-full min-w-0 ${local.class ?? ''}`.trim()}>
+    <p {...rest} ref={rootRef} class={`max-w-full min-w-0 ${local.class ?? ''}`.trim()} classList={local.classList}>
       <span class={`block w-full overflow-hidden whitespace-nowrap ${styles.typographyInherit}`}>
         <span
           class='inline-flex min-w-max whitespace-nowrap will-change-transform'

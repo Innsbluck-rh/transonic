@@ -1,6 +1,8 @@
 import { Component, createMemo, createResource, JSX, Match, Show, Switch } from 'solid-js';
+import { PlaybackQueueEntry } from '~/bindings';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 import PlayerIcon from './PlayerIcon';
@@ -11,11 +13,15 @@ type PlayerIcons = 'prev' | 'playpause' | 'next';
 
 interface PlayerBarProps {
   iconsVisibility?: Record<PlayerIcons, boolean>;
+  onClickTitle?: (entry?: PlaybackQueueEntry) => void;
+  onClickArtist?: (entry?: PlaybackQueueEntry) => void;
   onClickRestArea?: () => void;
   restAreaProps?: JSX.HTMLAttributes<HTMLDivElement>;
 }
 
 const PlayerBar: Component<PlayerBarProps> = (props) => {
+  const navigate = useSPNavigate();
+
   const iconsVisibility: Record<PlayerIcons, boolean> = props.iconsVisibility ?? {
     prev: true,
     playpause: true,
@@ -75,8 +81,8 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       <Show when={coverArt()}>
         {(assetUrl) => <img class='absolute h-full w-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
       </Show>
-      <div class='absolute z-0 h-full w-full backdrop-blur-[5px]'></div>
-      <div class='bg-primary-plane absolute z-0 h-full w-full opacity-75'></div>
+      <div class='absolute z-0 h-full w-full backdrop-blur-[2px]'></div>
+      <div class='bg-primary-plane absolute z-0 h-full w-full opacity-50'></div>
       <div class='from-primary-plane absolute z-0 h-full w-full bg-linear-to-r to-transparent'></div>
 
       <div class='relative z-10 flex h-full w-full flex-row items-center gap-2 p-4 shadow-xl'>
@@ -102,8 +108,27 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
             fallback={
               <>
                 <div class='mt-1 flex min-w-0 flex-1 flex-col gap-1'>
-                  <MarqueeParagraph text={currentEntry()?.title || '[unknown]'} class='archivo leading-none font-bold' />
-                  <MarqueeParagraph text={subtitleText()} class='archivo text-secondary-text text-xs leading-none' pixelsPerSecond={40} />
+                  <MarqueeParagraph
+                    text={currentEntry()?.title || '[unknown]'}
+                    class='archivo leading-none font-bold'
+                    classList={{
+                      'cursor-pointer': !!props.onClickTitle,
+                    }}
+                    onClick={() => {
+                      props.onClickTitle?.(currentEntry() ?? undefined);
+                    }}
+                  />
+                  <MarqueeParagraph
+                    text={subtitleText()}
+                    class='archivo text-secondary-text text-xs leading-none'
+                    classList={{
+                      'cursor-pointer': !!props.onClickArtist,
+                    }}
+                    pixelsPerSecond={40}
+                    onClick={() => {
+                      props.onClickArtist?.(currentEntry() ?? undefined);
+                    }}
+                  />
                 </div>
                 <div class='ml-4 flex flex-col gap-1'>
                   <p class='archivo text-xs'>

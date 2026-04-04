@@ -27,6 +27,7 @@ const AlbumCover: Component<AlbumCoverProps> = (props) => {
       size: DEFAULT_COVER_ART_SIZE,
     };
   });
+
   const [coverArt] = createResource(request, (payload) => fetchCoverArtAssetUrl(payload));
 
   return (

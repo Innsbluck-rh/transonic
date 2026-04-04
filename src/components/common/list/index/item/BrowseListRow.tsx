@@ -10,14 +10,14 @@ interface BrowseListRowProps {
 const BrowseListRow: Component<BrowseListRowProps> = (props) => {
   return (
     <div
-      class='ripple w-full cursor-pointer px-3 py-2'
+      class='ripple w-full cursor-pointer px-3.5 py-2.5'
       classList={{
         'bg-primary-selected': (props.selected || props.active) ?? false,
       }}
       onClick={() => props.onClick?.()}
     >
       <p
-        class='text-xs'
+        class='text-sm lg:text-xs'
         classList={{
           'text-accent font-bold': props.active ?? false,
           'text-zinc-950': props.selected ?? false,

@@ -22,7 +22,7 @@
   --color-primary-inner-surface: var(--theme-color-primary-inner-surface);
   --color-primary-selected: var(--theme-color-primary-selected);
   --color-primary-playing: var(--theme-color-primary-playing);
-
+  --color-primary-on-playing: var(--theme-color-primary-on-playing);
   --color-primary-hover: var(--theme-color-primary-hover);
 
   --color-primary-border: var(--theme-color-primary-border);
@@ -37,11 +37,13 @@
 }
 
 :root {
+  /* light theme default */
   --theme-color-primary-plane: var(--color-zinc-50);
   --theme-color-primary-surface: var(--color-zinc-100);
   --theme-color-primary-inner-surface: var(--color-zinc-200);
   --theme-color-primary-selected: var(--color-zinc-200);
-  --theme-color-primary-playing: var(--color-zinc-200);
+  --theme-color-primary-playing: var(--color-sky-600);
+  --theme-color-primary-on-playing: var(--color-zinc-200);
   --theme-color-primary-hover: var(--color-zinc-200);
   --theme-color-primary-border: var(--color-zinc-400);
   --theme-color-secondary-border: var(--color-zinc-300);

@@ -1,12 +1,12 @@
 import { createSignal } from 'solid-js';
-import { builtInThemes, type ColorTheme, type ThemeVariables, type TransonicColorTheme } from './definitions';
+import { builtInThemes, type ColorTheme, type ThemeVariables, type TransonicColorTheme } from './themes';
 
 const THEME_STORAGE_KEY = 'transonic.color-theme';
 const THEME_STYLE_ELEMENT_ID = 'transonic-theme-overrides';
 
 export type AppliedColorTheme = TransonicColorTheme | 'custom';
 
-export type { ColorTheme, ThemeVariables, TransonicColorTheme } from './definitions';
+export type { ColorTheme, ThemeVariables, TransonicColorTheme } from './themes';
 export { builtInThemes };
 
 export const [currentTheme, setCurrentTheme] = createSignal<AppliedColorTheme>('light');

@@ -43,7 +43,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         </div> */}
       </div>
       <div class='mt-1 flex flex-col gap-0'>
-        <p class='truncate text-sm font-bold' title={props.album.name ?? '[unknown]'}>
+        <p class='text-md truncate font-bold' title={props.album.name ?? '[unknown]'}>
           {props.album.name}
         </p>
         <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>

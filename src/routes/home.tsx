@@ -1,3 +1,4 @@
+import { useNavigate } from '@solidjs/router';
 import { createSignal, For, onMount, Show } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
 import Heading1 from '~/components/common/Heading1';
@@ -18,6 +19,7 @@ const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> 
 ];
 
 function Home() {
+  const navigate = useNavigate();
   const { playAlbum } = usePlayback();
   const [albumSections, setAlbumSections] = createSignal<HomeAlbumSection[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = createSignal(false);
@@ -103,7 +105,7 @@ function Home() {
                   albums={section.albums}
                   emptyMessage={`No albums returned for ${section.heading}.`}
                   onItemClick={async (album) => {
-                    await playAlbum(album.id);
+                    navigate(`/browse/album/${album.id}`);
                   }}
                 />
               </div>

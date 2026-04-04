@@ -1,11 +1,11 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
-import { commands, type SongResponse } from '~/bindings';
+import { commands, PlaybackQueueEntry } from '~/bindings';
 import { playbackStore } from '~/stores/PlaybackStore';
 
-interface SongListProps {
-  songs?: SongResponse[];
-  onClickSong?: (song: SongResponse, index: number, songs: SongResponse[]) => void;
+interface QueueListProps {
+  queue: PlaybackQueueEntry[];
+  onClickQueue?: (song: PlaybackQueueEntry, index: number, songs: PlaybackQueueEntry[]) => void;
 }
 
 // consider utilize this
@@ -24,39 +24,40 @@ function formatDurationSecond(duration: number) {
   }
 }
 
-const SongList: Component<SongListProps> = (props) => {
+// TODO: you know its VERY similar to SongList.tsx but it's not compatible because of poor(old) implementation in Queue item.
+// consider replace PlaybackQueueEntry to Just Raw Song data and merge this to SongList(and Stop hardcoding play function in songlist itself...)
+const QueueList: Component<QueueListProps> = (props) => {
   return (
-    <div class='flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto'>
+    <div class='flex w-full flex-col'>
       <For
-        each={props.songs}
+        each={props.queue}
         fallback={
-          <div class='col-span-2 flex w-full p-2'>
+          <div class='flex w-full p-2'>
             <p class='text-secondary-text px-1 text-xs italic'>[no songs]</p>
           </div>
         }
       >
-        {(song, i) => {
+        {(entry, i) => {
           const onClickEntry = async () => {
-            if (!props.songs) return;
-            props.onClickSong?.(song, i(), props.songs);
+            if (!props.queue) return;
+            props.onClickQueue?.(entry, i(), props.queue);
 
-            await commands.playbackPlaySongs({
-              songs: props.songs,
-              startIndex: i(),
+            await commands.playbackPlayQueueIndex({
+              index: i(),
             });
           };
 
-          const isPlaying = () => playbackStore.status?.currentSongId === song.id;
+          const isPlaying = () => playbackStore.status?.currentSongId === entry.songId; // ← here is cause of incompatibility fxxx
 
           return (
             <div
-              class='group ripple hover:bg-primary-hover flex w-full cursor-pointer flex-row items-center overflow-x-hidden px-4 py-3'
+              class='group ripple hover:bg-primary-hover flex h-auto cursor-pointer flex-row items-center overflow-x-hidden px-4 py-3'
               classList={{
                 'bg-primary-playing': isPlaying(),
               }}
               onClick={onClickEntry}
             >
-              <div class='group-hover:text-primary-text flex w-10 flex-row items-start'>
+              <div class='group-hover:text-primary-text flex w-8 flex-row items-start'>
                 <Show
                   when={!isPlaying()}
                   fallback={
@@ -70,17 +71,19 @@ const SongList: Component<SongListProps> = (props) => {
                 </Show>
               </div>
 
+              {/* <img src={coverArts[i()] || ''} class='mr-3 aspect-square max-h-8 w-8 rounded-md' /> */}
+
               <p
                 class='group-hover:text-primary-text min-w-0 flex-1 truncate text-sm'
                 classList={{
                   'text-primary-on-playing font-bold': isPlaying(),
                 }}
-                title={song.title}
+                title={entry.title}
               >
-                {song.title}
+                {entry.title}
               </p>
 
-              <p class='text-secondary-text archivo text-xs'>{formatDurationSecond(song.duration ?? 0)}</p>
+              <p class='text-secondary-text archivo ml-2 text-xs'>{formatDurationSecond(entry.duration ?? 0)}</p>
             </div>
           );
         }}
@@ -89,4 +92,4 @@ const SongList: Component<SongListProps> = (props) => {
   );
 };
 
-export default SongList;
+export default QueueList;
