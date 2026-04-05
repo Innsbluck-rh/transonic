@@ -158,7 +158,7 @@ function BrowseArtist(props: BrowseArtistProps) {
         <Show when={artist()}>
           {(artistValue) => (
             <div class='flex flex-col'>
-              <div class='relative flex h-42 w-full flex-col'>
+              <div class='relative z-10 flex h-42 w-full flex-col'>
                 <div class='border-primary-border absolute top-0 right-0 bottom-0 left-0 h-full w-full border-b'>
                   <Show
                     when={effectiveArtistImageSrc()}
@@ -181,7 +181,7 @@ function BrowseArtist(props: BrowseArtistProps) {
                 </p>
               </div>
 
-              <div class='flex flex-col'>
+              <div class='z-20 flex flex-col'>
                 <div class='border-secondary-border bg-primary-surface sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
                   <Heading3 class='text-secondary-text'>albums</Heading3>
                 </div>
