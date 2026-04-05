@@ -10,6 +10,7 @@ interface AlbumHorizontalListProps {
   onItemDblClick?: (album: AlbumListItem, e: MouseEvent) => void;
   onItemArtClick?: (album: AlbumListItem, e: MouseEvent) => void;
   onItemArtDblClick?: (album: AlbumListItem, e: MouseEvent) => void;
+  onItemContextMenu?: (album: AlbumListItem, e: MouseEvent) => void;
 }
 
 const AlbumHorizontalList: Component<AlbumHorizontalListProps> = (props) => {
@@ -25,6 +26,7 @@ const AlbumHorizontalList: Component<AlbumHorizontalListProps> = (props) => {
               onDblClick={(e) => props.onItemDblClick?.(album, e)}
               onArtClick={(e) => props.onItemArtClick?.(album, e)}
               onArtDblClick={(e) => props.onItemArtDblClick?.(album, e)}
+              onContextMenu={(e) => props.onItemContextMenu?.(album, e)}
             />
           )}
         </For>

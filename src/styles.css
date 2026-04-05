@@ -80,7 +80,8 @@
     user-select: none;
   }
 
-  div {
+  div,
+  form {
     @apply box-border;
 
     &::-webkit-scrollbar {
@@ -92,7 +93,7 @@
     }
 
     &::-webkit-scrollbar-track {
-      background-color: transparent;
+      background-color: #00000010;
     }
 
     &::-webkit-scrollbar-thumb {
@@ -121,7 +122,7 @@
   }
 
   button {
-    @apply bg-primary-surface border-primary-border hover:bg-primary-hover active:bg-primary-hover text-primary-text cursor-pointer rounded-sm border px-1.5 py-0.5 text-sm font-bold;
+    @apply bg-primary-surface border-primary-border hover:bg-primary-hover active:bg-primary-hover text-primary-text cursor-pointer rounded-sm border px-2 py-1.5 text-sm font-bold;
     position: relative;
     overflow: hidden;
 
@@ -149,6 +150,10 @@
       opacity: 0.2;
       transition: 0s;
     }
+  }
+
+  .button-borderless {
+    @apply hover:text-accent active:text-accent overflow-hidden rounded-md border-none bg-transparent;
   }
 
   .home-surface-root {

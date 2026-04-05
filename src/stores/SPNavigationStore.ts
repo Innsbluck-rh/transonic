@@ -1,6 +1,6 @@
 import { createStore } from 'solid-js/store';
 
-export type SPNavigationState = 'index' | 'setting';
+export type SPNavigationState = 'index' | 'setting' | 'player';
 export type NavDirection = 'forward' | 'backward';
 
 interface SPNavigationStore {

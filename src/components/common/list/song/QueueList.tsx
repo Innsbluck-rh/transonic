@@ -1,6 +1,8 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
+import { buildQueueItemMenuItems, showContextMenu } from '~/features/menu';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { playbackStore } from '~/stores/PlaybackStore';
 
 interface QueueListProps {
@@ -25,6 +27,8 @@ function formatDurationSecond(duration: number) {
 }
 
 const QueueList: Component<QueueListProps> = (props) => {
+  const navigate = useSPNavigate();
+
   return (
     <div class='flex w-full flex-col'>
       <For
@@ -45,13 +49,16 @@ const QueueList: Component<QueueListProps> = (props) => {
             });
           };
 
-          const isPlaying = () => playbackStore.status?.currentSongId === entry.id;
+          const isPlaying = () => playbackStore.status?.currentSongId === entry.id && playbackStore.status?.currentIndex === i();
 
           return (
             <div
-              class='group ripple hover:bg-primary-hover flex h-auto cursor-pointer flex-row items-center overflow-x-hidden px-4 py-3'
+              class='group ripple hover:bg-primary-hover flex h-auto cursor-pointer flex-row items-center overflow-x-hidden px-4 py-2.5'
               classList={{
                 'bg-primary-playing': isPlaying(),
+              }}
+              onContextMenu={(e) => {
+                showContextMenu(e, buildQueueItemMenuItems(entry, i(), navigate));
               }}
               onClick={onClickEntry}
             >
@@ -71,15 +78,27 @@ const QueueList: Component<QueueListProps> = (props) => {
 
               {/* <img src={coverArts[i()] || ''} class='mr-3 aspect-square max-h-8 w-8 rounded-md' /> */}
 
-              <p
-                class='group-hover:text-primary-text min-w-0 flex-1 truncate text-sm'
-                classList={{
-                  'text-primary-on-playing font-bold': isPlaying(),
-                }}
-                title={entry.title}
-              >
-                {entry.title}
-              </p>
+              <div class='flex min-w-0 flex-1 flex-col gap-1'>
+                <p
+                  class='group-hover:text-primary-text truncate text-sm leading-none'
+                  classList={{
+                    'text-primary-on-playing font-bold': isPlaying(),
+                  }}
+                  title={entry.title}
+                >
+                  {entry.title}
+                </p>
+                <p
+                  class='group-hover:text-secondary-text truncate text-xs leading-none'
+                  classList={{
+                    'text-secondary-text': !isPlaying(),
+                    'text-primary-on-playing': isPlaying(),
+                  }}
+                  title={entry.artist ?? '[unknown artist]'}
+                >
+                  {entry.artist}
+                </p>
+              </div>
 
               <p
                 class='archivo ml-2 text-xs'

@@ -5,6 +5,7 @@ mod connection;
 mod cover_art_cache;
 mod models;
 mod playback;
+mod playback_state;
 mod profiles;
 mod secrets;
 mod session;
@@ -16,6 +17,7 @@ use artist_image_cache::ArtistImageCache;
 use cover_art_cache::CoverArtCache;
 use models::ActiveSession;
 use playback::{PlaybackController, PlaybackEventAppHandle};
+use playback_state::{playback_state_path, FilePlaybackStatePersister};
 
 pub(crate) struct ActiveSessionState(pub Mutex<Option<ActiveSession>>);
 pub(crate) struct PlaybackControllerState(pub Mutex<PlaybackController>);
@@ -66,14 +68,21 @@ pub fn run() {
     #[cfg(target_os = "android")]
     let builder = builder.plugin(playback::init_android_mobile_plugin());
 
-    builder
+    let app = builder
         .setup(move |app| {
             specta_builder.mount_events(app);
+
+            let config_dir = app
+                .path()
+                .app_config_dir()
+                .map_err(|error| format!("Failed to resolve the app config directory: {error}"))?;
+            let persister_path = playback_state_path(&config_dir);
+            let persister = Box::new(FilePlaybackStatePersister::new(persister_path));
 
             let app_handle: PlaybackEventAppHandle =
                 Arc::new(Mutex::new(Some(app.handle().clone())));
             let controller =
-                playback::create_playback_controller(&app.handle(), app_handle.clone());
+                playback::create_playback_controller(&app.handle(), app_handle.clone(), persister);
             app.manage(PlaybackControllerState::new(controller));
             let cover_art_cache_root = app
                 .path()
@@ -101,6 +110,18 @@ pub fn run() {
 
             Ok(())
         })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|app_handle, event| {
+        if let tauri::RunEvent::Exit = event {
+            let playback = app_handle.state::<PlaybackControllerState>();
+            let mut controller = match playback.0.lock() {
+                Ok(guard) => guard,
+                Err(_) => return,
+            };
+            controller.sync_and_persist();
+            log::info!("app exit: persisted playback state");
+        }
+    });
 }

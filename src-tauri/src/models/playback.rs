@@ -24,10 +24,30 @@ pub enum InterruptReason {
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum QueueSource {
+    #[serde(rename_all = "camelCase")]
+    Songs {
+        songs: Vec<super::SongResponse>,
+    },
+    #[serde(rename_all = "camelCase")]
+    Album {
+        album_id: String,
+    },
+    #[serde(rename_all = "camelCase")]
+    FolderAlbum {
+        library_id: String,
+        node_id: String,
+        album_id: String,
+    },
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackSetQueueRequest {
-    pub entries: Vec<SongResponse>,
+    pub items: Vec<QueueSource>,
     pub current_index: Option<u32>,
+    pub auto_play: bool,
 }
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
@@ -40,27 +60,6 @@ pub struct PlaybackSeekRequest {
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackPlayQueueIndexRequest {
     pub index: u32,
-}
-
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaybackPlayAlbumRequest {
-    pub album_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaybackPlayFolderAlbumRequest {
-    pub library_id: String,
-    pub node_id: String,
-    pub album_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct PlaybackPlaySongsRequest {
-    pub songs: Vec<super::SongResponse>,
-    pub start_index: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
@@ -78,6 +77,18 @@ pub struct PlaybackStatus {
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
 pub struct MediaNotificationTap {}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackInsertAfterCurrentRequest {
+    pub items: Vec<QueueSource>,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackAppendToQueueRequest {
+    pub items: Vec<QueueSource>,
+}
 
 impl PlaybackStatus {
     pub fn empty() -> Self {

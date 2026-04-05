@@ -11,7 +11,7 @@ const ThemeToggle: Component = () => {
         class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2'
         onClick={() => applyTheme(isDarkTheme() ? 'light' : 'dark')}
       >
-        <Icon class='text-primary-text' icon={isDarkTheme() ? 'pixelarticons:sun' : 'pixelarticons:moon'} />
+        <Icon class='text-primary-text text-[16px]' icon={isDarkTheme() ? 'pixelarticons:sun' : 'pixelarticons:moon'} />
       </div>
     </div>
   );

@@ -70,8 +70,8 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       <div class='bg-primary-plane absolute z-0 h-full w-full opacity-50'></div>
       <div class='from-primary-plane absolute z-0 h-full w-full bg-linear-to-r to-transparent'></div>
 
-      <div class='relative z-10 flex h-full w-full flex-row items-center gap-2 p-4 shadow-xl'>
-        <div class='z-10 flex flex-row items-center gap-2'>
+      <div class='relative z-10 flex h-full w-full flex-row items-center gap-3 p-3.5 shadow-xl lg:p-5 lg:px-6'>
+        <div class='z-10 flex flex-row items-center gap-3'>
           <Show when={iconsVisibility.prev}>
             <PlayerIcon type='prev' disabled={isControlDisabled()} onClick={prev} />
           </Show>

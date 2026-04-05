@@ -3,14 +3,19 @@ import { Component, createMemo, Show } from 'solid-js';
 import { setSPNavStore, SPNavigationState, SPNavStore } from '~/stores/SPNavigationStore';
 
 interface SPBottomNavigationProps {
-  onClickNav?: (nav: SPNavigationState) => void;
+  onClickNav?: (nav: SPNavigationState, prevNav: SPNavigationState) => void;
 }
 
 const SPBottomNavigation: Component<SPBottomNavigationProps> = (props) => {
   return (
     <div class='border-primary-border bg-primary-plane z-20 flex flex-row border-t'>
-      <SPBottomNavigationItem onClick={(nav) => props.onClickNav?.(nav)} navState={'index'} icon='material-symbols:library-music-sharp' />
-      <SPBottomNavigationItem onClick={(nav) => props.onClickNav?.(nav)} navState={'setting'} icon='material-symbols:settings' />
+      <SPBottomNavigationItem
+        onClick={(nav, prevNav) => props.onClickNav?.(nav, prevNav)}
+        navState={'index'}
+        icon='material-symbols:library-music-sharp'
+      />
+      <SPBottomNavigationItem onClick={(nav, prevNav) => props.onClickNav?.(nav, prevNav)} navState={'player'} icon='material-symbols:play-circle' />
+      <SPBottomNavigationItem onClick={(nav, prevNav) => props.onClickNav?.(nav, prevNav)} navState={'setting'} icon='material-symbols:settings' />
       {/* <SPBottomNavigationItem onClick={(nav) => props.onClickNav?.(nav)} navState={'queue'} icon='material-symbols:playlist-play' label='queue' /> */}
     </div>
   );
@@ -22,7 +27,7 @@ interface SPBottomNavigationItemProps {
   navState: SPNavigationState;
   icon: string;
   label?: string;
-  onClick: (nav: SPNavigationState) => void;
+  onClick: (nav: SPNavigationState, prevNav: SPNavigationState) => void;
 }
 
 const SPBottomNavigationItem: Component<SPBottomNavigationItemProps> = (props) => {
@@ -32,7 +37,7 @@ const SPBottomNavigationItem: Component<SPBottomNavigationItemProps> = (props) =
       class='ripple hover:bg-primary-hover flex flex-1 cursor-pointer flex-col items-center py-4'
       // classList={{ 'bg-primary-hover': selected() }}
       onClick={() => {
-        props.onClick?.(props.navState);
+        props.onClick?.(props.navState, SPNavStore.state);
         setSPNavStore('state', props.navState);
       }}
     >

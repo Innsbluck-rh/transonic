@@ -21,7 +21,7 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["$APPCACHE/cover-art/**/*"]
+        "scope": ["$APPCACHE/cover-art/**/*", "$APPCACHE/artist-image/**/*"]
       }
     }
   },

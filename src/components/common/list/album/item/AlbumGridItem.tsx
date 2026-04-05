@@ -9,6 +9,7 @@ interface AlbumGridItemProps {
   album: AlbumItem;
   onClick?: (e: MouseEvent) => void;
   onDblClick?: (e: MouseEvent) => void;
+  onContextMenu?: (e: MouseEvent) => void;
   onArtClick?: (e: MouseEvent) => void;
   onArtDblClick?: (e: MouseEvent) => void;
 }
@@ -21,6 +22,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
       class={`group flex shrink-0 flex-col ${props.class}`}
       onClick={(e) => props.onArtClick?.(e)}
       onDblClick={(e) => props.onArtDblClick?.(e)}
+      onContextMenu={(e) => props.onContextMenu?.(e)}
       classList={{
         'cursor-pointer': isClickable,
       }}

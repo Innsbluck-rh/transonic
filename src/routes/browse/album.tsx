@@ -7,7 +7,8 @@ import PseudoAlbumCover from '~/components/common/list/album/item/PseudoAlbumCov
 import SongList from '~/components/common/list/song/SongList';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import { useCoverArt } from '~/features/albums/useCoverArt';
-import { type RouteVariant } from '~/features/navigation/routes';
+import { resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
@@ -18,8 +19,9 @@ interface BrowseAlbumProps extends Partial<RouteSectionProps<unknown>> {
 }
 
 function BrowseAlbum(props: BrowseAlbumProps) {
+  const navigate = useSPNavigate();
   const params = useParams();
-  const { playAlbum } = usePlayback();
+  const { playAlbum, insertAfterCurrent, appendToQueue } = usePlayback();
 
   const [album, setAlbum] = createSignal<AlbumSongsResponse | null>(null);
   let latestLoadId = 0;
@@ -77,8 +79,8 @@ function BrowseAlbum(props: BrowseAlbumProps) {
 
   return (
     <div class='home-surface-root w-full gap-0 p-0'>
-      <div class='bg-primary-inner-surface flex w-full flex-col items-center px-3.5 pt-6 pb-4 lg:flex-row lg:pt-4'>
-        <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full shadow-[inset_0_-2px_8px_rgba(128,128,128,0.5)]' />
+      <div class='bg-primary-inner-surface relative flex w-full flex-col items-center px-3.5 pt-6 pb-0 lg:flex-row lg:pt-4 lg:pb-4'>
+        <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full' />
 
         <div
           class='group border-secondary-border relative z-10 h-auto w-52 max-w-1/2 border lg:w-42'
@@ -108,10 +110,40 @@ function BrowseAlbum(props: BrowseAlbumProps) {
 
         <div class='mt-6 flex w-full flex-col items-start lg:mt-4 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
           <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo text-2xl font-black tracking-tighter lg:mb-1 lg:text-3xl' />
-          <MarqueeParagraph class='archivo text-secondary-text mt-0.5' text={album()?.artist || '[unknown]'} />
+          <MarqueeParagraph
+            onClick={() => {
+              const artistId = album()?.artistId;
+              if (artistId) navigate(resolveArtistRoute(artistId, props.routeVariant ?? 'desktop'));
+            }}
+            class='archivo text-secondary-text hover:text-accent mt-0.5 cursor-pointer'
+            text={album()?.artist || '[unknown]'}
+          />
           <Show when={infoText()}>
             <p class='archivo text-secondary-text mt-1.5 text-[12px]'>{infoText()}</p>
           </Show>
+
+          <div class='mt-3 mb-3 flex flex-row gap-2 lg:mt-auto'>
+            <button
+              class='button-borderless flex items-center gap-1.5'
+              onClick={() => {
+                const albumId = album()?.id;
+                if (albumId) insertAfterCurrent([{ type: 'album', albumId }]);
+              }}
+            >
+              <Icon icon='material-symbols:next-plan' />
+              play next
+            </button>
+            <button
+              class='button-borderless flex items-center gap-1.5'
+              onClick={() => {
+                const albumId = album()?.id;
+                if (albumId) appendToQueue([{ type: 'album', albumId }]);
+              }}
+            >
+              <Icon icon='material-symbols:playlist-add' />
+              add to queue
+            </button>
+          </div>
         </div>
       </div>
 

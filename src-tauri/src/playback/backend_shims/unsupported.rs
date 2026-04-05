@@ -30,6 +30,10 @@ impl PlaybackBackend for UnsupportedPlaybackBackend {
         Err("Playback backend is only implemented for Windows and Android.".to_string())
     }
 
+    fn resume(&mut self) -> Result<(), String> {
+        Err("Playback backend is only implemented for Windows and Android.".to_string())
+    }
+
     fn stop(&mut self) -> Result<(), String> {
         Ok(())
     }

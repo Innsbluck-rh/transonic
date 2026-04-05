@@ -7,9 +7,9 @@ use crate::{
     },
     commands::common::{client, format_api_error},
     models::{
-        CapabilityMatrix, PlaybackPlayAlbumRequest, PlaybackPlayFolderAlbumRequest,
-        PlaybackPlayQueueIndexRequest, PlaybackPlaySongsRequest, PlaybackSeekRequest,
-        PlaybackSetQueueRequest, PlaybackStatus, SongResponse,
+        CapabilityMatrix, PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest,
+        PlaybackPlayQueueIndexRequest, PlaybackSeekRequest, PlaybackSetQueueRequest,
+        PlaybackStatus, QueueSource, SongResponse,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
@@ -37,33 +37,200 @@ fn active_profile_id(state: &ActiveSessionState) -> Result<String, String> {
     Ok(session.profile_id.clone())
 }
 
+async fn flatten_queue_sources(
+    app: &AppHandle,
+    items: Vec<QueueSource>,
+) -> Result<Vec<SongResponse>, String> {
+    let needs_resolution = items
+        .iter()
+        .any(|item| !matches!(item, QueueSource::Songs { .. }));
+
+    if !needs_resolution {
+        return Ok(items
+            .into_iter()
+            .flat_map(|item| match item {
+                QueueSource::Songs { songs } => songs,
+                _ => unreachable!(),
+            })
+            .collect());
+    }
+
+    let active_client = {
+        let sessions = app.state::<ActiveSessionState>();
+        client(app, &sessions.0)?
+    };
+
+    let mut songs = Vec::new();
+    for item in items {
+        match item {
+            QueueSource::Songs { songs: s } => songs.extend(s),
+            QueueSource::Album { album_id } => {
+                let trimmed = album_id.trim().to_string();
+                if trimmed.is_empty() {
+                    return Err("albumId is required.".to_string());
+                }
+                let result = load_album_songs_from_client(&active_client, &trimmed)
+                    .await
+                    .map_err(format_api_error)?;
+                songs.extend(result.songs);
+            }
+            QueueSource::FolderAlbum {
+                library_id,
+                node_id,
+                album_id,
+            } => {
+                let lib_id = library_id.trim().to_string();
+                let nd_id = node_id.trim().to_string();
+                let alb_id = album_id.trim().to_string();
+                if lib_id.is_empty() {
+                    return Err("libraryId is required.".to_string());
+                }
+                if nd_id.is_empty() {
+                    return Err("nodeId is required.".to_string());
+                }
+                if alb_id.is_empty() {
+                    return Err("albumId is required.".to_string());
+                }
+                let result =
+                    load_folder_album_songs_from_client(&active_client, &lib_id, &nd_id, &alb_id)
+                        .await
+                        .map_err(format_api_error)?;
+                songs.extend(result.songs);
+            }
+        }
+    }
+    Ok(songs)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn playback_get_state(
+    app: AppHandle,
     state: State<'_, PlaybackControllerState>,
 ) -> Result<PlaybackStatus, String> {
     let mut controller = state
         .0
         .lock()
         .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-    controller.synced_state()
+
+    // Try to build a runtime context so that native events (e.g. track-ended)
+    // can trigger auto-advance.  Falls back to context-free polling if the
+    // active session is not available.
+    let sessions = app.state::<ActiveSessionState>();
+    let cover_art_cache = app.state::<CoverArtCacheState>();
+
+    let context_parts = (|| -> Result<_, String> {
+        let cm = active_capability_matrix(&sessions)?;
+        let pid = active_profile_id(&sessions)?;
+        let cl = client(&app, &sessions.0)?;
+        Ok((cl, cm, pid))
+    })();
+
+    match context_parts {
+        Ok((ref cl, ref cm, ref pid)) => {
+            let rc = PlaybackRuntimeContext {
+                client: cl,
+                capability_matrix: cm,
+                cover_art_cache: Some(&cover_art_cache.0),
+                profile_id: Some(pid.as_str()),
+            };
+            controller.synced_state_with_context(Some(&rc))
+        }
+        Err(_) => controller.synced_state(),
+    }
 }
 
 #[tauri::command]
 #[specta::specta]
 pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let result = (|| -> Result<(), String> {
+    tauri::async_runtime::spawn(async move {
+        let result: Result<(), String> = async {
+            let songs = flatten_queue_sources(&app, payload.items).await?;
+
+            let current_index = payload
+                .current_index
+                .or_else(|| (!songs.is_empty()).then_some(0));
+
             let playback = app.state::<PlaybackControllerState>();
             let mut controller = playback
                 .0
                 .lock()
                 .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.set_queue(payload).map(|_| ())
-        })();
+            controller.set_queue(songs, current_index)?;
+
+            if payload.auto_play {
+                let sessions = app.state::<ActiveSessionState>();
+                let cover_art_cache = app.state::<CoverArtCacheState>();
+                let active_capability_matrix = active_capability_matrix(&sessions)?;
+                let active_profile_id = active_profile_id(&sessions)?;
+                let active_client = client(&app, &sessions.0)?;
+                let runtime_context = PlaybackRuntimeContext {
+                    client: &active_client,
+                    capability_matrix: &active_capability_matrix,
+                    cover_art_cache: Some(&cover_art_cache.0),
+                    profile_id: Some(&active_profile_id),
+                };
+                controller.play(&runtime_context)?;
+            }
+
+            Ok(())
+        }
+        .await;
 
         if let Err(error) = result {
             log::error!("playback_set_queue: failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn playback_insert_after_current(
+    app: AppHandle,
+    payload: PlaybackInsertAfterCurrentRequest,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn(async move {
+        let result: Result<(), String> = async {
+            let songs = flatten_queue_sources(&app, payload.items).await?;
+
+            let playback = app.state::<PlaybackControllerState>();
+            let mut controller = playback
+                .0
+                .lock()
+                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+            controller.insert_after_current(songs).map(|_| ())
+        }
+        .await;
+
+        if let Err(error) = result {
+            log::error!("playback_insert_after_current: failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn playback_append_to_queue(
+    app: AppHandle,
+    payload: PlaybackAppendToQueueRequest,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn(async move {
+        let result: Result<(), String> = async {
+            let songs = flatten_queue_sources(&app, payload.items).await?;
+
+            let playback = app.state::<PlaybackControllerState>();
+            let mut controller = playback
+                .0
+                .lock()
+                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+            controller.append_to_queue(songs).map(|_| ())
+        }
+        .await;
+
+        if let Err(error) = result {
+            log::error!("playback_append_to_queue: failed: {error}");
         }
     });
     Ok(())
@@ -142,121 +309,6 @@ pub fn playback_play(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 #[specta::specta]
-pub fn playback_play_album(
-    app: AppHandle,
-    payload: PlaybackPlayAlbumRequest,
-) -> Result<(), String> {
-    tauri::async_runtime::spawn(async move {
-        let result: Result<(), String> = async {
-            let trimmed_album_id = payload.album_id.trim().to_string();
-            if trimmed_album_id.is_empty() {
-                return Err("albumId is required.".to_string());
-            }
-
-            let (active_capability_matrix, active_profile_id, active_client) = {
-                let sessions = app.state::<ActiveSessionState>();
-                let cap = active_capability_matrix(&sessions)?;
-                let pid = active_profile_id(&sessions)?;
-                let cli = client(&app, &sessions.0)?;
-                (cap, pid, cli)
-            };
-
-            let songs = load_album_songs_from_client(&active_client, &trimmed_album_id)
-                .await
-                .map_err(format_api_error)?
-                .songs;
-
-            let cover_art_cache = app.state::<CoverArtCacheState>();
-            let playback = app.state::<PlaybackControllerState>();
-            let runtime_context = PlaybackRuntimeContext {
-                client: &active_client,
-                capability_matrix: &active_capability_matrix,
-                cover_art_cache: Some(&cover_art_cache.0),
-                profile_id: Some(&active_profile_id),
-            };
-
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            replace_queue_and_play(&mut controller, &runtime_context, songs, None).map(|_| ())
-        }
-        .await;
-
-        if let Err(error) = result {
-            log::error!("playback_play_album: failed: {error}");
-        }
-    });
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn playback_play_folder_album(
-    app: AppHandle,
-    payload: PlaybackPlayFolderAlbumRequest,
-) -> Result<(), String> {
-    tauri::async_runtime::spawn(async move {
-        let result: Result<(), String> = async {
-            let library_id = payload.library_id.trim().to_string();
-            if library_id.is_empty() {
-                return Err("libraryId is required.".to_string());
-            }
-
-            let node_id = payload.node_id.trim().to_string();
-            if node_id.is_empty() {
-                return Err("nodeId is required.".to_string());
-            }
-
-            let album_id = payload.album_id.trim().to_string();
-            if album_id.is_empty() {
-                return Err("albumId is required.".to_string());
-            }
-
-            let (active_capability_matrix, active_profile_id, active_client) = {
-                let sessions = app.state::<ActiveSessionState>();
-                let cap = active_capability_matrix(&sessions)?;
-                let pid = active_profile_id(&sessions)?;
-                let cli = client(&app, &sessions.0)?;
-                (cap, pid, cli)
-            };
-
-            let songs = load_folder_album_songs_from_client(
-                &active_client,
-                &library_id,
-                &node_id,
-                &album_id,
-            )
-            .await
-            .map_err(format_api_error)?
-            .songs;
-
-            let cover_art_cache = app.state::<CoverArtCacheState>();
-            let playback = app.state::<PlaybackControllerState>();
-            let runtime_context = PlaybackRuntimeContext {
-                client: &active_client,
-                capability_matrix: &active_capability_matrix,
-                cover_art_cache: Some(&cover_art_cache.0),
-                profile_id: Some(&active_profile_id),
-            };
-
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            replace_queue_and_play(&mut controller, &runtime_context, songs, None).map(|_| ())
-        }
-        .await;
-
-        if let Err(error) = result {
-            log::error!("playback_play_folder_album: failed: {error}");
-        }
-    });
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub fn playback_pause(app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
@@ -273,63 +325,6 @@ pub fn playback_pause(app: AppHandle) -> Result<(), String> {
         }
     });
     Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
-pub fn playback_play_songs(
-    app: AppHandle,
-    payload: PlaybackPlaySongsRequest,
-) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let result = (|| -> Result<(), String> {
-            let sessions = app.state::<ActiveSessionState>();
-            let cover_art_cache = app.state::<CoverArtCacheState>();
-            let playback = app.state::<PlaybackControllerState>();
-
-            let active_capability_matrix = active_capability_matrix(&sessions)?;
-            let active_profile_id = active_profile_id(&sessions)?;
-            let active_client = client(&app, &sessions.0)?;
-            let runtime_context = PlaybackRuntimeContext {
-                client: &active_client,
-                capability_matrix: &active_capability_matrix,
-                cover_art_cache: Some(&cover_art_cache.0),
-                profile_id: Some(&active_profile_id),
-            };
-
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            replace_queue_and_play(
-                &mut controller,
-                &runtime_context,
-                payload.songs,
-                Some(payload.start_index),
-            )
-            .map(|_| ())
-        })();
-
-        if let Err(error) = result {
-            log::error!("playback_play_songs: failed: {error}");
-        }
-    });
-    Ok(())
-}
-
-fn replace_queue_and_play(
-    controller: &mut crate::playback::PlaybackController,
-    runtime_context: &PlaybackRuntimeContext<'_>,
-    songs: Vec<SongResponse>,
-    start_index: Option<u32>,
-) -> Result<PlaybackStatus, String> {
-    let current_index = start_index.or_else(|| (!songs.is_empty()).then_some(0));
-
-    controller.set_queue(PlaybackSetQueueRequest {
-        entries: songs,
-        current_index,
-    })?;
-    controller.play(runtime_context)
 }
 
 #[tauri::command]

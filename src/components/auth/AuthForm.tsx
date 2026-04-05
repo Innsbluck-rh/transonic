@@ -30,72 +30,70 @@ const AuthForm: Component<AuthFormProps> = (props) => {
 
   return (
     <form
-      class='flex flex-col gap-2'
+      class='flex w-full flex-col gap-3'
       onSubmit={(e) => {
         e.preventDefault();
         props.onSubmit(formData);
       }}
     >
-      <label class='flex flex-row items-center'>
-        <span class='w-30'>Display name</span>
-        <input
-          class='w-70'
-          type='text'
-          value={formData.displayName}
-          onInput={(event) => setFormData('displayName', event.currentTarget.value)}
-          placeholder='Office Navidrome'
-          autocomplete='off'
-        />
-      </label>
-
-      <label class='flex flex-row items-center'>
-        <span class='w-30'>Server URL</span>
-        <input
-          class='w-70'
-          type='url'
-          value={formData.serverUrl}
-          onInput={(event) => setFormData('serverUrl', event.currentTarget.value)}
-          placeholder='https://your-server.example'
-          autocomplete='url'
-          required
-        />
-      </label>
-
-      <label class='flex flex-row items-center'>
-        <span class='w-30'>Auth method</span>
-        <select class='w-70' value={formData.authKind} onInput={(event) => setFormData('authKind', event.currentTarget.value as AuthKind)}>
-          <option value='password'>Password token</option>
-          <option value='api_key'>API key</option>
-        </select>
-      </label>
-
-      <Show when={formData.authKind === 'password'}>
-        <label class='flex flex-row items-center'>
-          <span class='w-30'>Username</span>
+      <div class='grid grid-cols-[auto_1fr] gap-x-3 gap-y-3'>
+        <label class='contents items-center'>
+          <span>Display name</span>
           <input
-            class='w-70'
             type='text'
-            value={formData.username}
-            onInput={(event) => setFormData('username', event.currentTarget.value)}
-            placeholder='demo'
-            autocomplete='username'
+            value={formData.displayName}
+            onInput={(event) => setFormData('displayName', event.currentTarget.value)}
+            placeholder='Office Navidrome'
+            autocomplete='off'
+          />
+        </label>
+
+        <label class='contents items-center'>
+          <span>Server URL</span>
+          <input
+            type='url'
+            value={formData.serverUrl}
+            onInput={(event) => setFormData('serverUrl', event.currentTarget.value)}
+            placeholder='https://your-server.example'
+            autocomplete='url'
             required
           />
         </label>
-      </Show>
 
-      <label class='flex flex-row items-center'>
-        <span class='w-30'>{formData.authKind === 'password' ? 'Password' : 'API key'}</span>
-        <input
-          class='w-70'
-          type={formData.authKind === 'password' ? 'password' : 'text'}
-          value={formData.secret}
-          onInput={(event) => setFormData('secret', event.currentTarget.value)}
-          placeholder={formData.authKind === 'password' ? 'Your account password' : 'Paste an OpenSubsonic API key'}
-          autocomplete={formData.authKind === 'password' ? 'current-password' : 'off'}
-          required
-        />
-      </label>
+        <label class='contents items-center'>
+          <span>Auth method</span>
+          <select value={formData.authKind} onInput={(event) => setFormData('authKind', event.currentTarget.value as AuthKind)}>
+            <option value='password'>Password token</option>
+            <option value='api_key'>API key</option>
+          </select>
+        </label>
+
+        <Show when={formData.authKind === 'password'}>
+          <label class='contents items-center'>
+            <span>Username</span>
+            <input
+              type='text'
+              value={formData.username}
+              onInput={(event) => setFormData('username', event.currentTarget.value)}
+              placeholder='demo'
+              autocomplete='username'
+              required
+            />
+          </label>
+        </Show>
+
+        <label class='contents items-center'>
+          <span>{formData.authKind === 'password' ? 'Password' : 'API key'}</span>
+          <input
+            type={formData.authKind === 'password' ? 'password' : 'text'}
+            value={formData.secret}
+            onInput={(event) => setFormData('secret', event.currentTarget.value)}
+            placeholder={formData.authKind === 'password' ? 'Your account password' : 'Paste an OpenSubsonic API key'}
+            autocomplete={formData.authKind === 'password' ? 'current-password' : 'off'}
+            required
+          />
+        </label>
+      </div>
 
       <div class='flex flex-row gap-1'>
         <button class='disabled:text-zinc-400' type='submit' disabled={props.busy}>

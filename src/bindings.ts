@@ -165,6 +165,22 @@ async playbackSetQueue(payload: PlaybackSetQueueRequest) : Promise<Result<null, 
     else return { status: "error", error: e  as any };
 }
 },
+async playbackInsertAfterCurrent(payload: PlaybackInsertAfterCurrentRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_insert_after_current", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackAppendToQueue(payload: PlaybackAppendToQueueRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_append_to_queue", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async playbackPlayQueueIndex(payload: PlaybackPlayQueueIndexRequest) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_play_queue_index", { payload }) };
@@ -176,30 +192,6 @@ async playbackPlayQueueIndex(payload: PlaybackPlayQueueIndexRequest) : Promise<R
 async playbackPlay() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_play") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async playbackPlayAlbum(payload: PlaybackPlayAlbumRequest) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("playback_play_album", { payload }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async playbackPlayFolderAlbum(payload: PlaybackPlayFolderAlbumRequest) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("playback_play_folder_album", { payload }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async playbackPlaySongs(payload: PlaybackPlaySongsRequest) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("playback_play_songs", { payload }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -311,15 +303,15 @@ export type MusicDirectoryResponse = { id: string; name: string; children: Music
 export type MusicFolderSummary = { id: string; name: string }
 export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
-export type PlaybackPlayAlbumRequest = { albumId: string }
-export type PlaybackPlayFolderAlbumRequest = { libraryId: string; nodeId: string; albumId: string }
+export type PlaybackAppendToQueueRequest = { items: QueueSource[] }
+export type PlaybackInsertAfterCurrentRequest = { items: QueueSource[] }
 export type PlaybackPlayQueueIndexRequest = { index: number }
-export type PlaybackPlaySongsRequest = { songs: SongResponse[]; startIndex: number }
 export type PlaybackSeekRequest = { positionMs: number }
-export type PlaybackSetQueueRequest = { entries: SongResponse[]; currentIndex: number | null }
+export type PlaybackSetQueueRequest = { items: QueueSource[]; currentIndex: number | null; autoPlay: boolean }
 export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; queue: SongResponse[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
 export type PlayingState = "idle" | "playing" | "paused" | "stopped" | "interrupted" | "error"
 export type ProfileIdRequest = { profileId: string }
+export type QueueSource = { type: "songs"; songs: SongResponse[] } | { type: "album"; albumId: string } | { type: "folder_album"; libraryId: string; nodeId: string; albumId: string }
 export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"
 export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }
 export type SongRequest = { id: string }

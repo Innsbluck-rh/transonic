@@ -18,6 +18,9 @@ enum PlaybackJob {
     Pause {
         result_tx: std::sync::mpsc::Sender<Result<(), String>>,
     },
+    Resume {
+        result_tx: std::sync::mpsc::Sender<Result<(), String>>,
+    },
     Stop {
         result_tx: std::sync::mpsc::Sender<Result<(), String>>,
     },
@@ -89,6 +92,10 @@ impl PlaybackBackend for WindowsPlaybackBackend {
         self.request_result(|result_tx| PlaybackJob::Pause { result_tx })
     }
 
+    fn resume(&mut self) -> Result<(), String> {
+        self.request_result(|result_tx| PlaybackJob::Resume { result_tx })
+    }
+
     fn stop(&mut self) -> Result<(), String> {
         self.request_result(|result_tx| PlaybackJob::Stop { result_tx })
     }
@@ -107,6 +114,9 @@ fn playback_worker_loop(rx: std::sync::mpsc::Receiver<PlaybackJob>) {
             }
             PlaybackJob::Pause { result_tx } => {
                 let _ = result_tx.send(worker.pause());
+            }
+            PlaybackJob::Resume { result_tx } => {
+                let _ = result_tx.send(worker.resume());
             }
             PlaybackJob::Stop { result_tx } => {
                 let _ = result_tx.send(worker.stop());
@@ -221,6 +231,15 @@ impl WindowsPlaybackWorker {
             return Err("No stream is loaded for playback.".to_string());
         };
         sink.pause();
+        Ok(())
+    }
+
+    fn resume(&mut self) -> Result<(), String> {
+        let Some(sink) = self.sink.as_ref() else {
+            log::warn!("backend.resume: no sink is loaded");
+            return Err("No stream is loaded for playback.".to_string());
+        };
+        sink.play();
         Ok(())
     }
 

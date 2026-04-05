@@ -91,14 +91,12 @@ function InitLogin() {
   return (
     <div class='flex min-h-0 w-full flex-1 flex-col'>
       <Header title='Login to server' shouldShowProfiles={false} />
-      <div class='bg-primary-surface flex h-full w-full flex-col items-center justify-center'>
-        <div class='bg-primary-plane border-primary-border flex flex-col gap-3 rounded-md border p-7'>
-          <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
+      <div class='bg-primary-surface flex h-full w-full flex-col items-center justify-center gap-3 p-8'>
+        <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
 
-          <Show when={submitError()}>
-            <ErrorMsg>{submitError()}</ErrorMsg>
-          </Show>
-        </div>
+        <Show when={submitError()}>
+          <ErrorMsg>{submitError()}</ErrorMsg>
+        </Show>
       </div>
     </div>
   );

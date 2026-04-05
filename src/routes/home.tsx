@@ -4,6 +4,7 @@ import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings'
 import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
 import AlbumHorizontalList from '~/components/common/list/album/AlbumHorizontalList';
+import { buildAlbumMenuItems, showContextMenu } from '~/features/menu';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
@@ -20,7 +21,7 @@ const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> 
 
 function Home() {
   const navigate = useNavigate();
-  const { playAlbum } = usePlayback();
+  const { playAlbum, insertAfterCurrent, appendToQueue } = usePlayback();
   const [albumSections, setAlbumSections] = createSignal<HomeAlbumSection[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = createSignal(false);
   const [albumError, setAlbumError] = createSignal<string | null>(null);
@@ -106,6 +107,9 @@ function Home() {
                   emptyMessage={`No albums returned for ${section.heading}.`}
                   onItemClick={async (album) => {
                     navigate(`/browse/album/${album.id}`);
+                  }}
+                  onItemContextMenu={(album, e) => {
+                    showContextMenu(e, buildAlbumMenuItems({ type: 'album', albumId: album.id }, { insertAfterCurrent, appendToQueue }));
                   }}
                 />
               </div>

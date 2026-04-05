@@ -2,14 +2,16 @@ import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createResource, createSignal, Show } from 'solid-js';
 import { commands, type ArtistInfo2Response, type ArtistResponse } from '~/bindings';
 import Heading2 from '~/components/common/Heading2';
-import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
 import { AlbumItem } from '~/components/common/list/album/item/AlbumGridItem';
 import { type BrowseListItem } from '~/components/common/list/index/BrowseList';
+import LoadCircle from '~/components/common/LoadCircle';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { fetchArtistImageAssetUrl } from '~/features/artist/service';
+import { buildAlbumMenuItems, showContextMenu } from '~/features/menu';
 import { resolveAlbumRoute, resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
 const ARTIST_COVER_ART_SIZE = 320;
@@ -22,6 +24,7 @@ interface BrowseArtistProps extends Partial<RouteSectionProps<unknown>> {
 function BrowseArtist(props: BrowseArtistProps) {
   const params = useParams();
   const navigate = useSPNavigate();
+  const { insertAfterCurrent, appendToQueue } = usePlayback();
 
   const [artist, setArtist] = createSignal<ArtistResponse | null>(null);
   const [artistInfo, setArtistInfo] = createSignal<ArtistInfo2Response | null>(null);
@@ -68,6 +71,7 @@ function BrowseArtist(props: BrowseArtistProps) {
 
   const [failedSrc, setFailedSrc] = createSignal<string | null>(null);
   const effectiveArtistImageSrc = createMemo(() => {
+    if (artistImage.loading) return null;
     const src = artistImage() ?? null;
     return src !== null && src === failedSrc() ? null : src;
   });
@@ -94,6 +98,7 @@ function BrowseArtist(props: BrowseArtistProps) {
 
     setIsLoading(true);
     setError(null);
+    setFailedSrc(null);
 
     try {
       const [artistResult, infoResult] = await Promise.all([
@@ -171,7 +176,6 @@ function BrowseArtist(props: BrowseArtistProps) {
                   </Show>
                 </div>
                 <div class='bg-primary-inner-surface absolute top-0 right-0 bottom-0 left-0 flex h-full w-full opacity-75' />
-                <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full shadow-[inset_0_-2px_8px_rgba(128,128,128,0.5)]' />
                 <p class='archivo text-primary-text absolute bottom-0 left-0 z-10 m-4 w-full text-2xl font-black'>{artistValue().name}</p>
               </div>
 
@@ -182,6 +186,9 @@ function BrowseArtist(props: BrowseArtistProps) {
                   emptyMessage='No ID3 albums returned for this artist.'
                   onItemClick={(album) => {
                     navigate(resolveAlbumRoute(album.id, props.routeVariant ?? 'desktop'));
+                  }}
+                  onItemContextMenu={(album, e) => {
+                    showContextMenu(e, buildAlbumMenuItems({ type: 'album', albumId: album.id }, { insertAfterCurrent, appendToQueue }));
                   }}
                 />
               </div>

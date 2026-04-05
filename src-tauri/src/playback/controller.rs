@@ -5,10 +5,8 @@ use opensubsonic_client::{
 
 use crate::{
     cover_art_cache::CoverArtCache,
-    models::{
-        CapabilityMatrix, InterruptReason, PlaybackSetQueueRequest, PlaybackStatus, PlayingState,
-        SongResponse,
-    },
+    models::{CapabilityMatrix, InterruptReason, PlaybackStatus, PlayingState, SongResponse},
+    playback_state::{PlaybackStateFile, PlaybackStatePersister},
 };
 
 use super::{
@@ -30,8 +28,10 @@ pub struct PlaybackController {
     reporter: Box<dyn PlaybackReporter>,
     queue_sync: Box<dyn QueueSyncGateway>,
     native_events: Box<dyn NativePlaybackEventSource>,
+    persister: Box<dyn PlaybackStatePersister>,
     status: PlaybackStatus,
     interrupted_resume_state: Option<PlayingState>,
+    active_profile_id: Option<String>,
 }
 
 impl PlaybackController {
@@ -40,15 +40,64 @@ impl PlaybackController {
         reporter: Box<dyn PlaybackReporter>,
         queue_sync: Box<dyn QueueSyncGateway>,
         native_events: Box<dyn NativePlaybackEventSource>,
+        persister: Box<dyn PlaybackStatePersister>,
     ) -> Self {
         Self {
             backend,
             reporter,
             queue_sync,
             native_events,
+            persister,
             status: PlaybackStatus::empty(),
             interrupted_resume_state: None,
+            active_profile_id: None,
         }
+    }
+
+    pub fn set_active_profile_id(&mut self, profile_id: Option<String>) {
+        self.active_profile_id = profile_id;
+    }
+
+    pub fn restore_state(
+        &mut self,
+        profile_id: String,
+        queue: Vec<SongResponse>,
+        current_index: Option<u32>,
+        current_position_ms: u32,
+    ) -> PlaybackStatus {
+        if let Err(error) = validate_queue_index(&queue, current_index) {
+            log::warn!(
+                "controller.restore_state: invalid persisted index, starting fresh: {error}"
+            );
+            self.active_profile_id = Some(profile_id);
+            return self.state();
+        }
+
+        let next_song_id = current_song_id(&queue, current_index);
+        self.status.queue = queue;
+        self.status.current_index = current_index;
+        self.status.current_position_ms = current_position_ms;
+        self.status.current_song_id = next_song_id;
+        self.status.playing_state = if self.status.queue.is_empty() {
+            PlayingState::Idle
+        } else {
+            PlayingState::Stopped
+        };
+        self.status.error = None;
+        self.status.interrupt_reason = None;
+        self.status.pending_seek_position_ms = None;
+        self.interrupted_resume_state = None;
+        self.active_profile_id = Some(profile_id);
+
+        log::info!(
+            "controller.restore_state: restored queue_len={} current_index={:?} position_ms={}",
+            self.status.queue.len(),
+            self.status.current_index,
+            self.status.current_position_ms,
+        );
+
+        self.report_status();
+        self.state()
     }
 
     pub fn state(&self) -> PlaybackStatus {
@@ -56,7 +105,14 @@ impl PlaybackController {
     }
 
     pub fn synced_state(&mut self) -> Result<PlaybackStatus, String> {
-        self.process_native_events_inner(None, false)?;
+        self.synced_state_with_context(None)
+    }
+
+    pub fn synced_state_with_context(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<PlaybackStatus, String> {
+        self.process_native_events_inner(context, false)?;
         self.sync_current_position_from_backend()?;
         Ok(self.state())
     }
@@ -72,15 +128,16 @@ impl PlaybackController {
 
     pub fn set_queue(
         &mut self,
-        payload: PlaybackSetQueueRequest,
+        entries: Vec<SongResponse>,
+        current_index: Option<u32>,
     ) -> Result<PlaybackStatus, String> {
-        validate_queue_index(&payload.entries, payload.current_index)?;
+        validate_queue_index(&entries, current_index)?;
         self.backend.stop()?;
         self.clear_native_events();
 
-        let next_song_id = current_song_id(&payload.entries, payload.current_index);
-        self.status.queue = payload.entries;
-        self.status.current_index = payload.current_index;
+        let next_song_id = current_song_id(&entries, current_index);
+        self.status.queue = entries;
+        self.status.current_index = current_index;
         self.status.current_position_ms = 0;
         self.status.current_song_id = next_song_id;
         self.status.error = None;
@@ -109,12 +166,94 @@ impl PlaybackController {
         }
 
         self.sync_queue_state();
+        self.persist_state();
+        self.report_status();
+        Ok(self.state())
+    }
+
+    pub fn insert_after_current(
+        &mut self,
+        songs: Vec<SongResponse>,
+    ) -> Result<PlaybackStatus, String> {
+        if songs.is_empty() {
+            return Ok(self.state());
+        }
+
+        if self.status.queue.is_empty() {
+            let next_song_id = current_song_id(&songs, Some(0));
+            self.status.queue = songs;
+            self.status.current_index = Some(0);
+            self.status.current_song_id = next_song_id;
+            self.status.playing_state = PlayingState::Stopped;
+            log::info!(
+                "controller.insert_after_current: initialized empty queue with {} songs",
+                self.status.queue.len()
+            );
+        } else {
+            let insert_pos = match self.status.current_index {
+                Some(idx) => (idx as usize)
+                    .saturating_add(1)
+                    .min(self.status.queue.len()),
+                None => 0,
+            };
+            let count = songs.len();
+            for (i, song) in songs.into_iter().enumerate() {
+                self.status.queue.insert(insert_pos + i, song);
+            }
+            log::info!(
+                "controller.insert_after_current: inserted {count} songs at position {insert_pos}, queue_len={}",
+                self.status.queue.len()
+            );
+        }
+
+        self.persist_state();
+        self.report_status();
+        Ok(self.state())
+    }
+
+    pub fn append_to_queue(&mut self, songs: Vec<SongResponse>) -> Result<PlaybackStatus, String> {
+        if songs.is_empty() {
+            return Ok(self.state());
+        }
+
+        if self.status.queue.is_empty() {
+            let next_song_id = current_song_id(&songs, Some(0));
+            self.status.queue = songs;
+            self.status.current_index = Some(0);
+            self.status.current_song_id = next_song_id;
+            self.status.playing_state = PlayingState::Stopped;
+            log::info!(
+                "controller.append_to_queue: initialized empty queue with {} songs",
+                self.status.queue.len()
+            );
+        } else {
+            let count = songs.len();
+            self.status.queue.extend(songs);
+            log::info!(
+                "controller.append_to_queue: appended {count} songs, queue_len={}",
+                self.status.queue.len()
+            );
+        }
+
+        self.persist_state();
         self.report_status();
         Ok(self.state())
     }
 
     pub fn play(&mut self, context: &PlaybackRuntimeContext<'_>) -> Result<PlaybackStatus, String> {
         let index = self.ensure_current_index()?;
+
+        // If the track is already loaded and paused, resume without reloading.
+        if self.status.playing_state == PlayingState::Paused {
+            self.backend.resume()?;
+            self.status.playing_state = PlayingState::Playing;
+            self.status.error = None;
+            self.status.interrupt_reason = None;
+            self.process_native_events_inner(Some(context), false)?;
+            self.report_status();
+            return Ok(self.state());
+        }
+
         let requested_position_ms = self.status.current_position_ms;
         self.load_track_at_index(context, index, requested_position_ms, true)?;
         self.process_native_events_inner(Some(context), false)?;
@@ -145,6 +284,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
 
+        self.persist_state();
         self.play(context)
     }
 
@@ -157,6 +297,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
         self.process_native_events_inner(None, false)?;
+        self.persist_state();
         self.report_status();
         Ok(self.state())
     }
@@ -170,6 +311,7 @@ impl PlaybackController {
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
+        self.persist_state();
         self.report_status();
         Ok(self.state())
     }
@@ -268,6 +410,7 @@ impl PlaybackController {
             self.interrupted_resume_state = None;
         }
 
+        self.persist_state();
         self.process_native_events_inner(Some(context), false)?;
         self.report_status();
         Ok(self.state())
@@ -297,6 +440,7 @@ impl PlaybackController {
             self.interrupted_resume_state = None;
         }
 
+        self.persist_state();
         self.process_native_events_inner(Some(context), false)?;
         self.report_status();
         Ok(self.state())
@@ -323,9 +467,42 @@ impl PlaybackController {
         self.clear_native_events();
         self.status = PlaybackStatus::empty();
         self.interrupted_resume_state = None;
+        self.active_profile_id = None;
         self.sync_queue_state();
+        self.persist_state();
         self.report_status();
         self.state()
+    }
+
+    /// Save the current playback state to persistent storage for later restoration.
+    /// Only saves when an active profile_id is set. Failures are logged but not propagated.
+    pub fn persist_state(&self) {
+        let Some(profile_id) = &self.active_profile_id else {
+            return;
+        };
+
+        let state_file = PlaybackStateFile {
+            version: 1,
+            profile_id: profile_id.clone(),
+            queue: self.status.queue.clone(),
+            current_index: self.status.current_index,
+            current_position_ms: self.status.current_position_ms,
+        };
+
+        if let Err(error) = self.persister.save(&state_file) {
+            log::warn!("controller.persist_state: failed to save: {error}");
+        }
+    }
+
+    /// Sync position from backend and persist. Used for app exit handler.
+    pub fn sync_and_persist(&mut self) {
+        if self.active_profile_id.is_none() {
+            return;
+        }
+        if matches!(self.status.playing_state, PlayingState::Playing) {
+            let _ = self.sync_current_position_from_backend();
+        }
+        self.persist_state();
     }
 
     fn ensure_current_index(&mut self) -> Result<u32, String> {
@@ -826,9 +1003,7 @@ mod tests {
 
     use super::{current_song_id, PlaybackController, PlaybackRuntimeContext, PlaybackStatus};
     use crate::{
-        models::{
-            CapabilityMatrix, InterruptReason, PlaybackSetQueueRequest, PlayingState, SongResponse,
-        },
+        models::{CapabilityMatrix, InterruptReason, PlayingState, SongResponse},
         playback::{
             backend_shims::{
                 PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy,
@@ -840,6 +1015,7 @@ mod tests {
             queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
             reporting::PlaybackReporter,
         },
+        playback_state::NoopPlaybackStatePersister,
     };
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -864,6 +1040,7 @@ mod tests {
         seek_behavior: MockSeekBehavior,
         has_failed_first_load: bool,
         pause_calls: usize,
+        resume_calls: usize,
         stop_calls: usize,
     }
 
@@ -943,6 +1120,11 @@ mod tests {
 
         fn pause(&mut self) -> Result<(), String> {
             self.state.lock().unwrap().pause_calls += 1;
+            Ok(())
+        }
+
+        fn resume(&mut self) -> Result<(), String> {
+            self.state.lock().unwrap().resume_calls += 1;
             Ok(())
         }
 
@@ -1051,6 +1233,7 @@ mod tests {
             reporter,
             queue_sync,
             Box::new(NoopNativePlaybackEventSource),
+            Box::new(NoopPlaybackStatePersister),
         );
         (controller, state, reporter_state)
     }
@@ -1083,6 +1266,7 @@ mod tests {
             Box::new(MockNativeEventSource {
                 events: native_events.clone(),
             }),
+            Box::new(NoopPlaybackStatePersister),
         );
         (controller, state, reporter_state, native_events)
     }
@@ -1134,10 +1318,7 @@ mod tests {
     fn set_queue_rejects_out_of_range_current_index() {
         let (mut controller, _, _) = controller_with_mock_backend(false);
 
-        let result = controller.set_queue(PlaybackSetQueueRequest {
-            entries: queue_entries(&["song-a"]),
-            current_index: Some(1),
-        });
+        let result = controller.set_queue(queue_entries(&["song-a"]), Some(1));
 
         assert!(result.is_err());
     }
@@ -1146,10 +1327,7 @@ mod tests {
     fn duplicate_song_ids_are_distinguished_by_index() {
         let (mut controller, _, _) = controller_with_mock_backend(false);
         let status = controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a", "song-a", "song-b"]),
-                current_index: Some(1),
-            })
+            .set_queue(queue_entries(&["song-a", "song-a", "song-b"]), Some(1))
             .unwrap();
 
         assert_eq!(status.current_index, Some(1));
@@ -1167,10 +1345,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a", "song-b"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
             .unwrap();
 
         let prev_result = controller.prev(&runtime_context);
@@ -1192,10 +1367,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
 
         assert_eq!(
@@ -1216,6 +1388,33 @@ mod tests {
     }
 
     #[test]
+    fn play_from_paused_resumes_without_reloading() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(false);
+        let context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["a", "b"]), Some(0))
+            .unwrap();
+        controller.play(&context).unwrap();
+        controller.pause().unwrap();
+
+        // Resume from paused — should NOT trigger a new load.
+        let load_count_before = backend_state.lock().unwrap().load_calls.len();
+        controller.play(&context).unwrap();
+        let state = backend_state.lock().unwrap();
+        assert_eq!(state.load_calls.len(), load_count_before);
+        assert_eq!(state.resume_calls, 1);
+        drop(state);
+
+        assert_eq!(controller.state().playing_state, PlayingState::Playing);
+    }
+
+    #[test]
     fn synced_state_reads_backend_current_position() {
         let (mut controller, backend_state, _) = controller_with_mock_backend(false);
         let (client, capability_matrix) = runtime_context(true);
@@ -1226,10 +1425,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
 
@@ -1251,10 +1447,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         backend_state.lock().unwrap().current_position_ms = 2_500;
@@ -1275,10 +1468,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a", "song-b"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
 
@@ -1299,10 +1489,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         backend_state.lock().unwrap().current_position_ms = 4_321;
@@ -1329,10 +1516,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a", "song-b"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         native_events
@@ -1363,10 +1547,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         native_events
@@ -1395,10 +1576,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
 
         controller.play(&runtime_context).unwrap();
@@ -1420,10 +1598,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         let seeked = controller.seek(&runtime_context, 5_000).unwrap();
         assert_eq!(seeked.current_position_ms, 5_000);
@@ -1448,10 +1623,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
 
@@ -1476,10 +1648,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
 
@@ -1511,10 +1680,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
 
         controller.seek(&runtime_context, 5_000).unwrap();
@@ -1545,10 +1711,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         backend_state.lock().unwrap().current_position_ms = 1_750;
@@ -1589,10 +1752,7 @@ mod tests {
         };
 
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
 
         let result = controller.play_queue_index(&runtime_context, 1);
@@ -1612,10 +1772,7 @@ mod tests {
         };
 
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a", "song-b"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
             .unwrap();
         controller.seek(&runtime_context, 5_000).unwrap();
 
@@ -1669,10 +1826,7 @@ mod tests {
         };
 
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a", "song-b"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         controller.pause().unwrap();
@@ -1731,10 +1885,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
 
@@ -1762,10 +1913,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         controller.seek(&runtime_context, 5_500).unwrap();
@@ -1797,10 +1945,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
 
@@ -1834,10 +1979,7 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         controller.seek(&runtime_context, 5_500).unwrap();
@@ -1882,19 +2024,13 @@ mod tests {
             profile_id: None,
         };
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
         controller.seek(&runtime_context, 5_500).unwrap();
 
         let status = controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-b"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-b"]), Some(0))
             .unwrap();
 
         assert_eq!(status.playing_state, PlayingState::Stopped);
@@ -1914,10 +2050,7 @@ mod tests {
         };
 
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
 
         let result = controller.play(&runtime_context);
@@ -1959,10 +2092,7 @@ mod tests {
         };
 
         controller
-            .set_queue(PlaybackSetQueueRequest {
-                entries: queue_entries(&["song-a"]),
-                current_index: Some(0),
-            })
+            .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
         controller.play(&runtime_context).unwrap();
 
@@ -1974,5 +2104,112 @@ mod tests {
             reported_states.last().cloned(),
             Some(PlaybackStatus::empty())
         );
+    }
+
+    #[test]
+    fn insert_after_current_into_empty_queue_initializes_queue() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let songs = queue_entries(&["song-x", "song-y"]);
+        let status = controller.insert_after_current(songs).unwrap();
+        assert_eq!(status.queue.len(), 2);
+        assert_eq!(status.current_index, Some(0));
+        assert_eq!(status.current_song_id, Some("song-x".to_string()));
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+    }
+
+    #[test]
+    fn insert_after_current_inserts_after_current_index() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(1))
+            .unwrap();
+
+        let status = controller
+            .insert_after_current(queue_entries(&["song-x", "song-y"]))
+            .unwrap();
+        assert_eq!(status.queue.len(), 5);
+        assert_eq!(status.queue[0].id, "song-a");
+        assert_eq!(status.queue[1].id, "song-b"); // current
+        assert_eq!(status.queue[2].id, "song-x"); // inserted
+        assert_eq!(status.queue[3].id, "song-y"); // inserted
+        assert_eq!(status.queue[4].id, "song-c");
+        assert_eq!(status.current_index, Some(1)); // unchanged
+    }
+
+    #[test]
+    fn insert_after_current_with_empty_songs_is_noop() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        let status = controller.insert_after_current(vec![]).unwrap();
+        assert_eq!(status.queue.len(), 1);
+    }
+
+    #[test]
+    fn append_to_queue_into_empty_queue_initializes_queue() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let songs = queue_entries(&["song-x", "song-y"]);
+        let status = controller.append_to_queue(songs).unwrap();
+        assert_eq!(status.queue.len(), 2);
+        assert_eq!(status.current_index, Some(0));
+        assert_eq!(status.current_song_id, Some("song-x".to_string()));
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+    }
+
+    #[test]
+    fn append_to_queue_appends_to_end() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+
+        let status = controller
+            .append_to_queue(queue_entries(&["song-x", "song-y"]))
+            .unwrap();
+        assert_eq!(status.queue.len(), 4);
+        assert_eq!(status.queue[2].id, "song-x");
+        assert_eq!(status.queue[3].id, "song-y");
+        assert_eq!(status.current_index, Some(0)); // unchanged
+    }
+
+    #[test]
+    fn append_to_queue_with_empty_songs_is_noop() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        let status = controller.append_to_queue(vec![]).unwrap();
+        assert_eq!(status.queue.len(), 1);
+    }
+
+    #[test]
+    fn restore_state_sets_queue_and_stopped_state() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let queue = queue_entries(&["song-a", "song-b", "song-c"]);
+        let status = controller.restore_state("profile-1".to_string(), queue, Some(1), 5000);
+        assert_eq!(status.queue.len(), 3);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("song-b".to_string()));
+        assert_eq!(status.current_position_ms, 5000);
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+    }
+
+    #[test]
+    fn restore_state_with_empty_queue_sets_idle() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let status = controller.restore_state("profile-1".to_string(), vec![], None, 0);
+        assert_eq!(status.playing_state, PlayingState::Idle);
+        assert_eq!(status.queue.len(), 0);
+    }
+
+    #[test]
+    fn restore_state_with_invalid_index_ignores_queue() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let queue = queue_entries(&["song-a"]);
+        let status = controller.restore_state("profile-1".to_string(), queue, Some(5), 0);
+        // Should start fresh - queue not restored
+        assert_eq!(status.queue.len(), 0);
+        assert_eq!(status.playing_state, PlayingState::Idle);
     }
 }

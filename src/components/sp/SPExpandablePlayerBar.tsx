@@ -11,8 +11,8 @@ interface PlayerBarRequest {
 
 const [playerBarRequest, setPlayerBarRequest] = createSignal<PlayerBarRequest | null>(null);
 
-export function openPlayerBar() {
-  setPlayerBarRequest({ expanded: true, immediate: false });
+export function openPlayerBar(immediate = false) {
+  setPlayerBarRequest({ expanded: true, immediate });
 }
 
 export function closePlayerBar(immediate = false) {

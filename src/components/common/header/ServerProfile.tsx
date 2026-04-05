@@ -33,14 +33,14 @@ const ServerProfile: Component<ServerProfileProps> = (props) => {
         class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2'
         onClick={() => setOpen(!open())}
       >
-        <Icon class='text-primary-text' icon='pixelarticons:server' />
+        <Icon class='text-primary-text text-[16px]' icon='pixelarticons:server' />
         {/* <Show when={sessionStore.activeSession}>
           <p class='text-primary-text text-xs font-normal'>{activeProfile()?.displayName}</p>
         </Show> */}
         {/* <div
-          class='opacity-50 w-0 h-0 
-            border-l-[5px] border-l-transparent 
-            border-r-[5px] border-r-transparent 
+          class='opacity-50 w-0 h-0
+            border-l-[5px] border-l-transparent
+            border-r-[5px] border-r-transparent
             border-t-[5px] border-t-zinc-800'
         ></div> */}
       </div>

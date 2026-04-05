@@ -1,6 +1,8 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
+import { buildSongMenuItems, showContextMenu } from '~/features/menu';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { playbackStore } from '~/stores/PlaybackStore';
 
 interface SongListProps {
@@ -25,6 +27,8 @@ function formatDurationSecond(duration: number) {
 }
 
 const SongList: Component<SongListProps> = (props) => {
+  const { insertAfterCurrent, appendToQueue } = usePlayback();
+
   return (
     <div class='flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto'>
       <For
@@ -36,13 +40,18 @@ const SongList: Component<SongListProps> = (props) => {
         }
       >
         {(song, i) => {
+          const onContextMenuEntry = (e: MouseEvent) => {
+            showContextMenu(e, buildSongMenuItems(song, { insertAfterCurrent, appendToQueue }));
+          };
+
           const onClickEntry = () => {
             if (!props.songs) return;
             props.onClickSong?.(song, i(), props.songs);
 
-            commands.playbackPlaySongs({
-              songs: props.songs,
-              startIndex: i(),
+            commands.playbackSetQueue({
+              items: [{ type: 'songs', songs: props.songs }],
+              currentIndex: i(),
+              autoPlay: true,
             });
           };
 
@@ -55,6 +64,7 @@ const SongList: Component<SongListProps> = (props) => {
                 'bg-primary-playing': isPlaying(),
               }}
               onClick={onClickEntry}
+              onContextMenu={onContextMenuEntry}
             >
               <div class='group-hover:text-primary-text flex w-10 flex-row items-start'>
                 <Show
@@ -81,7 +91,7 @@ const SongList: Component<SongListProps> = (props) => {
               </p>
 
               <p
-                class='archivo text-xs'
+                class='archivo group-hover:text-secondary-text text-xs'
                 classList={{
                   'text-secondary-text': !isPlaying(),
                   'text-primary-on-playing': isPlaying(),

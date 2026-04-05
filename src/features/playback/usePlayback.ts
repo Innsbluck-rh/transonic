@@ -1,5 +1,5 @@
 import { createMemo, createSignal } from 'solid-js';
-import { commands, InterruptReason, PlayingState, type SongResponse } from '~/bindings';
+import { commands, InterruptReason, PlayingState, type QueueSource, type SongResponse } from '~/bindings';
 import { hasPlaybackCommandError } from './service';
 
 import { playbackStore } from '~/stores/PlaybackStore';
@@ -151,11 +151,41 @@ export function usePlayback() {
   };
 
   const playAlbum = (albumId: string) => {
-    commands.playbackPlayAlbum({ albumId }).then(hasPlaybackCommandError);
+    commands
+      .playbackSetQueue({
+        items: [{ type: 'album', albumId }],
+        currentIndex: null,
+        autoPlay: true,
+      })
+      .then(hasPlaybackCommandError);
   };
 
   const playFolderAlbum = (libraryId: string, nodeId: string, albumId: string) => {
-    commands.playbackPlayFolderAlbum({ libraryId, nodeId, albumId }).then(hasPlaybackCommandError);
+    commands
+      .playbackSetQueue({
+        items: [{ type: 'folder_album', libraryId, nodeId, albumId }],
+        currentIndex: null,
+        autoPlay: true,
+      })
+      .then(hasPlaybackCommandError);
+  };
+
+  const playSongs = (songs: SongResponse[], startIndex: number) => {
+    commands
+      .playbackSetQueue({
+        items: [{ type: 'songs', songs }],
+        currentIndex: songs.length ? startIndex : null,
+        autoPlay: true,
+      })
+      .then(hasPlaybackCommandError);
+  };
+
+  const insertAfterCurrent = (items: QueueSource[]) => {
+    commands.playbackInsertAfterCurrent({ items }).then(hasPlaybackCommandError);
+  };
+
+  const appendToQueue = (items: QueueSource[]) => {
+    commands.playbackAppendToQueue({ items }).then(hasPlaybackCommandError);
   };
 
   const isQueueIndexActive = (index: number) => currentIndex() === index;
@@ -188,5 +218,8 @@ export function usePlayback() {
     playQueueIndex,
     playAlbum,
     playFolderAlbum,
+    playSongs,
+    insertAfterCurrent,
+    appendToQueue,
   };
 }

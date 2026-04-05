@@ -87,13 +87,16 @@ const HomeLayoutSP: ParentComponent = (props) => {
           </div>
         </SPExpandablePlayerBar>
         <SPBottomNavigation
-          onClickNav={(n) => {
-            switch (n) {
+          onClickNav={(nav, prevNav) => {
+            switch (nav) {
               case 'index':
-                if (location.pathname !== '/sp')
+                if (location.pathname !== '/sp' && prevNav !== 'player')
                   spNavigate('/sp', {
                     replace: true,
                   });
+                break;
+              case 'player':
+                openPlayerBar();
                 break;
               case 'setting':
                 // stab

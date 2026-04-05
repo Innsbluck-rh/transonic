@@ -1,3 +1,4 @@
+import { Icon } from '@iconify-icon/solid';
 import { useNavigate } from '@solidjs/router';
 import { Component, Show } from 'solid-js';
 import { sessionStore } from '~/stores/SessionStore';
@@ -22,11 +23,18 @@ const Header: Component<HeaderProps> = (props) => {
         </Title>
       </Show>
       <div class='flex-1' />
-      <ThemeToggle />
-      {/* <input class='text-xs mr-2' placeholder='search...' /> */}
-      <Show when={props.shouldShowProfiles}>
-        <ServerProfile profiles={sessionStore.profiles} />
-      </Show>
+      <div class='flex flex-row gap-1'>
+        <div class='relative overflow-visible'>
+          <div class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2' onClick={() => {}}>
+            <Icon class='text-primary-text text-[16px]' icon='pixelarticons:settings-2-sharp' />
+          </div>
+        </div>
+        <ThemeToggle />
+        {/* <input class='text-xs mr-2' placeholder='search...' /> */}
+        <Show when={props.shouldShowProfiles}>
+          <ServerProfile profiles={sessionStore.profiles} />
+        </Show>
+      </div>
     </div>
   );
 };
