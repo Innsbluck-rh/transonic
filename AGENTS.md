@@ -5,6 +5,19 @@
 - READ THE LATEST CODE. You are supposed to find out potential information, issues, and solutions. You are NOT supposed to report what your thought ONLY from user's prompt or TODO list.
 - When you assigned to "research"(「調査」), "consider"(「検討」) or "investigate", you MUST NOT change anything.
 - Unless there are special circumstances, do not use commands that include building the Tauri app. It will take a considerably long time. Most errors should be detectable with tsc+cargo check+tests.
+- When executing cargo-related commands, please use `pnpm cargo:check` and `pnpm cargo:test` whenever possible.
+
+## platform-specific code
+
+- Code gated by `#[cfg(target_os = "...")]` (e.g. `android`, `ios`) is **not** checked by `pnpm cargo:check` on the host OS (Windows).
+- When you modify platform-specific code, you MUST attempt to verify it with the corresponding target:
+  ```
+  cargo check --target <triple>          # e.g. aarch64-linux-android
+  ```
+- If the check fails due to missing toolchain components (NDK, linker, etc.) or the target is not installed, you MUST:
+  1. Clearly inform the user that the platform-specific code was **not** verified by cargo check.
+  2. State the exact command and target triple the user should run.
+- Do NOT silently treat a host-only `cargo check` pass as full verification when platform-gated code was touched.
 
 ## ADR
 

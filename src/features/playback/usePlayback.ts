@@ -1,5 +1,5 @@
 import { createMemo, createSignal } from 'solid-js';
-import { commands, InterruptReason, PlaybackQueueEntry, PlayingState } from '~/bindings';
+import { commands, InterruptReason, PlayingState, type SongResponse } from '~/bindings';
 import { hasPlaybackCommandError } from './service';
 
 import { playbackStore } from '~/stores/PlaybackStore';
@@ -48,11 +48,11 @@ function interruptLabelForReason(reason: InterruptReason | null) {
   }
 }
 
-function isSameQueue(q1: PlaybackQueueEntry[], q2: PlaybackQueueEntry[]) {
+function isSameQueue(q1: SongResponse[], q2: SongResponse[]) {
   return (
     q1.length === q2.length &&
     q1.every((q, i) => {
-      return q.songId === q2[i].songId && q.albumId === q2[i].albumId && q.artistId === q2[i].artistId;
+      return q.id === q2[i].id;
     })
   );
 }
@@ -61,12 +61,12 @@ export function usePlayback() {
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
 
   const status = createMemo(() => playbackStore.status);
-  const queue = createMemo<PlaybackQueueEntry[]>((prev) => {
+  const queue = createMemo<SongResponse[]>((prev) => {
     const next = playbackStore.status?.queue ?? [];
     return isSameQueue(prev, next) ? prev : next;
   }, []);
   const currentIndex = createMemo<number | null>(() => status()?.currentIndex ?? null);
-  const currentEntry = createMemo<PlaybackQueueEntry | null>(() => {
+  const currentEntry = createMemo<SongResponse | null>(() => {
     const index = currentIndex();
     if (index === null) {
       return null;
@@ -105,36 +105,32 @@ export function usePlayback() {
   const currentPositionText = createMemo(() => formatTime(currentPositionMs() / 1000));
   const durationText = createMemo(() => formatTime(durationMs() / 1000));
 
-  const play = async () => {
-    const result = await commands.playbackPlay();
-    hasPlaybackCommandError(result);
+  const play = () => {
+    commands.playbackPlay().then(hasPlaybackCommandError);
   };
 
-  const pause = async () => {
-    const result = await commands.playbackPause();
-    hasPlaybackCommandError(result);
+  const pause = () => {
+    commands.playbackPause().then(hasPlaybackCommandError);
   };
 
-  const togglePlayPause = async () => {
+  const togglePlayPause = () => {
     if (playingState() === 'playing') {
-      await pause();
+      pause();
       return;
     }
 
-    await play();
+    play();
   };
 
-  const prev = async () => {
-    const result = await commands.playbackPrev();
-    hasPlaybackCommandError(result);
+  const prev = () => {
+    commands.playbackPrev().then(hasPlaybackCommandError);
   };
 
-  const next = async () => {
-    const result = await commands.playbackNext();
-    hasPlaybackCommandError(result);
+  const next = () => {
+    commands.playbackNext().then(hasPlaybackCommandError);
   };
 
-  const seek = async (nextPositionMs: number) => {
+  const seek = (nextPositionMs: number) => {
     const nextDurationMs = durationMs();
     if (nextDurationMs <= 0) {
       setPreviewPositionMs(null);
@@ -143,27 +139,23 @@ export function usePlayback() {
 
     const clampedPositionMs = clampPositionMs(nextPositionMs, nextDurationMs);
     setPreviewPositionMs(null);
-    const result = await commands.playbackSeek({ positionMs: clampedPositionMs });
-    hasPlaybackCommandError(result);
+    commands.playbackSeek({ positionMs: clampedPositionMs }).then(hasPlaybackCommandError);
   };
 
   const previewSeek = (nextPositionMs: number | null) => {
     setPreviewPositionMs(nextPositionMs);
   };
 
-  const playQueueIndex = async (index: number) => {
-    const result = await commands.playbackPlayQueueIndex({ index });
-    hasPlaybackCommandError(result);
+  const playQueueIndex = (index: number) => {
+    commands.playbackPlayQueueIndex({ index }).then(hasPlaybackCommandError);
   };
 
-  const playAlbum = async (albumId: string) => {
-    const result = await commands.playbackPlayAlbum({ albumId });
-    hasPlaybackCommandError(result);
+  const playAlbum = (albumId: string) => {
+    commands.playbackPlayAlbum({ albumId }).then(hasPlaybackCommandError);
   };
 
-  const playFolderAlbum = async (libraryId: string, nodeId: string, albumId: string) => {
-    const result = await commands.playbackPlayFolderAlbum({ libraryId, nodeId, albumId });
-    hasPlaybackCommandError(result);
+  const playFolderAlbum = (libraryId: string, nodeId: string, albumId: string) => {
+    commands.playbackPlayFolderAlbum({ libraryId, nodeId, albumId }).then(hasPlaybackCommandError);
   };
 
   const isQueueIndexActive = (index: number) => currentIndex() === index;

@@ -1,8 +1,9 @@
 import { useLocation } from '@solidjs/router';
 import { createMemo, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
+import { commands, events } from '~/bindings';
 import Header from '~/components/common/header/Header';
 import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
-import SPExpandablePlayerBar from '~/components/sp/SPExpandablePlayerBar';
+import SPExpandablePlayerBar, { openPlayerBar } from '~/components/sp/SPExpandablePlayerBar';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { startPlaybackStateSync } from '~/features/playback/service';
 import { sessionStore } from '~/stores/SessionStore';
@@ -22,6 +23,31 @@ const HomeLayoutSP: ParentComponent = (props) => {
       }
 
       unlisten = nextUnlisten;
+    });
+
+    // Android: 通知タップでプレイヤーバーを展開するイベントリスナー
+    void events.mediaNotificationTap
+      .listen(() => {
+        openPlayerBar();
+      })
+      .then((nextUnlisten) => {
+        if (disposed) {
+          nextUnlisten();
+          return;
+        }
+
+        const prev = unlisten;
+        unlisten = () => {
+          prev?.();
+          nextUnlisten();
+        };
+      });
+
+    // Android: コールドスタート時に通知タップで起動された場合の処理
+    void commands.consumePendingNotificationTap().then((pending) => {
+      if (pending && !disposed) {
+        openPlayerBar();
+      }
     });
   });
 

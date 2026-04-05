@@ -36,11 +36,11 @@ const SongList: Component<SongListProps> = (props) => {
         }
       >
         {(song, i) => {
-          const onClickEntry = async () => {
+          const onClickEntry = () => {
             if (!props.songs) return;
             props.onClickSong?.(song, i(), props.songs);
 
-            await commands.playbackPlaySongs({
+            commands.playbackPlaySongs({
               songs: props.songs,
               startIndex: i(),
             });
@@ -80,7 +80,15 @@ const SongList: Component<SongListProps> = (props) => {
                 {song.title}
               </p>
 
-              <p class='text-secondary-text archivo text-xs'>{formatDurationSecond(song.duration ?? 0)}</p>
+              <p
+                class='archivo text-xs'
+                classList={{
+                  'text-secondary-text': !isPlaying(),
+                  'text-primary-on-playing': isPlaying(),
+                }}
+              >
+                {formatDurationSecond(song.duration ?? 0)}
+              </p>
             </div>
           );
         }}

@@ -1,6 +1,5 @@
-import { Component, createMemo, createResource, Show } from 'solid-js';
-import { fetchCoverArtAssetUrl } from '~/features/albums/service';
-import { sessionStore } from '~/stores/SessionStore';
+import { Component, Match, Switch } from 'solid-js';
+import { useCoverArt } from '~/features/albums/useCoverArt';
 import PseudoAlbumCover from './PseudoAlbumCover';
 
 const DEFAULT_COVER_ART_SIZE = 224;
@@ -12,31 +11,23 @@ interface AlbumCoverProps {
 }
 
 const AlbumCover: Component<AlbumCoverProps> = (props) => {
-  const request = createMemo(() => {
-    if (!props.coverArtId) {
-      return null;
-    }
-    const profileId = sessionStore.activeSession?.profileId;
-    if (!profileId) {
-      return null;
-    }
-
-    return {
-      profileId,
-      coverArtId: props.coverArtId,
-      size: DEFAULT_COVER_ART_SIZE,
-    };
-  });
-
-  const [coverArt] = createResource(request, (payload) => fetchCoverArtAssetUrl(payload));
+  const { src, loading } = useCoverArt(() => props.coverArtId ?? null, DEFAULT_COVER_ART_SIZE);
 
   return (
     <div class='border-secondary-border aspect-square border object-cover'>
-      <Show when={coverArt()} fallback={<PseudoAlbumCover coverArtId={props.coverArtId} year={props.year} />}>
-        {(assetUrl) => (
-          <img class='h-full w-full object-cover' src={assetUrl()} alt={`${props.albumName} cover art`} loading='lazy' decoding='async' />
-        )}
-      </Show>
+      <Switch>
+        <Match when={src()}>
+          {(assetUrl) => (
+            <img class='h-full w-full object-cover' src={assetUrl()} alt={`${props.albumName} cover art`} loading='lazy' decoding='async' />
+          )}
+        </Match>
+        <Match when={loading()}>
+          <div class='bg-primary-inner-surface h-full w-full' />
+        </Match>
+        <Match when={true}>
+          <PseudoAlbumCover coverArtId={props.coverArtId} year={props.year} />
+        </Match>
+      </Switch>
     </div>
   );
 };

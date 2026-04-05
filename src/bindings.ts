@@ -141,6 +141,14 @@ async getCoverArt(payload: CoverArtRequest) : Promise<Result<CoverArtResponse, s
     else return { status: "error", error: e  as any };
 }
 },
+async getArtistImage(payload: ArtistImageRequest) : Promise<Result<ArtistImageResponse, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_artist_image", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async playbackGetState() : Promise<Result<PlaybackStatus, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_get_state") };
@@ -236,6 +244,9 @@ async playbackPrev() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async consumePendingNotificationTap() : Promise<boolean> {
+    return await TAURI_INVOKE("consume_pending_notification_tap");
 }
 }
 
@@ -243,8 +254,10 @@ async playbackPrev() : Promise<Result<null, string>> {
 
 
 export const events = __makeEvents__<{
+mediaNotificationTap: MediaNotificationTap,
 playbackStatus: PlaybackStatus
 }>({
+mediaNotificationTap: "media-notification-tap",
 playbackStatus: "playback-status"
 })
 
@@ -264,6 +277,8 @@ export type AlbumSongsResponse = { id: string; name: string | null; artist: stri
 export type AppBootstrap = { profiles: SavedProfileSummary[]; activeSession: ActiveSession | null; restoreStatus: RestoreStatus; message: string | null }
 export type ArtistAlbum = { id: string; parentId: string | null; title: string | null; album: string | null; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; starred: string | null }
 export type ArtistGroup = { name: string; artists: ArtistSummary[] }
+export type ArtistImageRequest = { url: string }
+export type ArtistImageResponse = { localPath: string }
 export type ArtistInfo2Request = { id: string; count: number | null; includeNotPresent: boolean | null }
 export type ArtistInfo2Response = { biography: string | null; musicBrainzId: string | null; lastFmUrl: string | null; smallImageUrl: string | null; mediumImageUrl: string | null; largeImageUrl: string | null; similarArtists: ArtistSummary[] }
 export type ArtistRequest = { id: string }
@@ -289,6 +304,7 @@ export type FolderStructureRootsResponse = { libraryId: string; libraryName: str
 export type FolderStructureSource = "directory" | "indexes"
 export type InterruptReason = "initial_load" | "stream_buffering_stall" | "seeking" | "full_reload"
 export type LastConnectionState = "never" | "ok" | "offline" | "reauth_required"
+export type MediaNotificationTap = Record<string, never>
 export type MusicDirectoryChild = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; size: number | null; contentType: string | null; suffix: string | null; bitRate: number | null; genre: string | null; created: string | null; starred: string | null; isDirectory: boolean; mediaType: string | null }
 export type MusicDirectoryRequest = { id: string }
 export type MusicDirectoryResponse = { id: string; name: string; children: MusicDirectoryChild[] }
@@ -299,10 +315,9 @@ export type PlaybackPlayAlbumRequest = { albumId: string }
 export type PlaybackPlayFolderAlbumRequest = { libraryId: string; nodeId: string; albumId: string }
 export type PlaybackPlayQueueIndexRequest = { index: number }
 export type PlaybackPlaySongsRequest = { songs: SongResponse[]; startIndex: number }
-export type PlaybackQueueEntry = { songId: string; title: string; path: string | null; artist: string | null; artistId: string | null; album: string | null; albumId: string | null; duration: number | null; coverArtId: string | null }
 export type PlaybackSeekRequest = { positionMs: number }
-export type PlaybackSetQueueRequest = { entries: PlaybackQueueEntry[]; currentIndex: number | null }
-export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; queue: PlaybackQueueEntry[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
+export type PlaybackSetQueueRequest = { entries: SongResponse[]; currentIndex: number | null }
+export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; queue: SongResponse[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
 export type PlayingState = "idle" | "playing" | "paused" | "stopped" | "interrupted" | "error"
 export type ProfileIdRequest = { profileId: string }
 export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"

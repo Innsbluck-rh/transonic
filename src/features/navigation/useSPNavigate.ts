@@ -1,4 +1,5 @@
 import { useLocation, useNavigate, type NavigateOptions } from '@solidjs/router';
+import { closePlayerBar } from '~/components/sp/SPExpandablePlayerBar';
 import { setSPNavStore, type NavDirection } from '~/stores/SPNavigationStore';
 
 function setNavDirection(direction: NavDirection) {
@@ -15,6 +16,10 @@ function clearNavDirection() {
  * SP専用のナビゲーションフック。
  * SP画面内での遷移にView Transitions APIを使ったスライドアニメーションを付与する。
  * SP以外のルートからの呼び出しでは通常のnavigateにフォールバックする。
+ *
+ * SPPlayerバーが展開中の場合、遷移前にバーを閉じる。
+ * これにより、View Transitionのアニメーション擬似要素がプレイヤーの上に
+ * 描画されてしまうz軸の問題を回避する。
  */
 export function useSPNavigate() {
   const navigate = useNavigate();
@@ -28,6 +33,9 @@ export function useSPNavigate() {
       nav(to);
       return;
     }
+
+    // SPPlayerバーが展開中なら閉じてからナビゲーションを行う
+    closePlayerBar();
 
     const direction: NavDirection = typeof to === 'number' && to < 0 ? 'backward' : 'forward';
     setNavDirection(direction);

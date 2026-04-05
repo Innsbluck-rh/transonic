@@ -13,6 +13,8 @@
     "ad:build": "tauri android build",
     "vite:dev": "vite",
     "vite:build": "vite build",
+    "cargo:check": "cd src-tauri && cargo check --manifest-path Cargo.toml",
+    "cargo:test": "cd src-tauri && cargo test --manifest-path Cargo.toml",
     "format": "prettier --write . --config .prettierrc",
     "format:check": "prettier --check . --config .prettierrc",
     "prettier": "pnpm format",

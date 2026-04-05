@@ -1,10 +1,9 @@
-import { Component, createMemo, createResource, JSX, Match, Show, Switch } from 'solid-js';
-import { PlaybackQueueEntry } from '~/bindings';
+import { Component, createMemo, JSX, Match, Show, Switch } from 'solid-js';
+import { type SongResponse } from '~/bindings';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
-import { fetchCoverArtAssetUrl } from '~/features/albums/service';
+import { useCoverArt } from '~/features/albums/useCoverArt';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
-import { sessionStore } from '~/stores/SessionStore';
 import PlayerIcon from './PlayerIcon';
 import PlayerSlider from './PlayerSlider';
 
@@ -13,8 +12,8 @@ type PlayerIcons = 'prev' | 'playpause' | 'next';
 
 interface PlayerBarProps {
   iconsVisibility?: Record<PlayerIcons, boolean>;
-  onClickTitle?: (entry?: PlaybackQueueEntry) => void;
-  onClickArtist?: (entry?: PlaybackQueueEntry) => void;
+  onClickTitle?: (entry?: SongResponse) => void;
+  onClickArtist?: (entry?: SongResponse) => void;
   onClickRestArea?: () => void;
   restAreaProps?: JSX.HTMLAttributes<HTMLDivElement>;
 }
@@ -50,21 +49,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
     return isInterrupted() ? `${artist} ${playbackInterruptLabel()}` : artist;
   });
 
-  const DEFAULT_COVER_ART_SIZE = 224;
-  const request = createMemo(() => {
-    const coverArtId = currentEntry()?.coverArtId;
-    const profileId = sessionStore.activeSession?.profileId;
-    if (!coverArtId || !profileId) {
-      return null;
-    }
-
-    return {
-      profileId,
-      coverArtId,
-      size: DEFAULT_COVER_ART_SIZE,
-    };
-  });
-  const [coverArt] = createResource(request, (payload) => fetchCoverArtAssetUrl(payload));
+  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId);
   const restAreaClass = createMemo(() => props.restAreaProps?.class);
 
   const onClickRestArea: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent> = (event) => {
@@ -110,7 +95,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                 <div class='mt-1 flex min-w-0 flex-1 flex-col gap-1'>
                   <MarqueeParagraph
                     text={currentEntry()?.title || '[unknown]'}
-                    class='archivo leading-none font-bold'
+                    class='archivo w-fit leading-none font-bold'
                     classList={{
                       'cursor-pointer': !!props.onClickTitle,
                     }}
@@ -120,7 +105,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                   />
                   <MarqueeParagraph
                     text={subtitleText()}
-                    class='archivo text-secondary-text text-xs leading-none'
+                    class='archivo text-secondary-text w-fit text-xs leading-none'
                     classList={{
                       'cursor-pointer': !!props.onClickArtist,
                     }}

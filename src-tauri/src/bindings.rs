@@ -8,7 +8,10 @@ use std::{
 use specta_typescript::Typescript;
 use tauri_specta::{collect_commands, collect_events, Builder};
 
-use crate::{commands, models::PlaybackStatus};
+use crate::{
+    commands,
+    models::{MediaNotificationTap, PlaybackStatus},
+};
 
 pub fn builder() -> Builder<tauri::Wry> {
     Builder::<tauri::Wry>::new()
@@ -30,6 +33,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::get_song,
             commands::get_album_list,
             commands::get_cover_art,
+            commands::get_artist_image,
             commands::playback_get_state,
             commands::playback_set_queue,
             commands::playback_play_queue_index,
@@ -42,8 +46,9 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback_seek,
             commands::playback_next,
             commands::playback_prev,
+            commands::consume_pending_notification_tap,
         ])
-        .events(collect_events![PlaybackStatus])
+        .events(collect_events![PlaybackStatus, MediaNotificationTap])
 }
 
 pub fn export_typescript_bindings() -> Result<(), specta_typescript::ExportError> {

@@ -1,11 +1,11 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
-import { commands, PlaybackQueueEntry } from '~/bindings';
+import { commands, type SongResponse } from '~/bindings';
 import { playbackStore } from '~/stores/PlaybackStore';
 
 interface QueueListProps {
-  queue: PlaybackQueueEntry[];
-  onClickQueue?: (song: PlaybackQueueEntry, index: number, songs: PlaybackQueueEntry[]) => void;
+  queue: SongResponse[];
+  onClickQueue?: (song: SongResponse, index: number, songs: SongResponse[]) => void;
 }
 
 // consider utilize this
@@ -24,8 +24,6 @@ function formatDurationSecond(duration: number) {
   }
 }
 
-// TODO: you know its VERY similar to SongList.tsx but it's not compatible because of poor(old) implementation in Queue item.
-// consider replace PlaybackQueueEntry to Just Raw Song data and merge this to SongList(and Stop hardcoding play function in songlist itself...)
 const QueueList: Component<QueueListProps> = (props) => {
   return (
     <div class='flex w-full flex-col'>
@@ -38,16 +36,16 @@ const QueueList: Component<QueueListProps> = (props) => {
         }
       >
         {(entry, i) => {
-          const onClickEntry = async () => {
+          const onClickEntry = () => {
             if (!props.queue) return;
             props.onClickQueue?.(entry, i(), props.queue);
 
-            await commands.playbackPlayQueueIndex({
+            commands.playbackPlayQueueIndex({
               index: i(),
             });
           };
 
-          const isPlaying = () => playbackStore.status?.currentSongId === entry.songId; // ← here is cause of incompatibility fxxx
+          const isPlaying = () => playbackStore.status?.currentSongId === entry.id;
 
           return (
             <div
@@ -83,7 +81,15 @@ const QueueList: Component<QueueListProps> = (props) => {
                 {entry.title}
               </p>
 
-              <p class='text-secondary-text archivo ml-2 text-xs'>{formatDurationSecond(entry.duration ?? 0)}</p>
+              <p
+                class='archivo ml-2 text-xs'
+                classList={{
+                  'text-secondary-text': !isPlaying(),
+                  'text-primary-on-playing': isPlaying(),
+                }}
+              >
+                {formatDurationSecond(entry.duration ?? 0)}
+              </p>
             </div>
           );
         }}

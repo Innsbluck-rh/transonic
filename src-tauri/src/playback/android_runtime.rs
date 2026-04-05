@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Mutex, OnceLock};
 
 use jni::{
@@ -6,10 +7,11 @@ use jni::{
     JNIEnv,
 };
 use tauri::{AppHandle, Manager, Wry};
+use tauri_specta::Event as _;
 
 use crate::{
-    commands::common::client, models::CapabilityMatrix, ActiveSessionState, CoverArtCacheState,
-    PlaybackControllerState,
+    commands::common::client, models::CapabilityMatrix, models::MediaNotificationTap,
+    ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
 };
 
 use super::{
@@ -18,6 +20,11 @@ use super::{
 };
 
 static ANDROID_APP_HANDLE: OnceLock<Mutex<Option<AppHandle<Wry>>>> = OnceLock::new();
+static PENDING_NOTIFICATION_TAP: AtomicBool = AtomicBool::new(false);
+
+pub fn consume_pending_notification_tap() -> bool {
+    PENDING_NOTIFICATION_TAP.swap(false, Ordering::SeqCst)
+}
 
 pub fn install_android_app_handle(app: AppHandle<Wry>) {
     let storage = ANDROID_APP_HANDLE.get_or_init(|| Mutex::new(None));
@@ -194,4 +201,21 @@ pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_disp
     };
 
     spawn_controller_action(action);
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_notifyAppResumedFromNotification(
+    _env: JNIEnv<'_>,
+    _this: JObject<'_>,
+) {
+    let Some(app) = cloned_app_handle() else {
+        log::info!("android_runtime: app handle not available, storing pending notification tap");
+        PENDING_NOTIFICATION_TAP.store(true, Ordering::SeqCst);
+        return;
+    };
+
+    if let Err(error) = (MediaNotificationTap {}).emit(&app) {
+        log::error!("android_runtime: failed to emit MediaNotificationTap event: {error}");
+        PENDING_NOTIFICATION_TAP.store(true, Ordering::SeqCst);
+    }
 }

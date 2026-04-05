@@ -1,4 +1,5 @@
 mod albums;
+mod artist_image;
 mod auth;
 mod browse;
 mod cover_art;
@@ -8,25 +9,26 @@ mod session;
 #[allow(unused_imports)]
 pub use albums::{AlbumListContext, AlbumListItem, AlbumListRequest, AlbumListResponse};
 #[allow(unused_imports)]
+pub use artist_image::{ArtistImageRequest, ArtistImageResponse};
+#[allow(unused_imports)]
 pub use auth::{AuthInput, AuthKind};
 #[allow(unused_imports)]
 pub use browse::{
-    AlbumSongsRequest, AlbumSongsResponse, ArtistAlbum, ArtistGroup,
-    ArtistInfo2Request, ArtistInfo2Response,
-    ArtistRequest, ArtistResponse, ArtistSummary, ArtistsRequest, ArtistsResponse,
-    FolderStructureAlbumItem, FolderStructureAlbumSongsRequest, FolderStructureAlbumSongsResponse,
-    FolderStructureAlbumsRequest, FolderStructureAlbumsResponse, FolderStructureRootNode,
-    FolderStructureRootsRequest, FolderStructureRootsResponse, FolderStructureSource,
-    MusicDirectoryChild, MusicDirectoryRequest, MusicDirectoryResponse, MusicFolderSummary,
-    MusicFoldersResponse, SongRequest, SongResponse,
+    AlbumSongsRequest, AlbumSongsResponse, ArtistAlbum, ArtistGroup, ArtistInfo2Request,
+    ArtistInfo2Response, ArtistRequest, ArtistResponse, ArtistSummary, ArtistsRequest,
+    ArtistsResponse, FolderStructureAlbumItem, FolderStructureAlbumSongsRequest,
+    FolderStructureAlbumSongsResponse, FolderStructureAlbumsRequest, FolderStructureAlbumsResponse,
+    FolderStructureRootNode, FolderStructureRootsRequest, FolderStructureRootsResponse,
+    FolderStructureSource, MusicDirectoryChild, MusicDirectoryRequest, MusicDirectoryResponse,
+    MusicFolderSummary, MusicFoldersResponse, SongRequest, SongResponse,
 };
 #[allow(unused_imports)]
 pub use cover_art::{CoverArtRequest, CoverArtResponse};
 #[allow(unused_imports)]
 pub use playback::{
-    InterruptReason, PlaybackPlayAlbumRequest, PlaybackPlayFolderAlbumRequest,
-    PlaybackPlayQueueIndexRequest, PlaybackPlaySongsRequest, PlaybackQueueEntry, PlaybackSeekRequest,
-    PlaybackSetQueueRequest, PlaybackStatus, PlayingState,
+    InterruptReason, MediaNotificationTap, PlaybackPlayAlbumRequest,
+    PlaybackPlayFolderAlbumRequest, PlaybackPlayQueueIndexRequest, PlaybackPlaySongsRequest,
+    PlaybackSeekRequest, PlaybackSetQueueRequest, PlaybackStatus, PlayingState,
 };
 #[allow(unused_imports)]
 pub use session::{

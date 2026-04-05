@@ -94,6 +94,10 @@ private class QueueCommandForwardingPlayer(
 
 @UnstableApi
 class PlaybackService : MediaSessionService(), Player.Listener {
+  companion object {
+    const val EXTRA_FROM_NOTIFICATION = "from_notification"
+  }
+
   private val rustBridge = RustPlaybackBridge()
   private lateinit var player: ExoPlayer
   private lateinit var sessionPlayer: QueueCommandForwardingPlayer
@@ -125,6 +129,7 @@ class PlaybackService : MediaSessionService(), Player.Listener {
         0,
         Intent(this, MainActivity::class.java).apply {
           flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+          putExtra(EXTRA_FROM_NOTIFICATION, true)
         },
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
       )

@@ -6,8 +6,8 @@ use opensubsonic_client::{
 use crate::{
     cover_art_cache::CoverArtCache,
     models::{
-        CapabilityMatrix, InterruptReason, PlaybackQueueEntry, PlaybackSetQueueRequest,
-        PlaybackStatus, PlayingState,
+        CapabilityMatrix, InterruptReason, PlaybackSetQueueRequest, PlaybackStatus, PlayingState,
+        SongResponse,
     },
 };
 
@@ -97,7 +97,7 @@ impl PlaybackController {
             log::info!(
                 "controller.set_queue: current_index={:?} song_id={} path={:?}",
                 self.status.current_index,
-                entry.song_id,
+                entry.id,
                 entry.path
             );
         } else {
@@ -192,7 +192,7 @@ impl PlaybackController {
 
         log::info!(
             "controller.seek: song_id={:?} path={:?} state={:?} requested_position_ms={} current_position_ms={}",
-            entry.as_ref().map(|queue_entry| queue_entry.song_id.as_str()),
+            entry.as_ref().map(|queue_entry| queue_entry.id.as_str()),
             entry.as_ref().and_then(|queue_entry| queue_entry.path.as_deref()),
             self.status.playing_state,
             requested_position_ms,
@@ -363,7 +363,7 @@ impl PlaybackController {
         let Some(entry) = current_queue_entry(&self.status.queue, Some(index)).cloned() else {
             return Err("Current playback entry does not exist.".to_string());
         };
-        let song_id = entry.song_id.clone();
+        let song_id = entry.id.clone();
 
         self.clear_native_events();
         self.status.playing_state = PlayingState::Interrupted;
@@ -414,7 +414,7 @@ impl PlaybackController {
         let Some(entry) = current_queue_entry(&self.status.queue, Some(index)).cloned() else {
             return Err("Current playback entry does not exist.".to_string());
         };
-        let song_id = entry.song_id.clone();
+        let song_id = entry.id.clone();
         let previous_status = self.status.clone();
         let previous_resume_state = self.interrupted_resume_state.clone();
 
@@ -456,11 +456,11 @@ impl PlaybackController {
     fn load_stream_for_song(
         &mut self,
         context: &PlaybackRuntimeContext<'_>,
-        entry: &PlaybackQueueEntry,
+        entry: &SongResponse,
         requested_position_ms: u32,
         autoplay: bool,
     ) -> Result<(), String> {
-        let song_id = entry.song_id.as_str();
+        let song_id = entry.id.as_str();
         let load_strategy = self.backend.plan_load(
             requested_position_ms,
             context.capability_matrix.transcode_offset,
@@ -491,7 +491,7 @@ impl PlaybackController {
                 build_stream_request(context.client, song_id, stream_offset_seconds, true)?;
             if let Err(raw_error) = self.backend.load(PlaybackBackendLoadRequest {
                 request: raw_stream,
-                media_id: entry.song_id.clone(),
+                media_id: entry.id.clone(),
                 title: entry.title.clone(),
                 artist: entry.artist.clone(),
                 album: entry.album.clone(),
@@ -507,7 +507,7 @@ impl PlaybackController {
                     build_stream_request(context.client, song_id, stream_offset_seconds, false)?;
                 if let Err(fallback_error) = self.backend.load(PlaybackBackendLoadRequest {
                     request: fallback_stream,
-                    media_id: entry.song_id.clone(),
+                    media_id: entry.id.clone(),
                     title: entry.title.clone(),
                     artist: entry.artist.clone(),
                     album: entry.album.clone(),
@@ -534,7 +534,7 @@ impl PlaybackController {
         self.backend
             .load(PlaybackBackendLoadRequest {
                 request: standard_stream,
-                media_id: entry.song_id.clone(),
+                media_id: entry.id.clone(),
                 title: entry.title.clone(),
                 artist: entry.artist.clone(),
                 album: entry.album.clone(),
@@ -764,7 +764,7 @@ fn build_cover_art_path(
 }
 
 fn validate_queue_index(
-    entries: &[PlaybackQueueEntry],
+    entries: &[SongResponse],
     current_index: Option<u32>,
 ) -> Result<(), String> {
     if entries.is_empty() {
@@ -787,15 +787,15 @@ fn validate_queue_index(
     Ok(())
 }
 
-fn current_song_id(entries: &[PlaybackQueueEntry], current_index: Option<u32>) -> Option<String> {
+fn current_song_id(entries: &[SongResponse], current_index: Option<u32>) -> Option<String> {
     let index = usize::try_from(current_index?).ok()?;
-    entries.get(index).map(|entry| entry.song_id.clone())
+    entries.get(index).map(|entry| entry.id.clone())
 }
 
 fn current_queue_entry(
-    entries: &[PlaybackQueueEntry],
+    entries: &[SongResponse],
     current_index: Option<u32>,
-) -> Option<&PlaybackQueueEntry> {
+) -> Option<&SongResponse> {
     let index = usize::try_from(current_index?).ok()?;
     entries.get(index)
 }
@@ -827,8 +827,7 @@ mod tests {
     use super::{current_song_id, PlaybackController, PlaybackRuntimeContext, PlaybackStatus};
     use crate::{
         models::{
-            CapabilityMatrix, InterruptReason, PlaybackQueueEntry, PlaybackSetQueueRequest,
-            PlayingState,
+            CapabilityMatrix, InterruptReason, PlaybackSetQueueRequest, PlayingState, SongResponse,
         },
         playback::{
             backend_shims::{
@@ -1101,19 +1100,32 @@ mod tests {
         (controller, state, reporter_state)
     }
 
-    fn queue_entries(song_ids: &[&str]) -> Vec<PlaybackQueueEntry> {
+    fn queue_entries(song_ids: &[&str]) -> Vec<SongResponse> {
         song_ids
             .iter()
-            .map(|song_id| PlaybackQueueEntry {
-                song_id: (*song_id).to_string(),
-                title: (*song_id).to_string(),
+            .map(|song_id| SongResponse {
+                id: (*song_id).to_string(),
+                parent_id: None,
                 path: None,
-                artist: None,
-                artist_id: None,
+                title: (*song_id).to_string(),
                 album: None,
                 album_id: None,
-                duration: None,
+                artist: None,
+                artist_id: None,
                 cover_art_id: None,
+                track: None,
+                disc_number: None,
+                year: None,
+                duration: None,
+                size: None,
+                content_type: None,
+                suffix: None,
+                bit_rate: None,
+                genre: None,
+                created: None,
+                starred: None,
+                is_directory: false,
+                media_type: None,
             })
             .collect()
     }

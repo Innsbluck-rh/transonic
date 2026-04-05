@@ -1,14 +1,14 @@
-import { Component, createMemo, createResource, JSX, Show } from 'solid-js';
+import { Component, JSX, Show } from 'solid-js';
 import Heading3 from '~/components/common/Heading3';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import PlayerIcon from '~/components/player/PlayerIcon';
 import PlayerSlider from '~/components/player/PlayerSlider';
-import { fetchCoverArtAssetUrl } from '~/features/albums/service';
-import { resolveArtistRoute } from '~/features/navigation/routes';
+import { useCoverArt } from '~/features/albums/useCoverArt';
+import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
-import { sessionStore } from '~/stores/SessionStore';
 import QueueList from '../common/list/song/QueueList';
+import { closePlayerBar } from './SPExpandablePlayerBar';
 
 interface SPPlayerProps {
   topSectionProps?: JSX.HTMLAttributes<HTMLDivElement>;
@@ -32,28 +32,13 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
     previewSeek,
   } = usePlayback();
 
-  const DEFAULT_COVER_ART_SIZE = 224;
-  const request = createMemo(() => {
-    const coverArtId = currentEntry()?.coverArtId;
-    const profileId = sessionStore.activeSession?.profileId;
-    if (!coverArtId || !profileId) {
-      return null;
-    }
-
-    return {
-      profileId,
-      coverArtId,
-      size: DEFAULT_COVER_ART_SIZE,
-    };
-  });
-
-  const [coverArt] = createResource(request, (payload) => fetchCoverArtAssetUrl(payload));
+  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId);
 
   const navigate = useSPNavigate();
   const { queue, isQueueIndexActive, playQueueIndex } = usePlayback();
 
   return (
-    <div class='flex h-full min-h-0 flex-1 flex-col'>
+    <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
       <div
         {...props.topSectionProps}
         class={`relative flex h-auto w-full shrink-0 flex-col items-center shadow-[0_0_16px_rgba(128,128,128,0.25)] ${props.topSectionProps?.class ?? ''}`}
@@ -71,7 +56,16 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               )}
             </Show>
 
-            <MarqueeParagraph text={currentEntry()?.title || ''} class='archivo mt-7 w-full text-center text-2xl font-black tracking-tighter' />
+            <MarqueeParagraph
+              text={currentEntry()?.title || ''}
+              class='archivo mt-5 w-full text-center text-2xl font-black tracking-tighter'
+              onClick={() => {
+                const albumId = currentEntry()?.albumId;
+                if (!albumId) return;
+                closePlayerBar(false);
+                navigate(resolveAlbumRoute(albumId, 'mobile'));
+              }}
+            />
             <MarqueeParagraph
               text={currentEntry()?.artist || ''}
               class='archivo text-secondary-text mt-1'
@@ -81,6 +75,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               onClick={() => {
                 const artistId = currentEntry()?.artistId;
                 if (!artistId) return;
+                closePlayerBar(false);
                 navigate(resolveArtistRoute(artistId, 'mobile'));
               }}
             />
@@ -119,8 +114,8 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
         </div>
       </div>
 
-      <div class='bg-primary-plane border-secondary-border flex flex-row items-center border-b px-3 pt-3.5 pb-2'>
-        <Heading3>queue</Heading3>
+      <div class='bg-primary-plane border-secondary-border secondar flex flex-row items-center border-b px-3 pt-3.5 pb-1.5'>
+        <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
       <div class='flex-1 overflow-y-auto'>
         <QueueList queue={queue()} />

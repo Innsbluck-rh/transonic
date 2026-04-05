@@ -19,7 +19,6 @@ import SPBrowseArtist from './routes/sp/artist';
 import SPBrowseFolderStructure from './routes/sp/folder';
 import SPIndexArtists from './routes/sp/index_artists';
 import SPIndexFolders from './routes/sp/index_folders';
-import SPPlayer from './routes/sp/player';
 
 export default function App() {
   const pf = platform();
@@ -56,7 +55,6 @@ export default function App() {
             <Route path='/sp/folders/:libraryId' component={SPBrowseFolderStructure} />
             <Route path='/sp/folders/:libraryId/:nodeId' component={SPBrowseFolderStructure} />
             <Route path='/sp/albums/:id' component={SPAlbum} />
-            <Route path='/sp/player' component={SPPlayer} />
           </Route>
         </Route>
         <Route path='/init_login' component={InitLogin} />

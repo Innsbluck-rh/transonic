@@ -1,6 +1,25 @@
-import { createEffect, createMemo, createSignal, JSX, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
+import { createEffect, createMemo, createSignal, JSX, on, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import PlayerBar from '~/components/player/PlayerBar';
 import SPPlayer from './SPPlayer';
+
+// ── 外部制御用のリアクティブブリッジ ──────────────────────────────
+
+interface PlayerBarRequest {
+  expanded: boolean;
+  immediate: boolean;
+}
+
+const [playerBarRequest, setPlayerBarRequest] = createSignal<PlayerBarRequest | null>(null);
+
+export function openPlayerBar() {
+  setPlayerBarRequest({ expanded: true, immediate: false });
+}
+
+export function closePlayerBar(immediate = false) {
+  setPlayerBarRequest({ expanded: false, immediate });
+}
+
+// ── コンポーネント本体 ──────────────────────────────────────────
 
 interface SPExpandablePlayerBarProps {
   topOffsetPx?: number;
@@ -26,6 +45,7 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
   const [phase, setPhase] = createSignal<SheetPhase>('collapsed');
   const [containerHeight, setContainerHeight] = createSignal(0);
   const [translateY, setTranslateY] = createSignal(0);
+  const [skipAnimation, setSkipAnimation] = createSignal(false);
   const [dragPointerId, setDragPointerId] = createSignal<number | null>(null);
   const [dragStartClientY, setDragStartClientY] = createSignal(0);
   const [dragStartTranslateY, setDragStartTranslateY] = createSignal(0);
@@ -48,7 +68,7 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
   });
 
   const isDragging = createMemo(() => phase() === 'dragging');
-  const shouldAnimate = createMemo(() => !isDragging());
+  const shouldAnimate = createMemo(() => !isDragging() && !skipAnimation());
   const shouldRenderFullPlayer = createMemo(() => phase() !== 'collapsed' || translateY() < closedTranslateY());
 
   const openSheet = () => {
@@ -59,6 +79,13 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
   const closeSheet = () => {
     setPhase('collapsed');
     setTranslateY(closedTranslateY());
+  };
+
+  const closeSheetInstantly = () => {
+    setSkipAnimation(true);
+    setPhase('collapsed');
+    setTranslateY(closedTranslateY());
+    requestAnimationFrame(() => setSkipAnimation(false));
   };
 
   const syncContainerHeight = () => {
@@ -192,6 +219,23 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
       setTranslateY(0);
     }
   });
+
+  // 外部からのリクエストを監視してローカルstateに反映する
+  createEffect(
+    on(playerBarRequest, (request) => {
+      if (!request) return;
+
+      if (request.expanded && phase() !== 'expanded') {
+        openSheet();
+      } else if (!request.expanded && phase() !== 'collapsed') {
+        if (request.immediate) {
+          closeSheetInstantly();
+        } else {
+          closeSheet();
+        }
+      }
+    })
+  );
 
   onMount(() => {
     syncContainerHeight();

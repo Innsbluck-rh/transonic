@@ -2,16 +2,16 @@
 @import 'css-ripple-effect/dist/ripple.min.css';
 
 .archivo-black {
-  font-family: 'Archivo Black', sans-serif;
+  font-family: 'Archivo Black', var(--cjk-fonts), sans-serif;
   font-weight: 900;
 }
 .archivo {
-  font-family: 'Archivo', sans-serif;
+  font-family: 'Archivo', var(--cjk-fonts), sans-serif;
   font-optical-sizing: auto;
   font-variation-settings: 'wdth' 100;
 }
 .public-sans-500 {
-  font-family: 'Public Sans', sans-serif;
+  font-family: 'Public Sans', var(--cjk-fonts), sans-serif;
   font-weight: 500;
   font-style: normal;
 }
@@ -37,6 +37,9 @@
 }
 
 :root {
+  --cjk-fonts:
+    /*'Noto Sans SC', 'Noto Sans CJK SC', 'Noto Sans TC', 'Noto Sans CJK TC', 'Noto Sans JP', 'Noto Sans CJK JP', 'Noto Sans KR', 'Noto Sans CJK KR',*/
+    'Microsoft YaHei', 'Microsoft JhengHei', 'Yu Gothic', 'Malgun Gothic', 'Hiragino Sans', 'PingFang SC', 'PingFang TC';
   /* light theme default */
   --theme-color-primary-plane: var(--color-zinc-50);
   --theme-color-primary-surface: var(--color-zinc-100);
@@ -70,7 +73,7 @@
   html,
   body {
     @apply bg-primary-plane box-border;
-    font-family: 'Public Sans', sans-serif;
+    font-family: 'Public Sans', var(--cjk-fonts), sans-serif;
     line-height: 1;
     width: 100dvw;
     overflow-x: hidden;
@@ -100,7 +103,7 @@
   h1,
   h2,
   h3 {
-    font-family: 'Archivo Black', sans-serif;
+    font-family: 'Archivo Black', var(--cjk-fonts), sans-serif;
   }
 
   p,
@@ -147,10 +150,10 @@
       transition: 0s;
     }
   }
-}
 
-.home-surface-root {
-  @apply bg-primary-surface flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
+  .home-surface-root {
+    @apply bg-primary-surface flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
+  }
 }
 
 /* SP screen page transitions via View Transitions API */

@@ -7,6 +7,7 @@ import AlbumGrid from '~/components/common/list/album/AlbumGrid';
 import { AlbumItem } from '~/components/common/list/album/item/AlbumGridItem';
 import { type BrowseListItem } from '~/components/common/list/index/BrowseList';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
+import { fetchArtistImageAssetUrl } from '~/features/artist/service';
 import { resolveAlbumRoute, resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { sessionStore } from '~/stores/SessionStore';
@@ -43,34 +44,31 @@ function BrowseArtist(props: BrowseArtistProps) {
     return roles.length > 0 ? roles.join(' / ') : null;
   });
 
-  const heroImageUrl = createMemo(
+  const externalImageUrl = createMemo(
     () => artistInfo()?.largeImageUrl ?? artistInfo()?.mediumImageUrl ?? artistInfo()?.smallImageUrl ?? artist()?.artistImageUrl ?? null
   );
 
-  const coverArtRequest = createMemo(() => {
-    if (heroImageUrl()) {
-      return null;
-    }
+  const artistImageRequest = createMemo(() => {
+    const url = externalImageUrl();
+    if (url) return { type: 'external' as const, url };
 
     const coverArtId = artist()?.coverArtId;
     const profileId = sessionStore.activeSession?.profileId;
-    if (!coverArtId || !profileId) {
-      return null;
-    }
+    if (!coverArtId || !profileId) return null;
 
-    return {
-      profileId,
-      coverArtId,
-      size: ARTIST_COVER_ART_SIZE,
-    };
+    return { type: 'coverArt' as const, profileId, coverArtId, size: ARTIST_COVER_ART_SIZE };
   });
 
-  const [coverArt] = createResource(coverArtRequest, (payload) => fetchCoverArtAssetUrl(payload));
-  const artistImageSrc = createMemo(() => heroImageUrl() ?? coverArt() ?? null);
+  const [artistImage] = createResource(artistImageRequest, (req) => {
+    if (req.type === 'external') {
+      return fetchArtistImageAssetUrl(req.url);
+    }
+    return fetchCoverArtAssetUrl(req);
+  });
 
   const [failedSrc, setFailedSrc] = createSignal<string | null>(null);
   const effectiveArtistImageSrc = createMemo(() => {
-    const src = artistImageSrc();
+    const src = artistImage() ?? null;
     return src !== null && src === failedSrc() ? null : src;
   });
 

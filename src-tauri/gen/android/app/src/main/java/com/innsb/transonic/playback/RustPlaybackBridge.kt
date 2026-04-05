@@ -5,6 +5,8 @@ class RustPlaybackBridge {
 
   external fun dispatchControllerAction(action: String)
 
+  external fun notifyAppResumedFromNotification()
+
   companion object {
     init {
       System.loadLibrary("transonic_lib")

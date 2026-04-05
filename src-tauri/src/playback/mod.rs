@@ -18,6 +18,8 @@ use crate::playback::native_events::NoopNativePlaybackEventSource;
 #[cfg(target_os = "android")]
 pub(crate) use android_mobile_plugin::init as init_android_mobile_plugin;
 #[cfg(target_os = "android")]
+pub(crate) use android_runtime::consume_pending_notification_tap;
+#[cfg(target_os = "android")]
 pub(crate) use android_runtime::install_android_app_handle;
 pub use controller::{PlaybackController, PlaybackRuntimeContext};
 pub use reporting::PlaybackEventAppHandle;

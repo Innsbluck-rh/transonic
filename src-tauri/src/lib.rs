@@ -1,3 +1,4 @@
+mod artist_image_cache;
 pub mod bindings;
 mod commands;
 mod connection;
@@ -11,6 +12,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
+use artist_image_cache::ArtistImageCache;
 use cover_art_cache::CoverArtCache;
 use models::ActiveSession;
 use playback::{PlaybackController, PlaybackEventAppHandle};
@@ -18,6 +20,7 @@ use playback::{PlaybackController, PlaybackEventAppHandle};
 pub(crate) struct ActiveSessionState(pub Mutex<Option<ActiveSession>>);
 pub(crate) struct PlaybackControllerState(pub Mutex<PlaybackController>);
 pub(crate) struct CoverArtCacheState(pub CoverArtCache);
+pub(crate) struct ArtistImageCacheState(pub ArtistImageCache);
 
 impl Default for ActiveSessionState {
     fn default() -> Self {
@@ -33,6 +36,12 @@ impl PlaybackControllerState {
 
 impl CoverArtCacheState {
     fn new(cache: CoverArtCache) -> Self {
+        Self(cache)
+    }
+}
+
+impl ArtistImageCacheState {
+    fn new(cache: ArtistImageCache) -> Self {
         Self(cache)
     }
 }
@@ -75,6 +84,16 @@ pub fn run() {
                 .join("cover-art");
             app.manage(CoverArtCacheState::new(CoverArtCache::new(
                 cover_art_cache_root,
+            )));
+            let artist_image_cache_root = app
+                .path()
+                .app_cache_dir()
+                .map_err(|error| {
+                    format!("Failed to resolve the app cache directory for artist images: {error}")
+                })?
+                .join("artist-image");
+            app.manage(ArtistImageCacheState::new(ArtistImageCache::new(
+                artist_image_cache_root,
             )));
 
             #[cfg(target_os = "android")]
