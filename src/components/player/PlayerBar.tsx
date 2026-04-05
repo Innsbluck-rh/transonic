@@ -58,7 +58,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   return (
-    <div class='relative flex w-full flex-col shadow-[0_4px_10px_rgba(128,128,128,0.5)]'>
+    <div class='relative flex w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0_/_0.05)]'>
       <div class='absolute z-30 w-full translate-y-[-50%]'>
         <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
       </div>
@@ -88,14 +88,14 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
           </Show>
         </div>
 
-        <div {...props.restAreaProps} class={`ml-2 flex min-w-0 flex-1 items-center ${restAreaClass() ?? ''}`} onClick={onClickRestArea}>
+        <div {...props.restAreaProps} class={`ml-3 flex min-w-0 flex-1 items-center ${restAreaClass() ?? ''}`} onClick={onClickRestArea}>
           <Switch
             fallback={
               <>
                 <div class='mt-1 flex min-w-0 flex-1 flex-col gap-1'>
                   <MarqueeParagraph
                     text={currentEntry()?.title || '[unknown]'}
-                    class='archivo w-fit leading-none font-bold'
+                    class='archivo w-fit text-base leading-none font-bold'
                     classList={{
                       'cursor-pointer': !!props.onClickTitle,
                     }}

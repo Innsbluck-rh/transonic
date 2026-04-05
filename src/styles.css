@@ -52,7 +52,7 @@
   --theme-color-secondary-border: var(--color-zinc-300);
   --theme-color-primary-text: var(--color-zinc-700);
   --theme-color-secondary-text: var(--color-zinc-500);
-  --theme-color-sp-nav-space: var(--color-zinc-500);
+  --theme-color-sp-nav-space: var(--color-zinc-400);
   --theme-color-accent: var(--color-sky-600);
   --player-bar-height: 0.15rem;
   --player-bar-detect-height: 1rem;

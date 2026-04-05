@@ -41,14 +41,14 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
       <div
         {...props.topSectionProps}
-        class={`relative flex h-auto w-full shrink-0 flex-col items-center shadow-[0_0_16px_rgba(128,128,128,0.25)] ${props.topSectionProps?.class ?? ''}`}
+        class={`relative flex h-auto w-full shrink-0 flex-col items-center shadow-lg ${props.topSectionProps?.class ?? ''}`}
       >
         <div class='z-10 mt-7 flex h-full w-full flex-col items-center'>
           <div class='flex h-full w-full flex-col items-center px-8'>
             <Show when={coverArt()}>
               {(assetUrl) => (
                 <img
-                  class='aspect-square h-auto w-52 max-w-[70%] min-w-1/3 object-cover object-center shadow-[0_0_24px_rgba(128,128,128,0.25)]'
+                  class='aspect-square h-auto w-48 max-w-[70%] min-w-1/3 object-cover object-center shadow-xl'
                   src={assetUrl()}
                   loading='lazy'
                   decoding='async'
@@ -81,7 +81,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
             />
 
             <div
-              class='border-secondary-border mt-3 flex w-full flex-row items-center justify-evenly'
+              class='border-secondary-border mt-2 flex w-full flex-row items-center justify-evenly'
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}

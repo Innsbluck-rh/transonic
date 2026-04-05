@@ -83,7 +83,7 @@ function BrowseAlbum(props: BrowseAlbumProps) {
         <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full' />
 
         <div
-          class='group border-secondary-border relative z-10 h-auto w-52 max-w-1/2 border lg:w-42'
+          class='group border-secondary-border relative z-10 h-auto w-52 max-w-1/2 border shadow-xl lg:w-42'
           onClick={() => {
             const albumId = album()?.id;
             if (albumId) playAlbum(albumId);
