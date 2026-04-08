@@ -58,7 +58,7 @@ log = "0.4"
 keyring = { version = "3", features = ["windows-native"] }
 rodio = "0.22.2"
 cpal = "0.17"
-symphonia = { version = "0.5.5", features = ["flac", "mp3", "aac", "isomp4", "pcm", "vorbis", "ogg"] }
+symphonia = { version = "0.5.5", features = ["flac", "mp3", "aac", "isomp4", "pcm", "vorbis", "ogg", "alac"] }
 windows = { version = "0.61", features = [
     "Win32_Media_MediaFoundation",
     "Win32_Media_Audio",

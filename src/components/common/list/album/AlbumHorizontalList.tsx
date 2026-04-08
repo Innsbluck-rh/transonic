@@ -10,7 +10,6 @@ interface AlbumHorizontalListProps {
   onItemDblClick?: (album: AlbumListItem, e: MouseEvent) => void;
   onItemArtClick?: (album: AlbumListItem, e: MouseEvent) => void;
   onItemArtDblClick?: (album: AlbumListItem, e: MouseEvent) => void;
-  onItemContextMenu?: (album: AlbumListItem, e: MouseEvent) => void;
 }
 
 const AlbumHorizontalList: Component<AlbumHorizontalListProps> = (props) => {

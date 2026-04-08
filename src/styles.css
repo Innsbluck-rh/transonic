@@ -159,6 +159,14 @@
   .home-surface-root {
     @apply bg-primary-surface flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
   }
+
+  img {
+    -webkit-user-drag: none;
+    user-drag: none;
+    /* テキスト選択も防ぐ場合 */
+    user-select: none;
+    -webkit-user-select: none;
+  }
 }
 
 /* SP screen page transitions via View Transitions API */

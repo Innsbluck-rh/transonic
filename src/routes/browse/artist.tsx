@@ -33,7 +33,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
     (artistInfo()?.similarArtists ?? []).map((similarArtist) => ({
       id: similarArtist.id,
       name: similarArtist.name,
-      href: resolveArtistRoute(similarArtist.id, props.routeVariant ?? 'desktop'),
+      href: resolveArtistRoute(similarArtist.id),
     }))
   );
 
@@ -185,7 +185,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
                     albums={albums()}
                     emptyMessage='No ID3 albums returned for this artist.'
                     onItemClick={(album) => {
-                      navigate(resolveAlbumRoute(album.id, props.routeVariant ?? 'desktop'));
+                      navigate(resolveAlbumRoute(album.id));
                     }}
                   />
                 </div>

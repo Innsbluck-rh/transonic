@@ -4,7 +4,6 @@ import { commands, type FolderStructureAlbumsResponse, type FolderStructureRoots
 import LoadCircle from '~/components/common/LoadCircle';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
 import { AlbumItem } from '~/components/common/list/album/item/AlbumGridItem';
-import { buildAlbumMenuItems, showContextMenu } from '~/features/menu';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
@@ -130,16 +129,6 @@ function BrowseFolderStructure() {
             onItemClick={async (album) => {
               if (!params.libraryId || !params.nodeId) return;
               await playFolderAlbum(params.libraryId, params.nodeId, album.id);
-            }}
-            onItemContextMenu={(album, e) => {
-              if (!params.libraryId || !params.nodeId) return;
-              showContextMenu(
-                e,
-                buildAlbumMenuItems(
-                  { type: 'folder_album', libraryId: params.libraryId, nodeId: params.nodeId, albumId: album.id },
-                  { insertAfterCurrent, appendToQueue }
-                )
-              );
             }}
           />
         </Show>

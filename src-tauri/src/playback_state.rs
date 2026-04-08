@@ -42,6 +42,7 @@ impl PlaybackStatePersister for FilePlaybackStatePersister {
 }
 
 #[derive(Debug, Default)]
+#[allow(dead_code)]
 pub struct NoopPlaybackStatePersister;
 
 impl PlaybackStatePersister for NoopPlaybackStatePersister {

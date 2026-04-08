@@ -265,6 +265,13 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
     <div ref={containerRef} class='relative flex min-h-0 w-full flex-1 flex-col overflow-hidden'>
       <div class='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden' style='view-transition-name: sp-screen'>
         {props.children}
+        <div
+          class='pointer-events-none absolute inset-0 z-20 bg-black'
+          style={{
+            opacity: `${progress() * 0.75}`,
+            transition: shouldAnimate() ? `opacity ${DEFAULT_SETTLE_DURATION_MS}ms ease-out` : 'none',
+          }}
+        />
       </div>
 
       <div
