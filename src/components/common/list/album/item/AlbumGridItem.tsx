@@ -1,5 +1,8 @@
 import { Component } from 'solid-js';
 import type { AlbumListItem, ArtistAlbum, FolderStructureAlbumItem } from '~/bindings';
+import { buildAlbumMenuItems } from '~/features/menu';
+import useContextMenu from '~/features/menu/useContextMenu';
+import { usePlayback } from '~/features/playback/usePlayback';
 import AlbumCover from './AlbumCover';
 
 export type AlbumItem = AlbumListItem | ArtistAlbum | FolderStructureAlbumItem;
@@ -9,12 +12,21 @@ interface AlbumGridItemProps {
   album: AlbumItem;
   onClick?: (e: MouseEvent) => void;
   onDblClick?: (e: MouseEvent) => void;
-  onContextMenu?: (e: MouseEvent) => void;
   onArtClick?: (e: MouseEvent) => void;
   onArtDblClick?: (e: MouseEvent) => void;
 }
 
 const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
+  const { insertAfterCurrent, appendToQueue } = usePlayback();
+  const contextMenuProps = useContextMenu(
+    buildAlbumMenuItems(
+      {
+        albumId: props.album.id,
+        type: 'album',
+      },
+      { insertAfterCurrent, appendToQueue }
+    )
+  );
   const isClickable = !!(props.onClick || props.onDblClick || props.onArtClick || props.onArtDblClick);
 
   return (
@@ -22,7 +34,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
       class={`group flex shrink-0 flex-col ${props.class}`}
       onClick={(e) => props.onArtClick?.(e)}
       onDblClick={(e) => props.onArtDblClick?.(e)}
-      onContextMenu={(e) => props.onContextMenu?.(e)}
+      {...contextMenuProps}
       classList={{
         'cursor-pointer': isClickable,
       }}

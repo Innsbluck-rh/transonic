@@ -1,5 +1,4 @@
 import { useNavigate } from '@solidjs/router';
-import { platform } from '@tauri-apps/plugin-os';
 import { createSignal, Show } from 'solid-js';
 import { commands, type ConnectServerProfileRequest, type ConnectServerProfileResult } from '~/bindings';
 import AuthForm, { AuthFormData } from '~/components/auth/AuthForm';
@@ -25,8 +24,7 @@ function formatFailureMsg(result: ConnectServerProfileResult) {
 
 function InitLogin() {
   const navigate = useNavigate();
-  const pf = platform();
-  const homeRoute = resolveHomeRoute(pf === 'android' || pf === 'ios' ? 'mobile' : 'desktop');
+  const homeRoute = resolveHomeRoute();
 
   const [submitting, setSubmitting] = createSignal<boolean>(false);
   const [submitError, setSubmitError] = createSignal<string | undefined>();

@@ -63,7 +63,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
                 const albumId = currentEntry()?.albumId;
                 if (!albumId) return;
                 closePlayerBar(false);
-                navigate(resolveAlbumRoute(albumId, 'mobile'));
+                navigate(resolveAlbumRoute(albumId));
               }}
             />
             <MarqueeParagraph
@@ -76,7 +76,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
                 const artistId = currentEntry()?.artistId;
                 if (!artistId) return;
                 closePlayerBar(false);
-                navigate(resolveArtistRoute(artistId, 'mobile'));
+                navigate(resolveArtistRoute(artistId));
               }}
             />
 

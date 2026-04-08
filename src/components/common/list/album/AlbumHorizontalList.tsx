@@ -26,7 +26,6 @@ const AlbumHorizontalList: Component<AlbumHorizontalListProps> = (props) => {
               onDblClick={(e) => props.onItemDblClick?.(album, e)}
               onArtClick={(e) => props.onItemArtClick?.(album, e)}
               onArtDblClick={(e) => props.onItemArtDblClick?.(album, e)}
-              onContextMenu={(e) => props.onItemContextMenu?.(album, e)}
             />
           )}
         </For>

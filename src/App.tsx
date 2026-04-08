@@ -2,7 +2,8 @@
 
 import { MetaProvider } from '@solidjs/meta';
 import { Navigate, Route, Router } from '@solidjs/router';
-import { platform } from '@tauri-apps/plugin-os';
+import PCContextMenu from './components/menu/PCContextMenu';
+import SPBottomContextMenu from './components/menu/SPBottomContextMenu';
 import { MOBILE_HOME_ROUTE, resolveHomeRoute } from './features/navigation/routes';
 import BrowseAlbum from './routes/browse/album';
 import BrowseArtist from './routes/browse/artist';
@@ -21,9 +22,7 @@ import SPIndexArtists from './routes/sp/index_artists';
 import SPIndexFolders from './routes/sp/index_folders';
 
 export default function App() {
-  const pf = platform();
-  const isSP = pf === 'android' || pf === 'ios';
-  const homeRoute = resolveHomeRoute(isSP ? 'mobile' : 'desktop');
+  const homeRoute = resolveHomeRoute();
 
   return (
     <Router
@@ -60,6 +59,8 @@ export default function App() {
         <Route path='/init_login' component={InitLogin} />
         <Route path='*404' component={AppError} />
       </Route>
+      <PCContextMenu />
+      <SPBottomContextMenu />
     </Router>
   );
 }

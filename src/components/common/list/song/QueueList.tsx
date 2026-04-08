@@ -1,7 +1,8 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
-import { buildQueueItemMenuItems, showContextMenu } from '~/features/menu';
+import { buildQueueItemMenuItems } from '~/features/menu';
+import useContextMenu from '~/features/menu/useContextMenu';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { playbackStore } from '~/stores/PlaybackStore';
 
@@ -48,6 +49,7 @@ const QueueList: Component<QueueListProps> = (props) => {
               index: i(),
             });
           };
+          const contextMenuProps = useContextMenu(buildQueueItemMenuItems(entry, i(), navigate));
 
           const isPlaying = () => playbackStore.status?.currentSongId === entry.id && playbackStore.status?.currentIndex === i();
 
@@ -57,10 +59,8 @@ const QueueList: Component<QueueListProps> = (props) => {
               classList={{
                 'bg-primary-playing': isPlaying(),
               }}
-              onContextMenu={(e) => {
-                showContextMenu(e, buildQueueItemMenuItems(entry, i(), navigate));
-              }}
               onClick={onClickEntry}
+              {...contextMenuProps}
             >
               <div class='group-hover:text-primary-text flex w-8 flex-row items-start'>
                 <Show

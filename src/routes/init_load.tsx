@@ -1,5 +1,4 @@
 import { useLocation, useNavigate } from '@solidjs/router';
-import { platform } from '@tauri-apps/plugin-os';
 import { createSignal, onMount, ParentComponent, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import { INIT_LOGIN_ROUTE, resolveBootstrapRoute } from '~/features/session/bootstrap';
@@ -9,8 +8,6 @@ const InitLoad: ParentComponent = (props) => {
   const location = useLocation();
   const navigate = useNavigate();
   const [loaded, setLoaded] = createSignal(false);
-  const pf = platform();
-  const routeVariant = pf === 'android' || pf === 'ios' ? 'mobile' : 'desktop';
 
   onMount(async () => {
     try {
@@ -24,7 +21,7 @@ const InitLoad: ParentComponent = (props) => {
       const bootstrap = result.data;
       loadBootstrapToStore(bootstrap);
 
-      const nextRoute = resolveBootstrapRoute(bootstrap, routeVariant);
+      const nextRoute = resolveBootstrapRoute(bootstrap);
       const currentRoute = `${location.pathname}${location.search}`;
       if (nextRoute !== currentRoute) {
         navigate(nextRoute, { replace: true });

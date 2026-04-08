@@ -1,7 +1,8 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
-import { buildSongMenuItems, showContextMenu } from '~/features/menu';
+import { buildSongMenuItems } from '~/features/menu';
+import useContextMenu from '~/features/menu/useContextMenu';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { playbackStore } from '~/stores/PlaybackStore';
 
@@ -40,9 +41,7 @@ const SongList: Component<SongListProps> = (props) => {
         }
       >
         {(song, i) => {
-          const onContextMenuEntry = (e: MouseEvent) => {
-            showContextMenu(e, buildSongMenuItems(song, { insertAfterCurrent, appendToQueue }));
-          };
+          const contextMenuProps = useContextMenu(buildSongMenuItems(song, { insertAfterCurrent, appendToQueue }));
 
           const onClickEntry = () => {
             if (!props.songs) return;
@@ -64,7 +63,7 @@ const SongList: Component<SongListProps> = (props) => {
                 'bg-primary-playing': isPlaying(),
               }}
               onClick={onClickEntry}
-              onContextMenu={onContextMenuEntry}
+              {...contextMenuProps}
             >
               <div class='group-hover:text-primary-text flex w-10 flex-row items-start'>
                 <Show

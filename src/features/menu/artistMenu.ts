@@ -1,6 +1,6 @@
-import type { MenuItemDef } from './showMenu';
+import type { MenuItem } from './types';
 
 /** Stub: artist-specific context menu items (to be implemented) */
-export function buildArtistMenuItems(_artistId: string): MenuItemDef[] {
+export function buildArtistMenuItems(_artistId: string): MenuItem[] {
   return [];
 }

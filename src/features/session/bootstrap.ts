@@ -1,5 +1,5 @@
 import type { AppBootstrap } from '~/bindings';
-import { HOME_ERROR_ROUTE, HOME_ROUTE, INIT_LOGIN_ROUTE, resolveHomeRoute, type RouteVariant } from '~/features/navigation/routes';
+import { HOME_ERROR_ROUTE, HOME_ROUTE, INIT_LOGIN_ROUTE, resolveHomeRoute } from '~/features/navigation/routes';
 
 export { HOME_ERROR_ROUTE, HOME_ROUTE, INIT_LOGIN_ROUTE };
 
@@ -9,8 +9,8 @@ export function toHomeErrorRoute(kind: HomeErrorKind) {
   return `${HOME_ERROR_ROUTE}?kind=${encodeURIComponent(kind)}`;
 }
 
-export function resolveBootstrapRoute(bootstrap: AppBootstrap, routeVariant: RouteVariant) {
-  const homeRoute = resolveHomeRoute(routeVariant);
+export function resolveBootstrapRoute(bootstrap: AppBootstrap) {
+  const homeRoute = resolveHomeRoute();
 
   switch (bootstrap.restoreStatus) {
     case 'restored':

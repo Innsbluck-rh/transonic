@@ -1,7 +1,7 @@
 import BrowseAlbum from '../browse/album';
 
 function SPAlbum() {
-  return <BrowseAlbum routeVariant='mobile' />;
+  return <BrowseAlbum />;
 }
 
 export default SPAlbum;

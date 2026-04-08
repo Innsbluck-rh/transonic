@@ -8,8 +8,7 @@ import { type BrowseListItem } from '~/components/common/list/index/BrowseList';
 import LoadCircle from '~/components/common/LoadCircle';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { fetchArtistImageAssetUrl } from '~/features/artist/service';
-import { buildAlbumMenuItems, showContextMenu } from '~/features/menu';
-import { resolveAlbumRoute, resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
+import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
@@ -17,11 +16,7 @@ import { sessionStore } from '~/stores/SessionStore';
 const ARTIST_COVER_ART_SIZE = 320;
 const SIMILAR_ARTIST_COUNT = 8;
 
-interface BrowseArtistProps extends Partial<RouteSectionProps<unknown>> {
-  routeVariant?: RouteVariant;
-}
-
-function BrowseArtist(props: BrowseArtistProps) {
+function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
   const params = useParams();
   const navigate = useSPNavigate();
   const { insertAfterCurrent, appendToQueue } = usePlayback();
@@ -191,9 +186,6 @@ function BrowseArtist(props: BrowseArtistProps) {
                     emptyMessage='No ID3 albums returned for this artist.'
                     onItemClick={(album) => {
                       navigate(resolveAlbumRoute(album.id, props.routeVariant ?? 'desktop'));
-                    }}
-                    onItemContextMenu={(album, e) => {
-                      showContextMenu(e, buildAlbumMenuItems({ type: 'album', albumId: album.id }, { insertAfterCurrent, appendToQueue }));
                     }}
                   />
                 </div>

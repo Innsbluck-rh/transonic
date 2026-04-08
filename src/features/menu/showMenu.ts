@@ -1,24 +1,18 @@
-import { Menu, MenuItem } from '@tauri-apps/api/menu';
+import { openContextMenu } from '~/stores/ContextMenuStore';
+import type { MenuItem } from './types';
 
-export interface MenuItemDef {
-  label: string;
-  action: () => void;
-  enabled?: boolean;
-}
+export function showContextMenu(e: TouchEvent | MouseEvent, items: MenuItem[]) {
+  let clientX, clientY;
+  if (e instanceof MouseEvent) {
+    clientX = e.clientX;
+    clientY = e.clientY;
+  } else {
+    // Access the first touch point
+    clientX = e.touches[0].clientX;
+    clientY = e.touches[0].clientY;
+  }
 
-export async function showContextMenu(e: MouseEvent, items: MenuItemDef[]): Promise<void> {
   e.preventDefault();
-
-  const menuItems = await Promise.all(
-    items.map((item) =>
-      MenuItem.new({
-        text: item.label,
-        enabled: item.enabled ?? true,
-        action: () => item.action(),
-      })
-    )
-  );
-
-  const menu = await Menu.new({ items: menuItems });
-  await menu.popup();
+  e.stopPropagation();
+  openContextMenu(items, clientX, clientY);
 }

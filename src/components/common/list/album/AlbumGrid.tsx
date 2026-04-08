@@ -8,7 +8,6 @@ interface AlbumGridProps {
   onItemDblClick?: (album: AlbumItem, e: MouseEvent) => void;
   onItemArtClick?: (album: AlbumItem, e: MouseEvent) => void;
   onItemArtDblClick?: (album: AlbumItem, e: MouseEvent) => void;
-  onItemContextMenu?: (album: AlbumItem, e: MouseEvent) => void;
 }
 
 const AlbumGrid: Component<AlbumGridProps> = (props) => {
@@ -23,7 +22,6 @@ const AlbumGrid: Component<AlbumGridProps> = (props) => {
               onDblClick={(e) => props.onItemDblClick?.(album, e)}
               onArtClick={(e) => props.onItemArtClick?.(album, e)}
               onArtDblClick={(e) => props.onItemArtDblClick?.(album, e)}
-              onContextMenu={(e) => props.onItemContextMenu?.(album, e)}
             />
           )}
         </For>

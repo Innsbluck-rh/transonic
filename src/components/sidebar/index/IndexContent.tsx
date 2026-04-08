@@ -1,6 +1,6 @@
 import { useNavigate } from '@solidjs/router';
-import { Component, createMemo, createSignal, Match, Switch } from 'solid-js';
-import { resolveBrowseIndexRoute, type RouteVariant } from '~/features/navigation/routes';
+import { Component, createSignal, Match, Switch } from 'solid-js';
+import { resolveBrowseIndexRoute } from '~/features/navigation/routes';
 import ArtistList from './list/ArtistList';
 import FolderList from './list/FolderList';
 import IndexModeSelect from './select/IndexModeSelect';
@@ -15,14 +15,12 @@ export const BROWSE_MODE_URLS: Record<BrowseMode, string> = {
 interface IndexContentProps {
   initialMode?: BrowseMode;
   modeNavigation?: 'local' | 'route';
-  routeVariant?: RouteVariant;
 }
 
 const IndexContent: Component<IndexContentProps> = (props) => {
   const navigate = useNavigate();
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>(props.initialMode ?? 'Artists');
-  const routeVariant = createMemo<RouteVariant>(() => props.routeVariant ?? 'desktop');
-  const selectedMode = createMemo<BrowseMode>(() => (props.modeNavigation === 'route' ? (props.initialMode ?? 'Artists') : browseMode()));
+  const selectedMode = () => (props.modeNavigation === 'route' ? (props.initialMode ?? 'Artists') : browseMode());
 
   return (
     <div class='flex w-full flex-col overflow-y-hidden'>
@@ -30,7 +28,7 @@ const IndexContent: Component<IndexContentProps> = (props) => {
         defaultMode={selectedMode()}
         onSelect={(mode) => {
           if (props.modeNavigation === 'route') {
-            navigate(resolveBrowseIndexRoute(mode, routeVariant()));
+            navigate(resolveBrowseIndexRoute(mode));
             return;
           }
 
@@ -41,10 +39,10 @@ const IndexContent: Component<IndexContentProps> = (props) => {
       <div class='flex-1 overflow-y-auto'>
         <Switch>
           <Match when={selectedMode() === 'Artists'}>
-            <ArtistList routeVariant={routeVariant()} />
+            <ArtistList />
           </Match>
           <Match when={selectedMode() === 'Folder Structures'}>
-            <FolderList routeVariant={routeVariant()} />
+            <FolderList />
           </Match>
         </Switch>
       </div>

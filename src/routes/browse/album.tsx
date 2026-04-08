@@ -7,23 +7,34 @@ import PseudoAlbumCover from '~/components/common/list/album/item/PseudoAlbumCov
 import SongList from '~/components/common/list/song/SongList';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import { useCoverArt } from '~/features/albums/useCoverArt';
-import { resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
+import { buildAlbumMenuItems } from '~/features/menu';
+import useContextMenu from '~/features/menu/useContextMenu';
+import { resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
 const ALBUM_COVER_ART_SIZE = 320;
 
-interface BrowseAlbumProps extends Partial<RouteSectionProps<unknown>> {
-  routeVariant?: RouteVariant;
-}
-
-function BrowseAlbum(props: BrowseAlbumProps) {
+function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
   const navigate = useSPNavigate();
   const params = useParams();
   const { playAlbum, insertAfterCurrent, appendToQueue } = usePlayback();
 
   const [album, setAlbum] = createSignal<AlbumSongsResponse | null>(null);
+  const contextMenuProps = createMemo(() => {
+    const albumId = album()?.id;
+    if (!albumId) return {};
+    return useContextMenu(
+      buildAlbumMenuItems(
+        {
+          albumId,
+          type: 'album',
+        },
+        { insertAfterCurrent, appendToQueue }
+      )
+    );
+  });
   let latestLoadId = 0;
 
   const { src: coverArt, loading: coverArtLoading } = useCoverArt(() => album()?.coverArtId ?? null, ALBUM_COVER_ART_SIZE);
@@ -83,11 +94,12 @@ function BrowseAlbum(props: BrowseAlbumProps) {
         <div class='absolute top-0 right-0 bottom-0 left-0 flex h-full w-full' />
 
         <div
-          class='group border-secondary-border relative z-10 h-auto w-52 max-w-1/2 border shadow-xl lg:w-42'
+          class='group border-secondary-border pointer-events-auto relative z-10 h-auto w-52 max-w-1/2 border shadow-xl lg:w-42'
           onClick={() => {
             const albumId = album()?.id;
             if (albumId) playAlbum(albumId);
           }}
+          {...contextMenuProps()}
         >
           <Switch>
             <Match when={coverArt()}>
@@ -113,7 +125,7 @@ function BrowseAlbum(props: BrowseAlbumProps) {
           <MarqueeParagraph
             onClick={() => {
               const artistId = album()?.artistId;
-              if (artistId) navigate(resolveArtistRoute(artistId, props.routeVariant ?? 'desktop'));
+              if (artistId) navigate(resolveArtistRoute(artistId));
             }}
             class='archivo text-secondary-text hover:text-accent mt-0.5 cursor-pointer'
             text={album()?.artist || '[unknown]'}

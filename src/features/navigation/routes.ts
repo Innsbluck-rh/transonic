@@ -1,36 +1,36 @@
-export type RouteVariant = 'desktop' | 'mobile';
+import { isSP } from '~/utils/isSP';
 
 export const HOME_ROUTE = '/home';
 export const MOBILE_HOME_ROUTE = '/sp/index/artists';
 export const INIT_LOGIN_ROUTE = '/init_login';
 export const HOME_ERROR_ROUTE = '/home/error';
 
-export function resolveHomeRoute(routeVariant: RouteVariant) {
-  return routeVariant === 'mobile' ? MOBILE_HOME_ROUTE : HOME_ROUTE;
+export function resolveHomeRoute() {
+  return isSP() ? MOBILE_HOME_ROUTE : HOME_ROUTE;
 }
 
-export function resolveArtistRoute(artistId: string, routeVariant: RouteVariant) {
+export function resolveArtistRoute(artistId: string) {
   const encodedArtistId = encodeURIComponent(artistId);
-  return routeVariant === 'mobile' ? `/sp/artists/${encodedArtistId}` : `/browse/artists/${encodedArtistId}`;
+  return isSP() ? `/sp/artists/${encodedArtistId}` : `/browse/artists/${encodedArtistId}`;
 }
 
-export function resolveFolderRoute(libraryId: string, nodeId: string | null | undefined, routeVariant: RouteVariant) {
+export function resolveFolderRoute(libraryId: string, nodeId: string | null | undefined) {
   const encodedLibraryId = encodeURIComponent(libraryId);
   if (!nodeId) {
-    return routeVariant === 'mobile' ? `/sp/folders/${encodedLibraryId}` : `/browse/folders/${encodedLibraryId}`;
+    return isSP() ? `/sp/folders/${encodedLibraryId}` : `/browse/folders/${encodedLibraryId}`;
   }
 
   const encodedNodeId = encodeURIComponent(nodeId);
-  return routeVariant === 'mobile' ? `/sp/folders/${encodedLibraryId}/${encodedNodeId}` : `/browse/folders/${encodedLibraryId}/${encodedNodeId}`;
+  return isSP() ? `/sp/folders/${encodedLibraryId}/${encodedNodeId}` : `/browse/folders/${encodedLibraryId}/${encodedNodeId}`;
 }
 
-export function resolveAlbumRoute(albumId: string, routeVariant: RouteVariant) {
+export function resolveAlbumRoute(albumId: string) {
   const encodedAlbumId = encodeURIComponent(albumId);
-  return routeVariant === 'mobile' ? `/sp/albums/${encodedAlbumId}` : `/browse/album/${encodedAlbumId}`;
+  return isSP() ? `/sp/albums/${encodedAlbumId}` : `/browse/album/${encodedAlbumId}`;
 }
 
-export function resolveBrowseIndexRoute(mode: 'Artists' | 'Folder Structures', routeVariant: RouteVariant) {
-  if (routeVariant === 'mobile') {
+export function resolveBrowseIndexRoute(mode: 'Artists' | 'Folder Structures') {
+  if (isSP()) {
     return mode === 'Artists' ? '/sp/index/artists' : '/sp/index/folders';
   }
 

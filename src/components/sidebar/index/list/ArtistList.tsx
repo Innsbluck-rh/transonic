@@ -2,13 +2,9 @@ import { Component, createSignal, onMount, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import LoadCircle from '~/components/common/LoadCircle';
 import BrowseList, { BrowseListItem } from '~/components/common/list/index/BrowseList';
-import { resolveArtistRoute, type RouteVariant } from '~/features/navigation/routes';
+import { resolveArtistRoute } from '~/features/navigation/routes';
 
-interface ArtistListProps {
-  routeVariant?: RouteVariant;
-}
-
-const ArtistList: Component<ArtistListProps> = (props) => {
+const ArtistList: Component = () => {
   const [loading, setLoading] = createSignal<boolean>(false);
   const [items, setItems] = createSignal<BrowseListItem[]>([]);
 
@@ -41,7 +37,7 @@ const ArtistList: Component<ArtistListProps> = (props) => {
         return {
           id: artist.id,
           name: artist.name,
-          href: resolveArtistRoute(artist.id, props.routeVariant ?? 'desktop'),
+          href: resolveArtistRoute(artist.id),
         } as BrowseListItem;
       })
     );

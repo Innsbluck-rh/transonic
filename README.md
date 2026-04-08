@@ -5,7 +5,7 @@ Multi-platform music player for subsonic servers.
 ## icon gen
 
 ```
-pnpm tauri icon ./public/icon2.svg -o ./src-tauri/icons
+pnpm tauri icon ./public/icon3.svg -o ./src-tauri/icons
 ```
 
 ## apk build for debug

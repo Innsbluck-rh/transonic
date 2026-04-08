@@ -1,7 +1,7 @@
 import BrowseArtist from '~/routes/browse/artist';
 
 function SPBrowseArtist() {
-  return <BrowseArtist routeVariant='mobile' />;
+  return <BrowseArtist />;
 }
 
 export default SPBrowseArtist;
