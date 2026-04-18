@@ -1,3 +1,5 @@
+@./skills/genshijin/SKILL.md @./skills/genshijin-commit/SKILL.md @./skills/genshijin-review/SKILL.md @./skills/genshijin-help/SKILL.md @./skills/genshijin-compress/SKILL.md
+
 # overview
 
 - This is a music player app project compatible with the subsonic API.

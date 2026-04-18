@@ -1,11 +1,13 @@
 import { useLocation } from '@solidjs/router';
-import { createMemo, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
+import { createEffect, createMemo, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import { commands, events } from '~/bindings';
 import Header from '~/components/common/header/Header';
 import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
 import SPExpandablePlayerBar, { openPlayerBar } from '~/components/sp/SPExpandablePlayerBar';
+import { MOBILE_SETTINGS_ROUTE } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { startPlaybackStateSync } from '~/features/playback/service';
+import { setSPNavStore } from '~/stores/SPNavigationStore';
 import { sessionStore } from '~/stores/SessionStore';
 
 const HomeLayoutSP: ParentComponent = (props) => {
@@ -56,6 +58,11 @@ const HomeLayoutSP: ParentComponent = (props) => {
     unlisten?.();
   });
 
+  createEffect(() => {
+    const path = location.pathname;
+    setSPNavStore('state', path === MOBILE_SETTINGS_ROUTE ? 'setting' : 'index');
+  });
+
   const canBack = createMemo<boolean>(() => !(location.pathname === '/sp' || location.pathname.startsWith('/sp/index')));
 
   return (
@@ -99,8 +106,9 @@ const HomeLayoutSP: ParentComponent = (props) => {
                 openPlayerBar();
                 break;
               case 'setting':
-                // stab
-                // navigate('/sp/setting');
+                if (location.pathname !== MOBILE_SETTINGS_ROUTE) {
+                  spNavigate(MOBILE_SETTINGS_ROUTE);
+                }
                 break;
             }
           }}

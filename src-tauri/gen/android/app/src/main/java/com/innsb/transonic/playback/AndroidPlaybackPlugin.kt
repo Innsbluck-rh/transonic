@@ -255,6 +255,20 @@ internal object PlaybackControllerHost {
 class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
   @Command
   @Keep
+  fun play(invoke: Invoke) {
+    val applicationContext = activity.applicationContext
+    PlaybackControllerHost.withController(applicationContext) { controllerResult ->
+      controllerResult.onSuccess { controller ->
+        controller.play()
+        invoke.resolve()
+      }.onFailure { error ->
+        invoke.reject(error.userMessage("Failed to connect to Android playback controller."))
+      }
+    }
+  }
+
+  @Command
+  @Keep
   fun loadPreparedMedia(invoke: Invoke) {
     val args = invoke.parseArgs(LoadPreparedMediaArgs::class.java)
     val applicationContext = activity.applicationContext

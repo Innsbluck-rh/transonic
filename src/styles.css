@@ -115,7 +115,12 @@
   }
 
   select {
-    @apply border-primary-border rounded-sm border px-0 py-0 text-sm;
+    @apply border-primary-border bg-primary-plane text-primary-text rounded-sm border px-0 py-0 text-sm;
+    color-scheme: inherit;
+  }
+
+  option {
+    @apply bg-primary-plane text-primary-text;
   }
   input {
     @apply border-primary-border border-b px-0 py-0 text-sm;

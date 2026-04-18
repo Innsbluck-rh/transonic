@@ -5,26 +5,11 @@ import { buildQueueItemMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { playbackStore } from '~/stores/PlaybackStore';
+import { formatCompactDuration } from '~/utils/duration';
 
 interface QueueListProps {
   queue: SongResponse[];
   onClickQueue?: (song: SongResponse, index: number, songs: SongResponse[]) => void;
-}
-
-// consider utilize this
-function formatDurationSecond(duration: number) {
-  const h = Math.round(duration / 3600);
-  const m = Math.round(duration / 60) - h * 60;
-  const s = Math.round(duration % 60);
-  if (h > 0) {
-    return `${String(h)}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-  } else if (m > 0) {
-    return `${String(m)}:${String(s).padStart(2, '0')}`;
-  } else if (s > 0) {
-    return `0:${String(s).padStart(2, '0')}`;
-  } else {
-    return '';
-  }
 }
 
 const QueueList: Component<QueueListProps> = (props) => {
@@ -107,7 +92,7 @@ const QueueList: Component<QueueListProps> = (props) => {
                   'text-primary-on-playing': isPlaying(),
                 }}
               >
-                {formatDurationSecond(entry.duration ?? 0)}
+                {formatCompactDuration(entry.duration ?? 0)}
               </p>
             </div>
           );

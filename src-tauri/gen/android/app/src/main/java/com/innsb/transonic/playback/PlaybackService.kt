@@ -108,7 +108,10 @@ class PlaybackService : MediaSessionService(), Player.Listener {
   override fun onCreate() {
     super.onCreate()
 
-    player = ExoPlayer.Builder(this).build().apply {
+    player = ExoPlayer.Builder(this)
+      .setHandleAudioBecomingNoisy(true)
+      .build()
+      .apply {
       setAudioAttributes(
         AudioAttributes.Builder()
           .setUsage(C.USAGE_MEDIA)

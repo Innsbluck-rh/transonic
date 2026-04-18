@@ -15,6 +15,7 @@ import HomeLayoutSP from './routes/homeLayoutSP';
 import InitLoad from './routes/init_load';
 import InitLogin from './routes/init_login';
 import Layout from './routes/layout';
+import SettingsRoute from './routes/settings';
 import SPAlbum from './routes/sp/album';
 import SPBrowseArtist from './routes/sp/artist';
 import SPBrowseFolderStructure from './routes/sp/folder';
@@ -41,6 +42,7 @@ export default function App() {
           <Route path='/home/error' component={AppError} />
           <Route component={HomeLayout}>
             <Route path='/home' component={Home} />
+            <Route path='/settings' component={SettingsRoute} />
             <Route path='/browse/folders/:libraryId' component={BrowseFolderStructure} />
             <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
             <Route path='/browse/artists/:id' component={BrowseArtist} />
@@ -50,6 +52,7 @@ export default function App() {
             <Route path='/sp' component={() => <Navigate href={MOBILE_HOME_ROUTE} />} />
             <Route path='/sp/index/artists' component={SPIndexArtists} />
             <Route path='/sp/index/folders' component={SPIndexFolders} />
+            <Route path='/sp/setting' component={SettingsRoute} />
             <Route path='/sp/artists/:id' component={SPBrowseArtist} />
             <Route path='/sp/folders/:libraryId' component={SPBrowseFolderStructure} />
             <Route path='/sp/folders/:libraryId/:nodeId' component={SPBrowseFolderStructure} />

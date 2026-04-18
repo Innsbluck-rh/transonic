@@ -5,3 +5,6 @@ storybook-static
 
 *.jks
 keystore.properties
+.agents
+.codex-plugins
+.serena

@@ -46,6 +46,12 @@ impl AndroidPlaybackBridge {
         Self { handle }
     }
 
+    pub fn play(&self) -> Result<(), String> {
+        self.handle
+            .run_mobile_plugin::<()>("play", ())
+            .map_err(|error| format!("Failed to resume the Android playback media: {error}"))
+    }
+
     pub fn load_prepared_media(&self, payload: &AndroidPreparedMediaRequest) -> Result<(), String> {
         self.handle
             .run_mobile_plugin::<()>("loadPreparedMedia", payload)

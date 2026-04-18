@@ -4,9 +4,15 @@ export const HOME_ROUTE = '/home';
 export const MOBILE_HOME_ROUTE = '/sp/index/artists';
 export const INIT_LOGIN_ROUTE = '/init_login';
 export const HOME_ERROR_ROUTE = '/home/error';
+export const SETTINGS_ROUTE = '/settings';
+export const MOBILE_SETTINGS_ROUTE = '/sp/setting';
 
 export function resolveHomeRoute() {
   return isSP() ? MOBILE_HOME_ROUTE : HOME_ROUTE;
+}
+
+export function resolveSettingsRoute() {
+  return isSP() ? MOBILE_SETTINGS_ROUTE : SETTINGS_ROUTE;
 }
 
 export function resolveArtistRoute(artistId: string) {

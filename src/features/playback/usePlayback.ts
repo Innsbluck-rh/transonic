@@ -1,21 +1,9 @@
 import { createMemo, createSignal } from 'solid-js';
 import { commands, InterruptReason, PlayingState, type QueueSource, type SongResponse } from '~/bindings';
+import { formatClockTime } from '~/utils/duration';
 import { hasPlaybackCommandError } from './service';
 
 import { playbackStore } from '~/stores/PlaybackStore';
-
-function formatTime(totalSeconds: number) {
-  const safeSeconds = Math.max(0, Math.floor(totalSeconds));
-  const hours = Math.floor(safeSeconds / 3600);
-  const minutes = Math.floor((safeSeconds % 3600) / 60);
-  const seconds = safeSeconds % 60;
-
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-  }
-
-  return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-}
 
 function clampPositionMs(positionMs: number, durationMs: number) {
   if (durationMs <= 0) {
@@ -102,8 +90,8 @@ export function usePlayback() {
   });
   const canSeek = createMemo(() => !isSeekDisabledForState(playingState()) && durationMs() > 0);
   const interruptLabel = createMemo(() => interruptLabelForReason(interruptReason()));
-  const currentPositionText = createMemo(() => formatTime(currentPositionMs() / 1000));
-  const durationText = createMemo(() => formatTime(durationMs() / 1000));
+  const currentPositionText = createMemo(() => formatClockTime(currentPositionMs() / 1000));
+  const durationText = createMemo(() => formatClockTime(durationMs() / 1000));
 
   const play = () => {
     commands.playbackPlay().then(hasPlaybackCommandError);

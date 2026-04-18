@@ -66,8 +66,7 @@ impl PlaybackBackend for AndroidPlaybackBackend {
     }
 
     fn resume(&mut self) -> Result<(), String> {
-        // Android uses ExoPlayer which handles resume via play(); not needed here.
-        Ok(())
+        self.bridge.play()
     }
 
     fn stop(&mut self) -> Result<(), String> {

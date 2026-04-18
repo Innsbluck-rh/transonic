@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "skills": {
+    "genshijin": {
+      "source": "InterfaceX-co-jp/genshijin",
+      "sourceType": "github",
+      "computedHash": "8d31bbe2c2a350f04a81c7eebac5eb694d4dfc57964732ddbb4d5e930a01ee98"
+    },
+    "genshijin-compress": {
+      "source": "InterfaceX-co-jp/genshijin",
+      "sourceType": "github",
+      "computedHash": "8dac7819b842a16fe3d1844dc3373db25ac35b0539705fac1dfd5235561ee749"
+    },
+    "genshijin-review": {
+      "source": "InterfaceX-co-jp/genshijin",
+      "sourceType": "github",
+      "computedHash": "f6fa3c56f88f788c1516eee862434b06c8f86c91a925689a78b114a5a8cee2e0"
+    }
+  }
+}
