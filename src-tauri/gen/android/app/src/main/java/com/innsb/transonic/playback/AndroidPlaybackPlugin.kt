@@ -6,6 +6,8 @@ import android.content.Context
 import android.os.Bundle
 import androidx.annotation.Keep
 import androidx.core.content.ContextCompat
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
@@ -18,6 +20,9 @@ import app.tauri.plugin.Plugin
 import com.google.common.util.concurrent.ListenableFuture
 
 internal const val COMMAND_LOAD_PREPARED_MEDIA = "com.innsb.transonic.playback.LOAD_PREPARED_MEDIA"
+internal const val COMMAND_PREPARE_NEXT_MEDIA = "com.innsb.transonic.playback.PREPARE_NEXT_MEDIA"
+internal const val COMMAND_ACTIVATE_PREPARED_MEDIA = "com.innsb.transonic.playback.ACTIVATE_PREPARED_MEDIA"
+internal const val COMMAND_CLEAR_PREPARED_MEDIA = "com.innsb.transonic.playback.CLEAR_PREPARED_MEDIA"
 
 private const val KEY_MEDIA_ID = "mediaId"
 private const val KEY_STREAM_URL = "streamUrl"
@@ -55,12 +60,23 @@ class LoadPreparedMediaArgs {
 
 @InvokeArg
 @Keep
+class ActivatePreparedMediaArgs {
+  var autoplay: Boolean = false
+}
+
+@InvokeArg
+@Keep
 class SeekToArgs {
   var positionMs: Long = 0
 }
 
 @Keep
 data class CurrentPositionResponse(val positionMs: Long)
+
+private data class ControllerMediaState(
+  val mediaId: String,
+  val basePositionMs: Long,
+)
 
 private fun LoadPreparedMediaArgs.toBundle(): Bundle {
   val headerNames = ArrayList<String>(headers.size)
@@ -82,6 +98,12 @@ private fun LoadPreparedMediaArgs.toBundle(): Bundle {
     putString(KEY_ARTIST, artist)
     putString(KEY_ALBUM, album)
     putString(KEY_ARTWORK_PATH, artworkPath)
+  }
+}
+
+private fun ActivatePreparedMediaArgs.toBundle(): Bundle {
+  return Bundle().apply {
+    putBoolean(KEY_AUTOPLAY, autoplay)
   }
 }
 
@@ -117,6 +139,12 @@ internal fun Bundle.toLoadPreparedMediaArgs(): LoadPreparedMediaArgs? {
   }
 }
 
+internal fun Bundle.toActivatePreparedMediaArgs(): ActivatePreparedMediaArgs {
+  return ActivatePreparedMediaArgs().apply {
+    autoplay = getBoolean(KEY_AUTOPLAY)
+  }
+}
+
 private fun Throwable.userMessage(defaultMessage: String): String {
   var current: Throwable? = this
   while (current != null) {
@@ -133,7 +161,30 @@ internal object PlaybackControllerHost {
   private var controller: MediaController? = null
   private var controllerFuture: ListenableFuture<MediaController>? = null
   private val pendingCallbacks = mutableListOf<(Result<MediaController>) -> Unit>()
-  private var loadedStreamBasePositionMs: Long = 0
+  private var currentMediaState: ControllerMediaState? = null
+  private var preparedMediaState: ControllerMediaState? = null
+  private var transitioningMediaState: ControllerMediaState? = null
+
+  private val playerListener =
+    object : Player.Listener {
+      override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+        val mediaId = mediaItem?.mediaId ?: return
+        synchronized(this@PlaybackControllerHost) {
+          val transitioning = transitioningMediaState
+          if (transitioning?.mediaId == mediaId) {
+            currentMediaState = transitioning
+            transitioningMediaState = null
+            return
+          }
+
+          val prepared = preparedMediaState ?: return
+          if (prepared.mediaId == mediaId) {
+            currentMediaState = prepared
+            preparedMediaState = null
+          }
+        }
+      }
+    }
 
   fun withExistingController(block: (MediaController) -> Unit): Boolean {
     val existingController = synchronized(this) { controller }
@@ -199,14 +250,36 @@ internal object PlaybackControllerHost {
     )
   }
 
-  fun updateLoadedStreamBasePositionMs(positionMs: Long) {
+  fun updateLoadedMedia(mediaId: String, basePositionMs: Long) {
     synchronized(this) {
-      loadedStreamBasePositionMs = positionMs
+      currentMediaState = ControllerMediaState(mediaId, basePositionMs)
+      preparedMediaState = null
+      transitioningMediaState = null
     }
   }
 
-  fun loadedStreamBasePositionMs(): Long {
-    return synchronized(this) { loadedStreamBasePositionMs }
+  fun updatePreparedMedia(mediaId: String, basePositionMs: Long) {
+    synchronized(this) {
+      preparedMediaState = ControllerMediaState(mediaId, basePositionMs)
+    }
+  }
+
+  fun beginPreparedTransition() {
+    synchronized(this) {
+      val prepared = preparedMediaState ?: return
+      transitioningMediaState = prepared
+      preparedMediaState = null
+    }
+  }
+
+  fun clearPreparedMedia() {
+    synchronized(this) {
+      preparedMediaState = null
+    }
+  }
+
+  fun currentBasePositionMs(): Long {
+    return synchronized(this) { currentMediaState?.basePositionMs ?: 0 }
   }
 
   fun releaseCurrentController() {
@@ -217,8 +290,11 @@ internal object PlaybackControllerHost {
   private fun publish(result: Result<MediaController>) {
     controllerFuture = null
     controller = result.getOrNull()
+    controller?.addListener(playerListener)
     if (controller == null) {
-      loadedStreamBasePositionMs = 0
+      currentMediaState = null
+      preparedMediaState = null
+      transitioningMediaState = null
     }
 
     val callbacks = pendingCallbacks.toList()
@@ -229,8 +305,11 @@ internal object PlaybackControllerHost {
   @Synchronized
   private fun clear(controller: MediaController) {
     if (this.controller === controller) {
+      controller.removeListener(playerListener)
       this.controller = null
-      loadedStreamBasePositionMs = 0
+      currentMediaState = null
+      preparedMediaState = null
+      transitioningMediaState = null
     }
   }
 
@@ -241,8 +320,11 @@ internal object PlaybackControllerHost {
         if (controller != null && currentController !== controller) {
           null
         } else {
+          currentController?.removeListener(playerListener)
           this.controller = null
-          loadedStreamBasePositionMs = 0
+          currentMediaState = null
+          preparedMediaState = null
+          transitioningMediaState = null
           currentController
         }
       }
@@ -287,7 +369,7 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
             try {
               val result = future.get()
               if (result.resultCode == SessionResult.RESULT_SUCCESS) {
-                PlaybackControllerHost.updateLoadedStreamBasePositionMs(streamBasePositionMs)
+                PlaybackControllerHost.updateLoadedMedia(args.mediaId, streamBasePositionMs)
                 invoke.resolve()
               } else {
                 invoke.reject("Failed to load Android playback media. resultCode=${result.resultCode}")
@@ -304,6 +386,119 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
       }.onFailure { error ->
         invoke.reject(error.userMessage("Failed to connect to Android playback controller."))
       }
+    }
+  }
+
+  @Command
+  @Keep
+  fun prepareNextMedia(invoke: Invoke) {
+    val args = invoke.parseArgs(LoadPreparedMediaArgs::class.java)
+    val applicationContext = activity.applicationContext
+    val streamBasePositionMs =
+      (args.absoluteStartPositionMs - args.localStartPositionMs).coerceAtLeast(0)
+
+    PlaybackControllerHost.withController(applicationContext) { controllerResult ->
+      controllerResult.onSuccess { controller ->
+        val future =
+          controller.sendCustomCommand(
+            SessionCommand(COMMAND_PREPARE_NEXT_MEDIA, Bundle.EMPTY),
+            args.toBundle(),
+          )
+        future.addListener(
+          {
+            try {
+              val result = future.get()
+              if (result.resultCode == SessionResult.RESULT_SUCCESS) {
+                PlaybackControllerHost.updatePreparedMedia(args.mediaId, streamBasePositionMs)
+                invoke.resolve()
+              } else {
+                invoke.reject("Failed to prepare Android playback media. resultCode=${result.resultCode}")
+              }
+            } catch (error: Throwable) {
+              if (error is InterruptedException) {
+                Thread.currentThread().interrupt()
+              }
+              invoke.reject(error.userMessage("Failed to prepare Android playback media."))
+            }
+          },
+          ContextCompat.getMainExecutor(applicationContext),
+        )
+      }.onFailure { error ->
+        invoke.reject(error.userMessage("Failed to connect to Android playback controller."))
+      }
+    }
+  }
+
+  @Command
+  @Keep
+  fun activatePreparedMedia(invoke: Invoke) {
+    val args = invoke.parseArgs(ActivatePreparedMediaArgs::class.java)
+    val applicationContext = activity.applicationContext
+
+    PlaybackControllerHost.withController(applicationContext) { controllerResult ->
+      controllerResult.onSuccess { controller ->
+        val future =
+          controller.sendCustomCommand(
+            SessionCommand(COMMAND_ACTIVATE_PREPARED_MEDIA, Bundle.EMPTY),
+            args.toBundle(),
+          )
+        future.addListener(
+          {
+            try {
+              val result = future.get()
+              if (result.resultCode == SessionResult.RESULT_SUCCESS) {
+                PlaybackControllerHost.beginPreparedTransition()
+                invoke.resolve()
+              } else {
+                invoke.reject("Failed to activate Android playback media. resultCode=${result.resultCode}")
+              }
+            } catch (error: Throwable) {
+              if (error is InterruptedException) {
+                Thread.currentThread().interrupt()
+              }
+              invoke.reject(error.userMessage("Failed to activate Android playback media."))
+            }
+          },
+          ContextCompat.getMainExecutor(applicationContext),
+        )
+      }.onFailure { error ->
+        invoke.reject(error.userMessage("Failed to connect to Android playback controller."))
+      }
+    }
+  }
+
+  @Command
+  @Keep
+  fun clearPreparedMedia(invoke: Invoke) {
+    val applicationContext = activity.applicationContext
+    if (!PlaybackControllerHost.withExistingController { controller ->
+      val future =
+        controller.sendCustomCommand(
+          SessionCommand(COMMAND_CLEAR_PREPARED_MEDIA, Bundle.EMPTY),
+          Bundle.EMPTY,
+        )
+      future.addListener(
+        {
+          try {
+            val result = future.get()
+            if (result.resultCode == SessionResult.RESULT_SUCCESS) {
+              PlaybackControllerHost.clearPreparedMedia()
+              invoke.resolve()
+            } else {
+              invoke.reject("Failed to clear Android prepared media. resultCode=${result.resultCode}")
+            }
+          } catch (error: Throwable) {
+            if (error is InterruptedException) {
+              Thread.currentThread().interrupt()
+            }
+            invoke.reject(error.userMessage("Failed to clear Android prepared media."))
+          }
+        },
+        ContextCompat.getMainExecutor(applicationContext),
+      )
+    }) {
+      PlaybackControllerHost.clearPreparedMedia()
+      invoke.resolve()
     }
   }
 
@@ -337,7 +532,7 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
     val args = invoke.parseArgs(SeekToArgs::class.java)
     if (!PlaybackControllerHost.withExistingController { controller ->
       val localPositionMs =
-        (args.positionMs - PlaybackControllerHost.loadedStreamBasePositionMs()).coerceAtLeast(0)
+        (args.positionMs - PlaybackControllerHost.currentBasePositionMs()).coerceAtLeast(0)
       controller.seekTo(localPositionMs)
       invoke.resolve()
     }) {
@@ -352,7 +547,7 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
       val currentPositionMs = controller.currentPosition.coerceAtLeast(0)
       invoke.resolveObject(
         CurrentPositionResponse(
-          PlaybackControllerHost.loadedStreamBasePositionMs() + currentPositionMs,
+          PlaybackControllerHost.currentBasePositionMs() + currentPositionMs,
         ),
       )
     }) {

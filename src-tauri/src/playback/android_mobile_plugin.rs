@@ -30,6 +30,12 @@ pub struct AndroidPreparedMediaRequest {
     pub artwork_path: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidActivatePreparedMediaRequest {
+    pub autoplay: bool,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AndroidPositionResponse {
@@ -56,6 +62,27 @@ impl AndroidPlaybackBridge {
         self.handle
             .run_mobile_plugin::<()>("loadPreparedMedia", payload)
             .map_err(|error| format!("Failed to load the Android playback media: {error}"))
+    }
+
+    pub fn prepare_next_media(&self, payload: &AndroidPreparedMediaRequest) -> Result<(), String> {
+        self.handle
+            .run_mobile_plugin::<()>("prepareNextMedia", payload)
+            .map_err(|error| format!("Failed to prepare the Android playback media: {error}"))
+    }
+
+    pub fn activate_prepared_media(
+        &self,
+        payload: &AndroidActivatePreparedMediaRequest,
+    ) -> Result<(), String> {
+        self.handle
+            .run_mobile_plugin::<()>("activatePreparedMedia", payload)
+            .map_err(|error| format!("Failed to activate the Android playback media: {error}"))
+    }
+
+    pub fn clear_prepared_media(&self) -> Result<(), String> {
+        self.handle
+            .run_mobile_plugin::<()>("clearPreparedMedia", ())
+            .map_err(|error| format!("Failed to clear the Android prepared media: {error}"))
     }
 
     pub fn pause(&self) -> Result<(), String> {

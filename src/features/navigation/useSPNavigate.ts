@@ -15,7 +15,7 @@ function clearNavDirection() {
 
 /**
  * SP専用のナビゲーションフック。
- * SP画面内での遷移にView Transitions APIを使ったスライドアニメーションを付与する。
+ * SP画面内での遷移にView Transitions APIを使ったフェードアニメーションを付与する。
  * SP以外のプラットフォームからの呼び出しでは通常のnavigateにフォールバックする。
  *
  * SPPlayerバーが展開中の場合、遷移前にバーを閉じる。

@@ -1198,7 +1198,15 @@ impl PlaybackController {
             return Ok(false);
         }
 
-        let Some(PreparedGaplessTrackState::Ready { target, .. }) = self.prepared_next.clone() else {
+        let Some(target) = self
+            .prepared_next
+            .clone()
+            .and_then(|prepared_state| match prepared_state {
+                PreparedGaplessTrackState::Preparing { target, .. }
+                | PreparedGaplessTrackState::Ready { target, .. } => Some(target),
+                PreparedGaplessTrackState::Failed { .. } => None,
+            })
+        else {
             return Ok(false);
         };
         let Some(entry) = current_queue_entry(&self.status.queue, Some(target.queue_index)) else {
@@ -2283,6 +2291,48 @@ mod tests {
             .push(PlaybackNativeEvent::GaplessPrepared { generation: 1 });
         controller
             .process_native_events(Some(&runtime_context))
+            .unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::GaplessTransition);
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.load_calls.len(), 1);
+        assert_eq!(backend_state.activate_prepared_calls, 0);
+        assert_eq!(backend_state.prepare_calls.len(), 2);
+
+        let status = controller.state();
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id.as_deref(), Some("song-b"));
+        assert!(matches!(
+            status.gapless_status.state,
+            GaplessState::Preparing
+        ));
+    }
+
+    #[test]
+    fn gapless_transition_native_event_advances_without_ready_signal() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
             .unwrap();
         native_events
             .lock()

@@ -174,6 +174,7 @@ pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_enqu
         "playing" => PlaybackNativeEvent::Playing { position_ms },
         "paused" => PlaybackNativeEvent::Paused { position_ms },
         "seek_processed" => PlaybackNativeEvent::SeekProcessed { position_ms },
+        "gapless_transition" => PlaybackNativeEvent::GaplessTransition,
         "error" => PlaybackNativeEvent::Error {
             message: message.unwrap_or_else(|| "Android playback failed.".to_string()),
         },
