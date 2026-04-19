@@ -1,30 +1,27 @@
 import { createStore } from 'solid-js/store';
+import { commands, type AppSettings, type SettingsOrigin } from '~/bindings';
 
 const SETTINGS_STORAGE_KEY = 'transonic.settings.v1';
 
-export interface PlaybackSettings {
-  prebufferEnabled: boolean;
-}
-
-export interface AppSettings {
-  playback: PlaybackSettings;
-}
-
-const DEFAULT_PLAYBACK_SETTINGS: PlaybackSettings = {
-  prebufferEnabled: false,
-};
-
 const DEFAULT_SETTINGS: AppSettings = {
-  playback: DEFAULT_PLAYBACK_SETTINGS,
+  playback: {
+    gaplessPlaybackEnabled: false,
+  },
 };
 
 export const [settingsStore, setSettingsStore] = createStore<AppSettings>(DEFAULT_SETTINGS);
 
-function normalizePlaybackSettings(raw: Partial<PlaybackSettings> | null | undefined): PlaybackSettings {
-  const legacyPrebufferStrategy = raw && 'prebufferStrategy' in raw ? (raw as Partial<{ prebufferStrategy: unknown }>).prebufferStrategy : null;
+function normalizePlaybackSettings(raw: Partial<AppSettings['playback']> | null | undefined): AppSettings['playback'] {
+  const legacyGaplessStrategy = raw && 'prebufferStrategy' in raw ? (raw as Partial<{ prebufferStrategy: unknown }>).prebufferStrategy : null;
+  const legacyGaplessEnabled = raw && 'prebufferEnabled' in raw ? (raw as Partial<{ prebufferEnabled: unknown }>).prebufferEnabled : null;
 
   return {
-    prebufferEnabled: typeof raw?.prebufferEnabled === 'boolean' ? raw.prebufferEnabled : legacyPrebufferStrategy === 'next_track',
+    gaplessPlaybackEnabled:
+      typeof raw?.gaplessPlaybackEnabled === 'boolean'
+        ? raw.gaplessPlaybackEnabled
+        : typeof legacyGaplessEnabled === 'boolean'
+          ? legacyGaplessEnabled
+          : legacyGaplessStrategy === 'next_track',
   };
 }
 
@@ -35,34 +32,76 @@ function normalizeSettings(raw: unknown): AppSettings {
   };
 }
 
-function persistSettings() {
+function readLegacySettings(): AppSettings | null {
   if (typeof window === 'undefined') {
-    return;
-  }
-
-  window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settingsStore));
-}
-
-export function initializeSettings() {
-  if (typeof window === 'undefined') {
-    return;
+    return null;
   }
 
   const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
   if (!raw) {
-    return;
+    return null;
   }
 
   try {
-    const parsed = JSON.parse(raw);
-    setSettingsStore(normalizeSettings(parsed));
+    return normalizeSettings(JSON.parse(raw));
   } catch (error) {
     console.error('failed to parse stored settings', error);
     window.localStorage.removeItem(SETTINGS_STORAGE_KEY);
+    return null;
   }
 }
 
-export function setPlaybackSetting<K extends keyof PlaybackSettings>(key: K, value: PlaybackSettings[K]) {
-  setSettingsStore('playback', key, value);
-  persistSettings();
+function clearLegacySettings() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  window.localStorage.removeItem(SETTINGS_STORAGE_KEY);
+}
+
+export async function hydrateSettings(settings: AppSettings, settingsOrigin: SettingsOrigin) {
+  setSettingsStore(settings);
+
+  if (settingsOrigin !== 'default') {
+    return;
+  }
+
+  const legacySettings = readLegacySettings();
+  if (!legacySettings) {
+    return;
+  }
+
+  setSettingsStore(legacySettings);
+  const result = await commands.settingsUpdate({ settings: legacySettings });
+  if (result.status === 'error') {
+    console.error(result.error);
+    return;
+  }
+
+  setSettingsStore(result.data);
+  clearLegacySettings();
+}
+
+export async function setPlaybackSetting<K extends keyof AppSettings['playback']>(key: K, value: AppSettings['playback'][K]) {
+  const previousSettings: AppSettings = {
+    playback: {
+      ...settingsStore.playback,
+    },
+  };
+  const nextSettings: AppSettings = {
+    playback: {
+      ...settingsStore.playback,
+      [key]: value,
+    },
+  };
+
+  setSettingsStore(nextSettings);
+  const result = await commands.settingsUpdate({ settings: nextSettings });
+  if (result.status === 'error') {
+    console.error(result.error);
+    setSettingsStore(previousSettings);
+    return;
+  }
+
+  setSettingsStore(result.data);
 }

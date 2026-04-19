@@ -57,7 +57,10 @@ pub(crate) fn normalize_media_type(media_type: Option<String>) -> Option<String>
 }
 
 pub(crate) fn normalize_roles(roles: Vec<String>) -> Vec<String> {
-    roles.into_iter().filter_map(|role| trim_text(&role)).collect()
+    roles
+        .into_iter()
+        .filter_map(|role| trim_text(&role))
+        .collect()
 }
 
 pub(crate) fn format_api_error(error: ApiError) -> String {

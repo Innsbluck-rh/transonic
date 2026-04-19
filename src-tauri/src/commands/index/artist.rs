@@ -137,7 +137,10 @@ mod tests {
         assert_eq!(response.indexes[0].name, "A");
         assert_eq!(response.indexes[0].artists[0].id, "artist-1");
         assert_eq!(response.indexes[0].artists[0].name, "Artist One");
-        assert_eq!(response.indexes[0].artists[0].cover_art_id.as_deref(), Some("ar-1"));
+        assert_eq!(
+            response.indexes[0].artists[0].cover_art_id.as_deref(),
+            Some("ar-1")
+        );
         assert_eq!(response.indexes[0].artists[0].album_count, Some(3));
         assert_eq!(response.indexes[0].artists[0].roles, vec!["artist"]);
     }

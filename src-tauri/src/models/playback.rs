@@ -23,17 +23,31 @@ pub enum InterruptReason {
     FullReload,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum GaplessState {
+    Unavailable,
+    Off,
+    Idle,
+    Preparing,
+    Ready,
+    Failed,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct GaplessStatus {
+    pub state: GaplessState,
+    pub message: String,
+}
+
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum QueueSource {
     #[serde(rename_all = "camelCase")]
-    Songs {
-        songs: Vec<super::SongResponse>,
-    },
+    Songs { songs: Vec<super::SongResponse> },
     #[serde(rename_all = "camelCase")]
-    Album {
-        album_id: String,
-    },
+    Album { album_id: String },
     #[serde(rename_all = "camelCase")]
     FolderAlbum {
         library_id: String,
@@ -68,6 +82,7 @@ pub struct PlaybackStatus {
     pub playing_state: PlayingState,
     pub interrupt_reason: Option<InterruptReason>,
     pub pending_seek_position_ms: Option<u32>,
+    pub gapless_status: GaplessStatus,
     pub queue: Vec<SongResponse>,
     pub current_index: Option<u32>,
     pub current_position_ms: u32,
@@ -96,6 +111,10 @@ impl PlaybackStatus {
             playing_state: PlayingState::Idle,
             interrupt_reason: None,
             pending_seek_position_ms: None,
+            gapless_status: GaplessStatus {
+                state: GaplessState::Unavailable,
+                message: "gapless: unavailable".to_string(),
+            },
             queue: Vec::new(),
             current_index: None,
             current_position_ms: 0,

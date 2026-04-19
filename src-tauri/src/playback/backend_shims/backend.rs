@@ -1,5 +1,7 @@
 use opensubsonic_client::PreparedBinaryRequest;
 
+use crate::models::PlaybackCapabilities;
+
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PlaybackBackendLoadRequest {
@@ -49,12 +51,25 @@ pub enum PlaybackSeekAction {
 }
 
 pub trait PlaybackBackend: Send {
+    fn capabilities(&self) -> PlaybackCapabilities {
+        PlaybackCapabilities {
+            gapless_playback: false,
+        }
+    }
+
     fn plan_load(
         &self,
         requested_position_ms: u32,
         supports_stream_offset: bool,
     ) -> PlaybackLoadStrategy;
     fn load(&mut self, request: PlaybackBackendLoadRequest) -> Result<(), String>;
+    fn prepare(&mut self, _request: PlaybackBackendLoadRequest) -> Result<u64, String> {
+        Err("Gapless playback is unavailable on this backend.".to_string())
+    }
+    fn activate_prepared(&mut self, _autoplay: bool) -> Result<(), String> {
+        Err("Gapless playback is unavailable on this backend.".to_string())
+    }
+    fn clear_prepared(&mut self) {}
     fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String>;
     fn current_position_ms(&self) -> Result<u32, String>;
     fn pause(&mut self) -> Result<(), String>;

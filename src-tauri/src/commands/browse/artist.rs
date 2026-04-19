@@ -8,8 +8,13 @@ use tauri::{AppHandle, State};
 
 use crate::{
     commands::{
-        common::{client, format_api_error, normalize_media_type, normalize_optional_text, normalize_roles, trim_text},
-        json::{opt_boolish, opt_stringish, opt_u32ish, opt_u64ish, stringish, value_as, vec_or_single},
+        common::{
+            client, format_api_error, normalize_media_type, normalize_optional_text,
+            normalize_roles, trim_text,
+        },
+        json::{
+            opt_boolish, opt_stringish, opt_u32ish, opt_u64ish, stringish, value_as, vec_or_single,
+        },
     },
     models::{
         ArtistAlbum, ArtistGroup, ArtistInfo2Request, ArtistInfo2Response, ArtistRequest,

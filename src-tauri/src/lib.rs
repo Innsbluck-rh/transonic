@@ -1,3 +1,4 @@
+mod app_settings;
 mod artist_image_cache;
 pub mod bindings;
 mod commands;
@@ -13,6 +14,7 @@ use std::sync::{Arc, Mutex};
 
 use tauri::Manager;
 
+use app_settings::{app_settings_path, AppSettingsStore};
 use artist_image_cache::ArtistImageCache;
 use cover_art_cache::CoverArtCache;
 use models::ActiveSession;
@@ -21,6 +23,7 @@ use playback_state::{playback_state_path, FilePlaybackStatePersister};
 
 pub(crate) struct ActiveSessionState(pub Mutex<Option<ActiveSession>>);
 pub(crate) struct PlaybackControllerState(pub Mutex<PlaybackController>);
+pub(crate) struct AppSettingsState(pub Mutex<AppSettingsStore>);
 pub(crate) struct CoverArtCacheState(pub CoverArtCache);
 pub(crate) struct ArtistImageCacheState(pub ArtistImageCache);
 
@@ -33,6 +36,12 @@ impl Default for ActiveSessionState {
 impl PlaybackControllerState {
     fn new(controller: PlaybackController) -> Self {
         Self(Mutex::new(controller))
+    }
+}
+
+impl AppSettingsState {
+    fn new(store: AppSettingsStore) -> Self {
+        Self(Mutex::new(store))
     }
 }
 
@@ -76,13 +85,27 @@ pub fn run() {
                 .path()
                 .app_config_dir()
                 .map_err(|error| format!("Failed to resolve the app config directory: {error}"))?;
+            let settings_path = app_settings_path(&config_dir);
+            let settings_store = match AppSettingsStore::load(settings_path.clone()) {
+                Ok(store) => store,
+                Err(error) => {
+                    log::warn!("setup: failed to load app settings, using defaults: {error}");
+                    AppSettingsStore::default_at(settings_path)
+                }
+            };
+            let initial_gapless_playback_enabled = settings_store.snapshot().0.playback.gapless_playback_enabled;
+            app.manage(AppSettingsState::new(settings_store));
             let persister_path = playback_state_path(&config_dir);
             let persister = Box::new(FilePlaybackStatePersister::new(persister_path));
 
             let app_handle: PlaybackEventAppHandle =
                 Arc::new(Mutex::new(Some(app.handle().clone())));
-            let controller =
-                playback::create_playback_controller(&app.handle(), app_handle.clone(), persister);
+            let controller = playback::create_playback_controller(
+                &app.handle(),
+                app_handle.clone(),
+                persister,
+                initial_gapless_playback_enabled,
+            );
             app.manage(PlaybackControllerState::new(controller));
             let cover_art_cache_root = app
                 .path()
@@ -107,6 +130,8 @@ pub fn run() {
 
             #[cfg(target_os = "android")]
             playback::install_android_app_handle(app.handle().clone());
+            #[cfg(target_os = "windows")]
+            playback::install_windows_app_handle(app.handle().clone());
 
             Ok(())
         })

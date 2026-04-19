@@ -6,9 +6,9 @@ pub mod song;
 
 use serde::Deserialize;
 
+use crate::commands::common::normalize_media_type;
 use crate::commands::json::{opt_boolish, opt_stringish, opt_u32ish, opt_u64ish, stringish};
 use crate::models::SongResponse;
-use crate::commands::common::normalize_media_type;
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

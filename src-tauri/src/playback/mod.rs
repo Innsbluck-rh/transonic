@@ -3,7 +3,8 @@ mod controller;
 mod native_events;
 mod queue_sync;
 mod reporting;
-
+#[cfg(target_os = "windows")]
+mod windows_runtime;
 use crate::playback_state::PlaybackStatePersister;
 
 #[cfg(target_os = "android")]
@@ -25,11 +26,16 @@ pub(crate) use android_runtime::consume_pending_notification_tap;
 pub(crate) use android_runtime::install_android_app_handle;
 pub use controller::{PlaybackController, PlaybackRuntimeContext};
 pub use reporting::PlaybackEventAppHandle;
+#[cfg(target_os = "windows")]
+pub(crate) use windows_runtime::install_windows_app_handle;
+#[cfg(target_os = "windows")]
+pub(crate) use windows_runtime::spawn_controller_process_native_events;
 
 pub(crate) fn create_playback_controller(
     _app: &tauri::AppHandle,
     app_handle: PlaybackEventAppHandle,
     persister: Box<dyn PlaybackStatePersister>,
+    gapless_playback_enabled: bool,
 ) -> PlaybackController {
     #[cfg(target_os = "android")]
     {
@@ -44,6 +50,7 @@ pub(crate) fn create_playback_controller(
                 Box::new(NoopQueueSyncGateway),
                 Box::new(runtime_state.event_hub.clone()),
                 persister,
+                gapless_playback_enabled,
             );
         }
     }
@@ -57,6 +64,7 @@ pub(crate) fn create_playback_controller(
             Box::new(NoopQueueSyncGateway),
             Box::new(event_hub),
             persister,
+            gapless_playback_enabled,
         );
     }
 
@@ -68,6 +76,7 @@ pub(crate) fn create_playback_controller(
             Box::new(NoopQueueSyncGateway),
             Box::new(NoopNativePlaybackEventSource),
             persister,
+            gapless_playback_enabled,
         );
     }
 

@@ -37,6 +37,23 @@ fn active_profile_id(state: &ActiveSessionState) -> Result<String, String> {
     Ok(session.profile_id.clone())
 }
 
+pub(crate) fn active_runtime_parts(
+    app: &AppHandle,
+    sessions: &State<'_, ActiveSessionState>,
+) -> Result<
+    (
+        opensubsonic_client::OpenSubsonicClient,
+        CapabilityMatrix,
+        String,
+    ),
+    String,
+> {
+    let active_capability_matrix = active_capability_matrix(sessions)?;
+    let active_profile_id = active_profile_id(sessions)?;
+    let active_client = client(app, &sessions.0)?;
+    Ok((active_client, active_capability_matrix, active_profile_id))
+}
+
 async fn flatten_queue_sources(
     app: &AppHandle,
     items: Vec<QueueSource>,
@@ -119,12 +136,7 @@ pub fn playback_get_state(
     let sessions = app.state::<ActiveSessionState>();
     let cover_art_cache = app.state::<CoverArtCacheState>();
 
-    let context_parts = (|| -> Result<_, String> {
-        let cm = active_capability_matrix(&sessions)?;
-        let pid = active_profile_id(&sessions)?;
-        let cl = client(&app, &sessions.0)?;
-        Ok((cl, cm, pid))
-    })();
+    let context_parts = (|| -> Result<_, String> { active_runtime_parts(&app, &sessions) })();
 
     match context_parts {
         Ok((ref cl, ref cm, ref pid)) => {
@@ -161,9 +173,8 @@ pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> R
             if payload.auto_play {
                 let sessions = app.state::<ActiveSessionState>();
                 let cover_art_cache = app.state::<CoverArtCacheState>();
-                let active_capability_matrix = active_capability_matrix(&sessions)?;
-                let active_profile_id = active_profile_id(&sessions)?;
-                let active_client = client(&app, &sessions.0)?;
+                let (active_client, active_capability_matrix, active_profile_id) =
+                    active_runtime_parts(&app, &sessions)?;
                 let runtime_context = PlaybackRuntimeContext {
                     client: &active_client,
                     capability_matrix: &active_capability_matrix,
@@ -248,9 +259,8 @@ pub fn playback_play_queue_index(
             let cover_art_cache = app.state::<CoverArtCacheState>();
             let playback = app.state::<PlaybackControllerState>();
 
-            let active_capability_matrix = active_capability_matrix(&sessions)?;
-            let active_profile_id = active_profile_id(&sessions)?;
-            let active_client = client(&app, &sessions.0)?;
+            let (active_client, active_capability_matrix, active_profile_id) =
+                active_runtime_parts(&app, &sessions)?;
             let runtime_context = PlaybackRuntimeContext {
                 client: &active_client,
                 capability_matrix: &active_capability_matrix,
@@ -283,9 +293,8 @@ pub fn playback_play(app: AppHandle) -> Result<(), String> {
             let cover_art_cache = app.state::<CoverArtCacheState>();
             let playback = app.state::<PlaybackControllerState>();
 
-            let active_capability_matrix = active_capability_matrix(&sessions)?;
-            let active_profile_id = active_profile_id(&sessions)?;
-            let active_client = client(&app, &sessions.0)?;
+            let (active_client, active_capability_matrix, active_profile_id) =
+                active_runtime_parts(&app, &sessions)?;
             let runtime_context = PlaybackRuntimeContext {
                 client: &active_client,
                 capability_matrix: &active_capability_matrix,
@@ -356,9 +365,8 @@ pub fn playback_seek(app: AppHandle, payload: PlaybackSeekRequest) -> Result<(),
             let cover_art_cache = app.state::<CoverArtCacheState>();
             let playback = app.state::<PlaybackControllerState>();
 
-            let active_capability_matrix = active_capability_matrix(&sessions)?;
-            let active_profile_id = active_profile_id(&sessions)?;
-            let active_client = client(&app, &sessions.0)?;
+            let (active_client, active_capability_matrix, active_profile_id) =
+                active_runtime_parts(&app, &sessions)?;
             let runtime_context = PlaybackRuntimeContext {
                 client: &active_client,
                 capability_matrix: &active_capability_matrix,
@@ -391,9 +399,8 @@ pub fn playback_next(app: AppHandle) -> Result<(), String> {
             let cover_art_cache = app.state::<CoverArtCacheState>();
             let playback = app.state::<PlaybackControllerState>();
 
-            let active_capability_matrix = active_capability_matrix(&sessions)?;
-            let active_profile_id = active_profile_id(&sessions)?;
-            let active_client = client(&app, &sessions.0)?;
+            let (active_client, active_capability_matrix, active_profile_id) =
+                active_runtime_parts(&app, &sessions)?;
             let runtime_context = PlaybackRuntimeContext {
                 client: &active_client,
                 capability_matrix: &active_capability_matrix,
@@ -424,9 +431,8 @@ pub fn playback_prev(app: AppHandle) -> Result<(), String> {
             let cover_art_cache = app.state::<CoverArtCacheState>();
             let playback = app.state::<PlaybackControllerState>();
 
-            let active_capability_matrix = active_capability_matrix(&sessions)?;
-            let active_profile_id = active_profile_id(&sessions)?;
-            let active_client = client(&app, &sessions.0)?;
+            let (active_client, active_capability_matrix, active_profile_id) =
+                active_runtime_parts(&app, &sessions)?;
             let runtime_context = PlaybackRuntimeContext {
                 client: &active_client,
                 capability_matrix: &active_capability_matrix,

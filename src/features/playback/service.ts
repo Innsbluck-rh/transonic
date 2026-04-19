@@ -1,32 +1,76 @@
 import { commands, events, PlaybackStatus } from '~/bindings';
 import { playbackStore, setPlaybackStore } from '~/stores/PlaybackStore';
 
-const PLAYBACK_STATE_POLL_MS = 500;
-
 type PlaybackCommandResult = { status: 'ok' } | { status: 'error'; error: string };
 
-function applyPlaybackState(status: PlaybackStatus) {
-  setPlaybackStore('status', status);
+let requestPlaybackStateRefresh: (() => void) | undefined;
+
+function monotonicNowMs() {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
+
+function applyPlaybackState(status: PlaybackStatus, receivedAtMs: number) {
+  setPlaybackStore({
+    status,
+    authoritativeReceivedAtMs: receivedAtMs,
+    clockMs: receivedAtMs,
+  });
 }
 
 export async function startPlaybackStateSync() {
   let stateGeneration = 0;
-  let pollInFlight = false;
+  let refreshInFlight = false;
+  let animationFrameId: number | undefined;
 
   const applyAuthoritativeState = (status: PlaybackStatus) => {
     stateGeneration += 1;
-    applyPlaybackState(status);
+    applyPlaybackState(status, monotonicNowMs());
+    syncClockLoop();
   };
 
   const refreshIfIdle = () => {
-    if (pollInFlight) {
+    if (refreshInFlight) {
       return;
     }
 
-    pollInFlight = true;
+    refreshInFlight = true;
     void refreshPlaybackState().finally(() => {
-      pollInFlight = false;
+      refreshInFlight = false;
     });
+  };
+
+  const stopClockLoop = () => {
+    if (animationFrameId === undefined) {
+      return;
+    }
+
+    window.cancelAnimationFrame(animationFrameId);
+    animationFrameId = undefined;
+  };
+
+  const shouldTickClock = () => playbackStore.status?.playingState === 'playing' && !document.hidden;
+
+  const tickClock = () => {
+    if (!shouldTickClock()) {
+      animationFrameId = undefined;
+      return;
+    }
+
+    setPlaybackStore('clockMs', monotonicNowMs());
+    animationFrameId = window.requestAnimationFrame(tickClock);
+  };
+
+  const syncClockLoop = () => {
+    if (!shouldTickClock()) {
+      stopClockLoop();
+      return;
+    }
+
+    if (animationFrameId !== undefined) {
+      return;
+    }
+
+    animationFrameId = window.requestAnimationFrame(tickClock);
   };
 
   const unlistenStatus = await events.playbackStatus.listen((event) => {
@@ -48,18 +92,30 @@ export async function startPlaybackStateSync() {
     applyAuthoritativeState(stateResult.data);
   };
 
-  await refreshPlaybackState();
-
-  const intervalId = window.setInterval(() => {
-    if (pollInFlight || playbackStore.status?.playingState !== 'playing') {
+  const refreshAfterResume = () => {
+    if (document.hidden) {
+      stopClockLoop();
       return;
     }
 
     refreshIfIdle();
-  }, PLAYBACK_STATE_POLL_MS);
+    syncClockLoop();
+  };
+
+  requestPlaybackStateRefresh = refreshIfIdle;
+
+  await refreshPlaybackState();
+  window.addEventListener('focus', refreshAfterResume);
+  document.addEventListener('visibilitychange', refreshAfterResume);
+  syncClockLoop();
 
   return () => {
-    window.clearInterval(intervalId);
+    stopClockLoop();
+    window.removeEventListener('focus', refreshAfterResume);
+    document.removeEventListener('visibilitychange', refreshAfterResume);
+    if (requestPlaybackStateRefresh === refreshIfIdle) {
+      requestPlaybackStateRefresh = undefined;
+    }
     unlistenStatus();
   };
 }
@@ -67,6 +123,7 @@ export async function startPlaybackStateSync() {
 export function hasPlaybackCommandError(result: PlaybackCommandResult) {
   if (result.status === 'error') {
     console.error(result.error);
+    requestPlaybackStateRefresh?.();
     return true;
   }
 

@@ -1,11 +1,18 @@
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
+use crate::models::PlaybackCapabilities;
 
 #[derive(Debug, Default)]
 struct UnsupportedPlaybackBackend;
 
 impl PlaybackBackend for UnsupportedPlaybackBackend {
+    fn capabilities(&self) -> PlaybackCapabilities {
+        PlaybackCapabilities {
+            gapless_playback: false,
+        }
+    }
+
     fn plan_load(
         &self,
         requested_position_ms: u32,

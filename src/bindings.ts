@@ -237,6 +237,14 @@ async playbackPrev() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async settingsUpdate(payload: SettingsUpdateRequest) : Promise<Result<AppSettings, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("settings_update", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async consumePendingNotificationTap() : Promise<boolean> {
     return await TAURI_INVOKE("consume_pending_notification_tap");
 }
@@ -266,7 +274,8 @@ export type AlbumListRequest = { context: AlbumListContext; size: number | null;
 export type AlbumListResponse = { context: AlbumListContext; albums: AlbumListItem[] }
 export type AlbumSongsRequest = { id: string }
 export type AlbumSongsResponse = { id: string; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; created: string | null; starred: string | null; songs: SongResponse[] }
-export type AppBootstrap = { profiles: SavedProfileSummary[]; activeSession: ActiveSession | null; restoreStatus: RestoreStatus; message: string | null }
+export type AppBootstrap = { profiles: SavedProfileSummary[]; activeSession: ActiveSession | null; restoreStatus: RestoreStatus; message: string | null; playbackCapabilities: PlaybackCapabilities; settings: AppSettings; settingsOrigin: SettingsOrigin }
+export type AppSettings = { playback: PlaybackSettings }
 export type ArtistAlbum = { id: string; parentId: string | null; title: string | null; album: string | null; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; starred: string | null }
 export type ArtistGroup = { name: string; artists: ArtistSummary[] }
 export type ArtistImageRequest = { url: string }
@@ -294,6 +303,8 @@ export type FolderStructureRootNode = { id: string; name: string }
 export type FolderStructureRootsRequest = { libraryId: string }
 export type FolderStructureRootsResponse = { libraryId: string; libraryName: string; source: FolderStructureSource; rootNodes: FolderStructureRootNode[] }
 export type FolderStructureSource = "directory" | "indexes"
+export type GaplessState = "unavailable" | "off" | "idle" | "preparing" | "ready" | "failed"
+export type GaplessStatus = { state: GaplessState; message: string }
 export type InterruptReason = "initial_load" | "stream_buffering_stall" | "seeking" | "full_reload"
 export type LastConnectionState = "never" | "ok" | "offline" | "reauth_required"
 export type MediaNotificationTap = Record<string, never>
@@ -304,16 +315,20 @@ export type MusicFolderSummary = { id: string; name: string }
 export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
 export type PlaybackAppendToQueueRequest = { items: QueueSource[] }
+export type PlaybackCapabilities = { gaplessPlayback: boolean }
 export type PlaybackInsertAfterCurrentRequest = { items: QueueSource[] }
 export type PlaybackPlayQueueIndexRequest = { index: number }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { items: QueueSource[]; currentIndex: number | null; autoPlay: boolean }
-export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; queue: SongResponse[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
+export type PlaybackSettings = { gaplessPlaybackEnabled: boolean }
+export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }
 export type PlayingState = "idle" | "playing" | "paused" | "stopped" | "interrupted" | "error"
 export type ProfileIdRequest = { profileId: string }
 export type QueueSource = { type: "songs"; songs: SongResponse[] } | { type: "album"; albumId: string } | { type: "folder_album"; libraryId: string; nodeId: string; albumId: string }
 export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"
 export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }
+export type SettingsOrigin = "default" | "stored"
+export type SettingsUpdateRequest = { settings: AppSettings }
 export type SongRequest = { id: string }
 export type SongResponse = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; duration: number | null; size: number | null; contentType: string | null; suffix: string | null; bitRate: number | null; genre: string | null; created: string | null; starred: string | null; isDirectory: boolean; mediaType: string | null }
 

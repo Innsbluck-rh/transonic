@@ -21,6 +21,10 @@ function isSeekDisabledForState(state?: PlayingState) {
   return !state || state === 'idle' || state === 'error' || state === 'interrupted';
 }
 
+function isPositionAdvancingState(state?: PlayingState) {
+  return state === 'playing';
+}
+
 function interruptLabelForReason(reason: InterruptReason | null) {
   switch (reason) {
     case 'initial_load':
@@ -49,6 +53,8 @@ export function usePlayback() {
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
 
   const status = createMemo(() => playbackStore.status);
+  const authoritativeReceivedAtMs = createMemo(() => playbackStore.authoritativeReceivedAtMs);
+  const clockMs = createMemo(() => playbackStore.clockMs);
   const queue = createMemo<SongResponse[]>((prev) => {
     const next = playbackStore.status?.queue ?? [];
     return isSameQueue(prev, next) ? prev : next;
@@ -68,17 +74,29 @@ export function usePlayback() {
   const isControlDisabled = createMemo(() => isControlDisabledForState(playingState()));
   const durationMs = createMemo(() => (currentEntry()?.duration ?? 0) * 1000);
   const currentPositionMs = createMemo(() => {
+    const nextDurationMs = durationMs();
     const nextPreviewPositionMs = previewPositionMs();
     if (nextPreviewPositionMs !== null) {
-      return clampPositionMs(nextPreviewPositionMs, durationMs());
+      return clampPositionMs(nextPreviewPositionMs, nextDurationMs);
     }
 
     const nextPendingSeekPositionMs = status()?.pendingSeekPositionMs ?? null;
     if (nextPendingSeekPositionMs !== null) {
-      return clampPositionMs(nextPendingSeekPositionMs, durationMs());
+      return clampPositionMs(nextPendingSeekPositionMs, nextDurationMs);
     }
 
-    return clampPositionMs(status()?.currentPositionMs ?? 0, durationMs());
+    const basePositionMs = status()?.currentPositionMs ?? 0;
+    if (!isPositionAdvancingState(playingState())) {
+      return clampPositionMs(basePositionMs, nextDurationMs);
+    }
+
+    const baseReceivedAtMs = authoritativeReceivedAtMs();
+    if (baseReceivedAtMs === null) {
+      return clampPositionMs(basePositionMs, nextDurationMs);
+    }
+
+    const elapsedMs = Math.max(0, clockMs() - baseReceivedAtMs);
+    return clampPositionMs(basePositionMs + elapsedMs, nextDurationMs);
   });
   const progressPercent = createMemo(() => {
     const nextDurationMs = durationMs();
@@ -92,6 +110,7 @@ export function usePlayback() {
   const interruptLabel = createMemo(() => interruptLabelForReason(interruptReason()));
   const currentPositionText = createMemo(() => formatClockTime(currentPositionMs() / 1000));
   const durationText = createMemo(() => formatClockTime(durationMs() / 1000));
+  const gaplessStatus = createMemo(() => status()?.gaplessStatus ?? null);
 
   const play = () => {
     commands.playbackPlay().then(hasPlaybackCommandError);
@@ -193,6 +212,7 @@ export function usePlayback() {
     progressPercent,
     currentPositionText,
     durationText,
+    gaplessStatus,
     interruptLabel,
     isQueueIndexActive,
     queueIndexProgressPercent,

@@ -5,7 +5,10 @@ use opensubsonic_client::{
 
 use crate::{
     cover_art_cache::CoverArtCache,
-    models::{CapabilityMatrix, InterruptReason, PlaybackStatus, PlayingState, SongResponse},
+    models::{
+        CapabilityMatrix, GaplessState, GaplessStatus, InterruptReason, PlaybackCapabilities,
+        PlaybackStatus, PlayingState, SongResponse,
+    },
     playback_state::{PlaybackStateFile, PlaybackStatePersister},
 };
 
@@ -23,12 +26,57 @@ pub struct PlaybackRuntimeContext<'a> {
     pub profile_id: Option<&'a str>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct GaplessTrackTarget {
+    queue_index: u32,
+    song_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PreparedGaplessTrackState {
+    Preparing {
+        target: GaplessTrackTarget,
+        generation: u64,
+    },
+    Ready {
+        target: GaplessTrackTarget,
+        generation: u64,
+    },
+    Failed {
+        target: GaplessTrackTarget,
+        generation: Option<u64>,
+    },
+}
+
+impl PreparedGaplessTrackState {
+    fn target(&self) -> &GaplessTrackTarget {
+        match self {
+            Self::Preparing { target, .. }
+            | Self::Ready { target, .. }
+            | Self::Failed { target, .. } => target,
+        }
+    }
+
+    fn generation(&self) -> Option<u64> {
+        match self {
+            Self::Preparing { generation, .. } | Self::Ready { generation, .. } => {
+                Some(*generation)
+            }
+            Self::Failed { generation, .. } => *generation,
+        }
+    }
+}
+
 pub struct PlaybackController {
     backend: Box<dyn PlaybackBackend>,
     reporter: Box<dyn PlaybackReporter>,
     queue_sync: Box<dyn QueueSyncGateway>,
     native_events: Box<dyn NativePlaybackEventSource>,
     persister: Box<dyn PlaybackStatePersister>,
+    playback_capabilities: PlaybackCapabilities,
+    gapless_playback_enabled: bool,
+    prepared_next: Option<PreparedGaplessTrackState>,
+    gapless_failure: Option<String>,
     status: PlaybackStatus,
     interrupted_resume_state: Option<PlayingState>,
     active_profile_id: Option<String>,
@@ -41,13 +89,19 @@ impl PlaybackController {
         queue_sync: Box<dyn QueueSyncGateway>,
         native_events: Box<dyn NativePlaybackEventSource>,
         persister: Box<dyn PlaybackStatePersister>,
+        gapless_playback_enabled: bool,
     ) -> Self {
+        let playback_capabilities = backend.capabilities();
         Self {
             backend,
             reporter,
             queue_sync,
             native_events,
             persister,
+            playback_capabilities,
+            gapless_playback_enabled,
+            prepared_next: None,
+            gapless_failure: None,
             status: PlaybackStatus::empty(),
             interrupted_resume_state: None,
             active_profile_id: None,
@@ -55,7 +109,28 @@ impl PlaybackController {
     }
 
     pub fn set_active_profile_id(&mut self, profile_id: Option<String>) {
+        if self.active_profile_id != profile_id {
+            self.clear_gapless_preparation();
+        }
         self.active_profile_id = profile_id;
+    }
+
+    pub fn clear_gapless_preparation(&mut self) {
+        self.backend.clear_prepared();
+        self.prepared_next = None;
+        self.gapless_failure = None;
+        self.update_gapless_status();
+    }
+
+    pub fn set_gapless_playback_enabled(
+        &mut self,
+        enabled: bool,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<(), String> {
+        self.gapless_playback_enabled = enabled;
+        let result = self.sync_gapless_for_current_track(context);
+        self.report_status();
+        result
     }
 
     pub fn restore_state(
@@ -87,6 +162,7 @@ impl PlaybackController {
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
+        self.clear_gapless_preparation();
         self.active_profile_id = Some(profile_id);
 
         log::info!(
@@ -100,7 +176,12 @@ impl PlaybackController {
         self.state()
     }
 
-    pub fn state(&self) -> PlaybackStatus {
+    pub fn capabilities(&self) -> PlaybackCapabilities {
+        self.playback_capabilities.clone()
+    }
+
+    pub fn state(&mut self) -> PlaybackStatus {
+        self.update_gapless_status();
         self.status.clone()
     }
 
@@ -114,6 +195,9 @@ impl PlaybackController {
     ) -> Result<PlaybackStatus, String> {
         self.process_native_events_inner(context, false)?;
         self.sync_current_position_from_backend()?;
+        if let Err(error) = self.sync_gapless_for_current_track(context) {
+            log::warn!("controller.synced_state_with_context: gapless refresh failed: {error}");
+        }
         Ok(self.state())
     }
 
@@ -133,6 +217,7 @@ impl PlaybackController {
     ) -> Result<PlaybackStatus, String> {
         validate_queue_index(&entries, current_index)?;
         self.backend.stop()?;
+        self.clear_gapless_preparation();
         self.clear_native_events();
 
         let next_song_id = current_song_id(&entries, current_index);
@@ -179,6 +264,8 @@ impl PlaybackController {
             return Ok(self.state());
         }
 
+        self.clear_gapless_preparation();
+
         if self.status.queue.is_empty() {
             let next_song_id = current_song_id(&songs, Some(0));
             self.status.queue = songs;
@@ -215,6 +302,8 @@ impl PlaybackController {
         if songs.is_empty() {
             return Ok(self.state());
         }
+
+        self.clear_gapless_preparation();
 
         if self.status.queue.is_empty() {
             let next_song_id = current_song_id(&songs, Some(0));
@@ -303,6 +392,7 @@ impl PlaybackController {
     }
 
     pub fn stop(&mut self) -> Result<PlaybackStatus, String> {
+        self.clear_gapless_preparation();
         self.backend.stop()?;
         self.clear_native_events();
         self.status.playing_state = PlayingState::Stopped;
@@ -448,6 +538,7 @@ impl PlaybackController {
 
     #[allow(dead_code)]
     pub fn on_track_finished(&mut self) -> PlaybackStatus {
+        self.clear_gapless_preparation();
         self.clear_native_events();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
@@ -460,6 +551,7 @@ impl PlaybackController {
     }
 
     pub fn reset(&mut self) -> PlaybackStatus {
+        self.clear_gapless_preparation();
         if let Err(error) = self.backend.stop() {
             log::warn!("controller.reset: failed to stop backend: {error}");
         }
@@ -553,8 +645,24 @@ impl PlaybackController {
         self.interrupted_resume_state = None;
         self.report_status();
 
-        let load_result =
-            self.load_stream_for_song(context, &entry, requested_position_ms, autoplay);
+        let load_result = match self.try_activate_prepared_gapless_track(
+            index,
+            &entry,
+            requested_position_ms,
+            autoplay,
+        ) {
+            Ok(true) => Ok(()),
+            Ok(false) => {
+                self.load_stream_for_song(context, &entry, requested_position_ms, autoplay)
+            }
+            Err(error) => {
+                log::warn!(
+                    "controller.load_track_at_index: failed to activate prepared track for song_id={song_id}: {error}"
+                );
+                self.clear_gapless_preparation();
+                self.load_stream_for_song(context, &entry, requested_position_ms, autoplay)
+            }
+        };
 
         if let Err(error) = load_result {
             self.status.playing_state = PlayingState::Error;
@@ -577,6 +685,9 @@ impl PlaybackController {
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
+        if let Err(error) = self.sync_gapless_for_current_track(Some(context)) {
+            log::warn!("controller.load_track_at_index: gapless refresh failed: {error}");
+        }
 
         Ok(())
     }
@@ -626,6 +737,9 @@ impl PlaybackController {
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
+        if let Err(error) = self.sync_gapless_for_current_track(Some(context)) {
+            log::warn!("controller.reload_track_at_index_exact: gapless refresh failed: {error}");
+        }
 
         Ok(())
     }
@@ -637,6 +751,29 @@ impl PlaybackController {
         requested_position_ms: u32,
         autoplay: bool,
     ) -> Result<(), String> {
+        self.load_or_prepare_stream_for_song(context, entry, requested_position_ms, autoplay, false)
+            .map(|_| ())
+    }
+
+    fn prepare_stream_for_song(
+        &mut self,
+        context: &PlaybackRuntimeContext<'_>,
+        entry: &SongResponse,
+    ) -> Result<u64, String> {
+        self.load_or_prepare_stream_for_song(context, entry, 0, false, true)
+            .and_then(|generation| {
+                generation.ok_or_else(|| "Missing gapless generation.".to_string())
+            })
+    }
+
+    fn load_or_prepare_stream_for_song(
+        &mut self,
+        context: &PlaybackRuntimeContext<'_>,
+        entry: &SongResponse,
+        requested_position_ms: u32,
+        autoplay: bool,
+        prepare_only: bool,
+    ) -> Result<Option<u64>, String> {
         let song_id = entry.id.as_str();
         let load_strategy = self.backend.plan_load(
             requested_position_ms,
@@ -646,7 +783,12 @@ impl PlaybackController {
         let local_start_position_ms = load_strategy.local_start_position_ms;
 
         log::info!(
-            "controller.load_stream_for_song: song_id={} path={:?} requested_position_ms={} server_offset_capability={} stream_offset_seconds={:?} local_start_position_ms={} autoplay={}",
+            "controller.{}: song_id={} path={:?} requested_position_ms={} server_offset_capability={} stream_offset_seconds={:?} local_start_position_ms={} autoplay={}",
+            if prepare_only {
+                "prepare_stream_for_song"
+            } else {
+                "load_stream_for_song"
+            },
             song_id,
             entry.path,
             requested_position_ms,
@@ -666,61 +808,234 @@ impl PlaybackController {
         if requested_position_ms == 0 {
             let raw_stream =
                 build_stream_request(context.client, song_id, stream_offset_seconds, true)?;
-            if let Err(raw_error) = self.backend.load(PlaybackBackendLoadRequest {
-                request: raw_stream,
-                media_id: entry.id.clone(),
-                title: entry.title.clone(),
-                artist: entry.artist.clone(),
-                album: entry.album.clone(),
-                artwork_path: artwork_path.clone(),
-                absolute_start_position_ms: requested_position_ms,
+            let raw_request = self.build_backend_load_request(
+                entry,
+                raw_stream,
+                artwork_path.clone(),
+                requested_position_ms,
                 local_start_position_ms,
                 autoplay,
-            }) {
-                log::warn!(
-                    "controller.load_track_at_index: raw stream load failed for song_id={song_id}: {raw_error}"
-                );
-                let fallback_stream =
-                    build_stream_request(context.client, song_id, stream_offset_seconds, false)?;
-                if let Err(fallback_error) = self.backend.load(PlaybackBackendLoadRequest {
-                    request: fallback_stream,
-                    media_id: entry.id.clone(),
-                    title: entry.title.clone(),
-                    artist: entry.artist.clone(),
-                    album: entry.album.clone(),
-                    artwork_path,
-                    absolute_start_position_ms: requested_position_ms,
-                    local_start_position_ms,
-                    autoplay,
-                }) {
-                    let message = format!(
-                        "Failed to load playback stream. raw stream failed: {raw_error}; fallback stream failed: {fallback_error}"
+            );
+            return match if prepare_only {
+                self.backend.prepare(raw_request).map(Some)
+            } else {
+                self.backend.load(raw_request).map(|_| None)
+            } {
+                Ok(result) => Ok(result),
+                Err(raw_error) => {
+                    log::warn!(
+                        "controller.{}: raw stream request failed for song_id={song_id}: {raw_error}",
+                        if prepare_only {
+                            "prepare_stream_for_song"
+                        } else {
+                            "load_track_at_index"
+                        }
                     );
-                    log::error!(
-                        "controller.load_track_at_index: fallback stream load failed for song_id={song_id}: {fallback_error}"
+                    let fallback_stream = build_stream_request(
+                        context.client,
+                        song_id,
+                        stream_offset_seconds,
+                        false,
+                    )?;
+                    let fallback_request = self.build_backend_load_request(
+                        entry,
+                        fallback_stream,
+                        artwork_path,
+                        requested_position_ms,
+                        local_start_position_ms,
+                        autoplay,
                     );
-                    return Err(message);
+                    match if prepare_only {
+                        self.backend.prepare(fallback_request).map(Some)
+                    } else {
+                        self.backend.load(fallback_request).map(|_| None)
+                    } {
+                        Ok(result) => Ok(result),
+                        Err(fallback_error) => {
+                            let message = format!(
+                                "Failed to {} playback stream. raw stream failed: {raw_error}; fallback stream failed: {fallback_error}",
+                                if prepare_only { "prepare" } else { "load" }
+                            );
+                            log::error!(
+                                "controller.{}: fallback stream request failed for song_id={song_id}: {fallback_error}",
+                                if prepare_only {
+                                    "prepare_stream_for_song"
+                                } else {
+                                    "load_track_at_index"
+                                }
+                            );
+                            Err(message)
+                        }
+                    }
                 }
-            }
-
-            return Ok(());
+            };
         }
 
         let standard_stream =
             build_stream_request(context.client, song_id, stream_offset_seconds, false)?;
-        self.backend
-            .load(PlaybackBackendLoadRequest {
-                request: standard_stream,
-                media_id: entry.id.clone(),
-                title: entry.title.clone(),
-                artist: entry.artist.clone(),
-                album: entry.album.clone(),
-                artwork_path,
-                absolute_start_position_ms: requested_position_ms,
-                local_start_position_ms,
-                autoplay,
-            })
-            .map_err(|error| format!("Failed to load playback stream: {error}"))
+        let standard_request = self.build_backend_load_request(
+            entry,
+            standard_stream,
+            artwork_path,
+            requested_position_ms,
+            local_start_position_ms,
+            autoplay,
+        );
+        if prepare_only {
+            self.backend.prepare(standard_request).map(Some)
+        } else {
+            self.backend.load(standard_request).map(|_| None)
+        }
+        .map_err(|error| {
+            format!(
+                "Failed to {} playback stream: {error}",
+                if prepare_only { "prepare" } else { "load" }
+            )
+        })
+    }
+
+    fn build_backend_load_request(
+        &self,
+        entry: &SongResponse,
+        request: PreparedBinaryRequest,
+        artwork_path: Option<String>,
+        absolute_start_position_ms: u32,
+        local_start_position_ms: u32,
+        autoplay: bool,
+    ) -> PlaybackBackendLoadRequest {
+        PlaybackBackendLoadRequest {
+            request,
+            media_id: entry.id.clone(),
+            title: entry.title.clone(),
+            artist: entry.artist.clone(),
+            album: entry.album.clone(),
+            artwork_path,
+            absolute_start_position_ms,
+            local_start_position_ms,
+            autoplay,
+        }
+    }
+
+    fn try_activate_prepared_gapless_track(
+        &mut self,
+        index: u32,
+        entry: &SongResponse,
+        requested_position_ms: u32,
+        autoplay: bool,
+    ) -> Result<bool, String> {
+        if !self.supports_gapless_playback() {
+            return Ok(false);
+        }
+
+        let Some(prepared_state) = self.prepared_next.clone() else {
+            return Ok(false);
+        };
+
+        let target = prepared_state.target();
+        if requested_position_ms != 0 || target.queue_index != index || target.song_id != entry.id {
+            self.clear_gapless_preparation();
+            return Ok(false);
+        }
+
+        match prepared_state {
+            PreparedGaplessTrackState::Ready { .. }
+            | PreparedGaplessTrackState::Preparing { .. } => {
+                self.try_activate_backend_prepared_track(autoplay)
+            }
+            PreparedGaplessTrackState::Failed { .. } => {
+                self.clear_gapless_preparation();
+                Ok(false)
+            }
+        }
+    }
+
+    fn try_activate_backend_prepared_track(&mut self, autoplay: bool) -> Result<bool, String> {
+        match self.backend.activate_prepared(autoplay) {
+            Ok(()) => {
+                self.gapless_failure = None;
+                self.prepared_next = None;
+                self.update_gapless_status();
+                Ok(true)
+            }
+            Err(error) if is_missing_prepared_stream_error(&error) => {
+                self.clear_gapless_preparation();
+                Ok(false)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn sync_gapless_for_current_track(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<(), String> {
+        if !self.supports_gapless_playback() {
+            self.clear_gapless_preparation();
+            return Ok(());
+        }
+
+        let Some(context) = context else {
+            self.clear_gapless_preparation();
+            return Ok(());
+        };
+
+        if !self.gapless_playback_enabled || !self.can_prepare_gapless_from_current_state() {
+            self.clear_gapless_preparation();
+            return Ok(());
+        }
+
+        let Some(target) = self.current_gapless_target() else {
+            self.clear_gapless_preparation();
+            return Ok(());
+        };
+
+        if self
+            .prepared_next
+            .as_ref()
+            .is_some_and(|prepared| prepared.target() == &target)
+        {
+            return Ok(());
+        }
+
+        self.clear_gapless_preparation();
+        let entry = current_queue_entry(&self.status.queue, Some(target.queue_index))
+            .cloned()
+            .ok_or_else(|| "Current playback entry does not exist.".to_string())?;
+
+        match self.prepare_stream_for_song(context, &entry) {
+            Ok(generation) => {
+                self.gapless_failure = None;
+                self.prepared_next = Some(PreparedGaplessTrackState::Preparing { target, generation });
+                self.update_gapless_status();
+                Ok(())
+            }
+            Err(error) => {
+                self.gapless_failure = Some(error.clone());
+                self.prepared_next = Some(PreparedGaplessTrackState::Failed {
+                    target,
+                    generation: None,
+                });
+                self.update_gapless_status();
+                Err(error)
+            }
+        }
+    }
+
+    fn can_prepare_gapless_from_current_state(&self) -> bool {
+        matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused
+        )
+    }
+
+    fn current_gapless_target(&self) -> Option<GaplessTrackTarget> {
+        let current_index = self.status.current_index?;
+        let next_index = current_index.checked_add(1)?;
+        let next_entry = current_queue_entry(&self.status.queue, Some(next_index))?;
+        Some(GaplessTrackTarget {
+            queue_index: next_index,
+            song_id: next_entry.id.clone(),
+        })
     }
 
     fn sync_current_position_from_backend(&mut self) -> Result<(), String> {
@@ -829,8 +1144,84 @@ impl PlaybackController {
                 self.interrupted_resume_state = None;
                 Ok(true)
             }
+            PlaybackNativeEvent::GaplessPrepared { generation } => {
+                Ok(self.handle_gapless_prepared(generation))
+            }
+            PlaybackNativeEvent::GaplessFailed {
+                generation,
+                message,
+            } => Ok(self.handle_gapless_failed(generation, message)),
+            PlaybackNativeEvent::GaplessTransition => self.handle_gapless_transition(context),
             PlaybackNativeEvent::Ended => self.handle_track_ended(context),
         }
+    }
+
+    fn handle_gapless_prepared(&mut self, generation: u64) -> bool {
+        let Some(PreparedGaplessTrackState::Preparing {
+            target,
+            generation: current_generation,
+        }) = self.prepared_next.clone()
+        else {
+            return false;
+        };
+        if current_generation != generation {
+            return false;
+        }
+
+        self.gapless_failure = None;
+        self.prepared_next = Some(PreparedGaplessTrackState::Ready { target, generation });
+        true
+    }
+
+    fn handle_gapless_failed(&mut self, generation: u64, message: String) -> bool {
+        let Some(prepared_state) = self.prepared_next.clone() else {
+            return false;
+        };
+        if prepared_state.generation() != Some(generation) {
+            return false;
+        }
+
+        self.gapless_failure = Some(message);
+        self.prepared_next = Some(PreparedGaplessTrackState::Failed {
+            target: prepared_state.target().clone(),
+            generation: Some(generation),
+        });
+        true
+    }
+
+    fn handle_gapless_transition(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<bool, String> {
+        if !self.supports_gapless_playback() {
+            self.clear_gapless_preparation();
+            return Ok(false);
+        }
+
+        let Some(PreparedGaplessTrackState::Ready { target, .. }) = self.prepared_next.clone() else {
+            return Ok(false);
+        };
+        let Some(entry) = current_queue_entry(&self.status.queue, Some(target.queue_index)) else {
+            self.clear_gapless_preparation();
+            return Ok(false);
+        };
+
+        self.status.playing_state = PlayingState::Playing;
+        self.status.interrupt_reason = None;
+        self.status.pending_seek_position_ms = None;
+        self.status.current_index = Some(target.queue_index);
+        self.status.current_song_id = Some(entry.id.clone());
+        self.status.current_position_ms = 0;
+        self.status.error = None;
+        self.interrupted_resume_state = None;
+        self.gapless_failure = None;
+        self.prepared_next = None;
+
+        if let Err(error) = self.sync_gapless_for_current_track(context) {
+            log::warn!("controller.handle_gapless_transition: gapless refresh failed: {error}");
+        }
+
+        Ok(true)
     }
 
     fn handle_track_ended(
@@ -862,6 +1253,7 @@ impl PlaybackController {
     }
 
     fn transition_to_stopped_end_of_queue(&mut self) {
+        self.clear_gapless_preparation();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
         self.status.error = None;
@@ -883,11 +1275,87 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
     }
 
+    fn supports_gapless_playback(&self) -> bool {
+        self.playback_capabilities.gapless_playback
+    }
+
+    fn update_gapless_status(&mut self) {
+        self.status.gapless_status = if !self.supports_gapless_playback() {
+            GaplessStatus {
+                state: GaplessState::Unavailable,
+                message: "gapless: unavailable".to_string(),
+            }
+        } else if !self.gapless_playback_enabled {
+            GaplessStatus {
+                state: GaplessState::Off,
+                message: "gapless: off".to_string(),
+            }
+        } else if let Some(prepared) = &self.prepared_next {
+            match prepared {
+                PreparedGaplessTrackState::Preparing { target, .. } => GaplessStatus {
+                    state: GaplessState::Preparing,
+                    message: format!(
+                        "gapless: preparing {}",
+                        self.gapless_target_label(target)
+                    ),
+                },
+                PreparedGaplessTrackState::Ready { target, .. } => GaplessStatus {
+                    state: GaplessState::Ready,
+                    message: format!("gapless: ready {}", self.gapless_target_label(target)),
+                },
+                PreparedGaplessTrackState::Failed { target, .. } => {
+                    let reason = self.gapless_failure.as_deref().unwrap_or("unknown error");
+                    GaplessStatus {
+                        state: GaplessState::Failed,
+                        message: format!(
+                            "gapless: failed {} ({reason})",
+                            self.gapless_target_label(target)
+                        ),
+                    }
+                }
+            }
+        } else if !self.can_prepare_gapless_from_current_state() {
+            GaplessStatus {
+                state: GaplessState::Idle,
+                message: "gapless: idle (waiting for playback)".to_string(),
+            }
+        } else if let Some(target) = self.current_gapless_target() {
+            GaplessStatus {
+                state: GaplessState::Idle,
+                message: format!("gapless: idle {}", self.gapless_target_label(&target)),
+            }
+        } else {
+            GaplessStatus {
+                state: GaplessState::Idle,
+                message: "gapless: idle (no next track)".to_string(),
+            }
+        };
+    }
+
+    fn gapless_target_label(&self, target: &GaplessTrackTarget) -> String {
+        current_queue_entry(&self.status.queue, Some(target.queue_index))
+            .map(|entry| {
+                format!(
+                    "(#{} {})",
+                    target.queue_index.saturating_add(1),
+                    entry.title.as_str()
+                )
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "(#{} {})",
+                    target.queue_index.saturating_add(1),
+                    target.song_id
+                )
+            })
+    }
+
     fn sync_queue_state(&mut self) {
         let _ = self.queue_sync.sync_queue(&self.status);
     }
 
     fn report_status(&mut self) {
+        self.update_gapless_status();
         let _ = self.reporter.report_state(&self.status);
     }
 }
@@ -905,7 +1373,7 @@ fn build_stream_request(
             format: raw_stream.then_some("raw".to_string()),
             time_offset: stream_offset_seconds,
             size: None,
-            estimate_content_length: None,
+            estimate_content_length: Some(true),
             converted: None,
         })
         .map_err(format_api_error)
@@ -938,6 +1406,10 @@ fn build_cover_art_path(
         .join()
         .map_err(|_| "The cover art resolver thread panicked.".to_string())?
         .map(|path| Some(path.to_string_lossy().to_string()))
+}
+
+fn is_missing_prepared_stream_error(error: &str) -> bool {
+    error.to_ascii_lowercase().contains("no prepared stream")
 }
 
 fn validate_queue_index(
@@ -1003,7 +1475,10 @@ mod tests {
 
     use super::{current_song_id, PlaybackController, PlaybackRuntimeContext, PlaybackStatus};
     use crate::{
-        models::{CapabilityMatrix, InterruptReason, PlayingState, SongResponse},
+        models::{
+            CapabilityMatrix, GaplessState, InterruptReason, PlaybackCapabilities, PlayingState,
+            SongResponse,
+        },
         playback::{
             backend_shims::{
                 PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy,
@@ -1022,6 +1497,7 @@ mod tests {
     enum MockSeekBehavior {
         #[default]
         Apply,
+        ApplyAndEmitSeekProcessed,
         ReloadRequired,
         Fail,
     }
@@ -1031,6 +1507,8 @@ mod tests {
         load_calls: Vec<String>,
         load_absolute_start_positions_ms: Vec<u32>,
         load_local_start_positions_ms: Vec<u32>,
+        prepare_calls: Vec<String>,
+        next_prepare_generation: u64,
         seek_calls_ms: Vec<u32>,
         current_position_ms: u32,
         current_position_calls: usize,
@@ -1042,6 +1520,16 @@ mod tests {
         pause_calls: usize,
         resume_calls: usize,
         stop_calls: usize,
+        activate_prepared_calls: usize,
+        clear_prepared_calls: usize,
+        activated_prepared_urls: Vec<String>,
+        prepared_request: Option<MockPreparedRequest>,
+    }
+
+    #[derive(Debug, Clone)]
+    struct MockPreparedRequest {
+        url: String,
+        absolute_start_position_ms: u32,
     }
 
     #[derive(Debug, Default)]
@@ -1051,6 +1539,8 @@ mod tests {
 
     struct MockBackend {
         state: Arc<Mutex<MockBackendState>>,
+        playback_capabilities: PlaybackCapabilities,
+        native_events: Option<Arc<Mutex<Vec<PlaybackNativeEvent>>>>,
     }
 
     struct MockReporter {
@@ -1063,6 +1553,10 @@ mod tests {
     }
 
     impl PlaybackBackend for MockBackend {
+        fn capabilities(&self) -> PlaybackCapabilities {
+            self.playback_capabilities.clone()
+        }
+
         fn plan_load(
             &self,
             requested_position_ms: u32,
@@ -1099,12 +1593,63 @@ mod tests {
             Ok(())
         }
 
+        fn prepare(&mut self, request: PlaybackBackendLoadRequest) -> Result<u64, String> {
+            let mut state = self.state.lock().unwrap();
+            let url = request.request.url.to_string();
+            state.prepare_calls.push(url.clone());
+            if state.always_fail_load {
+                return Err("stream rejected".to_string());
+            }
+            if state.fail_standard_load && !url.contains("format=raw") {
+                return Err("standard stream rejected".to_string());
+            }
+            if state.fail_first_load && !state.has_failed_first_load {
+                state.has_failed_first_load = true;
+                return Err("raw stream rejected".to_string());
+            }
+
+            state.next_prepare_generation = state.next_prepare_generation.wrapping_add(1);
+            let generation = state.next_prepare_generation;
+            state.prepared_request = Some(MockPreparedRequest {
+                url,
+                absolute_start_position_ms: request.absolute_start_position_ms,
+            });
+            Ok(generation)
+        }
+
+        fn activate_prepared(&mut self, _autoplay: bool) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            let Some(request) = state.prepared_request.take() else {
+                return Err("no prepared stream".to_string());
+            };
+            state.activate_prepared_calls += 1;
+            state.activated_prepared_urls.push(request.url);
+            state.current_position_ms = request.absolute_start_position_ms;
+            Ok(())
+        }
+
+        fn clear_prepared(&mut self) {
+            let mut state = self.state.lock().unwrap();
+            state.clear_prepared_calls += 1;
+            state.prepared_request = None;
+        }
+
         fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String> {
             let mut state = self.state.lock().unwrap();
             state.seek_calls_ms.push(position_ms);
             match state.seek_behavior {
                 MockSeekBehavior::Apply => {
                     state.current_position_ms = position_ms;
+                    Ok(PlaybackSeekAction::Applied)
+                }
+                MockSeekBehavior::ApplyAndEmitSeekProcessed => {
+                    state.current_position_ms = position_ms;
+                    if let Some(native_events) = &self.native_events {
+                        native_events
+                            .lock()
+                            .unwrap()
+                            .push(PlaybackNativeEvent::SeekProcessed { position_ms });
+                    }
                     Ok(PlaybackSeekAction::Applied)
                 }
                 MockSeekBehavior::ReloadRequired => Ok(PlaybackSeekAction::ReloadRequired),
@@ -1223,6 +1768,10 @@ mod tests {
         let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
         let backend = Box::new(MockBackend {
             state: state.clone(),
+            playback_capabilities: PlaybackCapabilities {
+                gapless_playback: true,
+            },
+            native_events: None,
         });
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
@@ -1234,6 +1783,7 @@ mod tests {
             queue_sync,
             Box::new(NoopNativePlaybackEventSource),
             Box::new(NoopPlaybackStatePersister),
+            false,
         );
         (controller, state, reporter_state)
     }
@@ -1254,6 +1804,10 @@ mod tests {
         let native_events = Arc::new(Mutex::new(Vec::new()));
         let backend = Box::new(MockBackend {
             state: state.clone(),
+            playback_capabilities: PlaybackCapabilities {
+                gapless_playback: true,
+            },
+            native_events: Some(native_events.clone()),
         });
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
@@ -1267,6 +1821,7 @@ mod tests {
                 events: native_events.clone(),
             }),
             Box::new(NoopPlaybackStatePersister),
+            false,
         );
         (controller, state, reporter_state, native_events)
     }
@@ -1281,6 +1836,35 @@ mod tests {
         let (controller, state, reporter_state) =
             controller_with_mock_backend_full_config(false, false, false, false);
         state.lock().unwrap().seek_behavior = seek_behavior;
+        (controller, state, reporter_state)
+    }
+
+    fn controller_with_mock_backend_capabilities(
+        gapless_playback: bool,
+    ) -> (
+        PlaybackController,
+        Arc<Mutex<MockBackendState>>,
+        Arc<Mutex<MockReporterState>>,
+    ) {
+        let state = Arc::new(Mutex::new(MockBackendState::default()));
+        let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
+        let backend = Box::new(MockBackend {
+            state: state.clone(),
+            playback_capabilities: PlaybackCapabilities { gapless_playback },
+            native_events: None,
+        });
+        let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
+            state: reporter_state.clone(),
+        });
+        let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
+        let controller = PlaybackController::new(
+            backend,
+            reporter,
+            queue_sync,
+            Box::new(NoopNativePlaybackEventSource),
+            Box::new(NoopPlaybackStatePersister),
+            false,
+        );
         (controller, state, reporter_state)
     }
 
@@ -1533,6 +2117,219 @@ mod tests {
         assert_eq!(status.current_index, Some(1));
         assert_eq!(status.current_song_id.as_deref(), Some("song-b"));
         assert_eq!(backend_state.lock().unwrap().load_calls.len(), 2);
+    }
+
+    #[test]
+    fn enabling_gapless_prepares_next_track() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.prepare_calls.len(), 1);
+        assert!(backend_state.prepare_calls[0].contains("song-b"));
+        assert!(matches!(
+            status.gapless_status.state,
+            GaplessState::Preparing
+        ));
+    }
+
+    #[test]
+    fn manual_next_uses_prepared_gapless_track_when_ready() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::GaplessPrepared { generation: 1 });
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        controller.next(&runtime_context).unwrap();
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.load_calls.len(), 1);
+        assert_eq!(backend_state.activate_prepared_calls, 1);
+        assert_eq!(controller.state().current_index, Some(1));
+        assert_eq!(
+            controller.state().current_song_id.as_deref(),
+            Some("song-b")
+        );
+    }
+
+    #[test]
+    fn manual_next_uses_prepared_gapless_track_before_ready_event_arrives() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+
+        controller.next(&runtime_context).unwrap();
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.load_calls.len(), 1);
+        assert_eq!(backend_state.activate_prepared_calls, 1);
+        assert_eq!(controller.state().current_index, Some(1));
+        assert_eq!(
+            controller.state().current_song_id.as_deref(),
+            Some("song-b")
+        );
+    }
+
+    #[test]
+    fn ended_native_event_uses_prepared_gapless_track_when_ready() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::GaplessPrepared { generation: 1 });
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Ended);
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.load_calls.len(), 1);
+        assert_eq!(backend_state.activate_prepared_calls, 1);
+        let status = controller.state();
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id.as_deref(), Some("song-b"));
+    }
+
+    #[test]
+    fn gapless_transition_native_event_advances_without_backend_activation() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::GaplessPrepared { generation: 1 });
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::GaplessTransition);
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.load_calls.len(), 1);
+        assert_eq!(backend_state.activate_prepared_calls, 0);
+        assert_eq!(backend_state.prepare_calls.len(), 2);
+
+        let status = controller.state();
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id.as_deref(), Some("song-b"));
+        assert!(matches!(
+            status.gapless_status.state,
+            GaplessState::Preparing
+        ));
+    }
+
+    #[test]
+    fn unsupported_backend_reports_gapless_unavailable_and_skips_prepare() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend_capabilities(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.prepare_calls.len(), 0);
+        assert_eq!(status.gapless_status.state, GaplessState::Unavailable);
     }
 
     #[test]
@@ -1934,6 +2731,29 @@ mod tests {
     }
 
     #[test]
+    fn native_seek_processed_event_queued_during_seek_clears_pending_before_seek_returns() {
+        let (mut controller, backend_state, _, _) = controller_with_mock_backend_and_native_events(false);
+        backend_state.lock().unwrap().seek_behavior = MockSeekBehavior::ApplyAndEmitSeekProcessed;
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        let status = controller.seek(&runtime_context, 5_500).unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(status.current_position_ms, 5_500);
+        assert_eq!(status.pending_seek_position_ms, None);
+    }
+
+    #[test]
     fn runtime_buffering_reports_stream_buffering_stall() {
         let (mut controller, _, _, native_events) =
             controller_with_mock_backend_and_native_events(false);
@@ -2097,12 +2917,20 @@ mod tests {
         controller.play(&runtime_context).unwrap();
 
         let status = controller.reset();
-        assert_eq!(status, PlaybackStatus::empty());
+        assert_eq!(status.playing_state, PlayingState::Idle);
+        assert!(status.queue.is_empty());
+        assert_eq!(status.gapless_status.state, GaplessState::Off);
 
         let reported_states = reporter_state.lock().unwrap().reported_states.clone();
         assert_eq!(
-            reported_states.last().cloned(),
-            Some(PlaybackStatus::empty())
+            reported_states
+                .last()
+                .map(|state| state.playing_state.clone()),
+            Some(PlayingState::Idle)
+        );
+        assert_eq!(
+            reported_states.last().map(|state| state.gapless_status.state.clone()),
+            Some(GaplessState::Off)
         );
     }
 

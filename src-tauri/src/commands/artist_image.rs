@@ -27,11 +27,10 @@ pub async fn get_artist_image(
     };
     let cache = artist_image_cache.0.clone();
     let url = url.to_string();
-    let local_path = tauri::async_runtime::spawn_blocking(move || {
-        cache.resolve_artist_image(&profile_id, &url)
-    })
-    .await
-    .map_err(|error| format!("Failed to join the artist image cache task: {error}"))??;
+    let local_path =
+        tauri::async_runtime::spawn_blocking(move || cache.resolve_artist_image(&profile_id, &url))
+            .await
+            .map_err(|error| format!("Failed to join the artist image cache task: {error}"))??;
 
     Ok(ArtistImageResponse {
         local_path: local_path.to_string_lossy().to_string(),

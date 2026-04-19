@@ -4,6 +4,7 @@ use crate::playback::android_mobile_plugin::{
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
+use crate::models::PlaybackCapabilities;
 
 #[derive(Debug, Clone)]
 struct AndroidPlaybackBackend {
@@ -11,6 +12,12 @@ struct AndroidPlaybackBackend {
 }
 
 impl PlaybackBackend for AndroidPlaybackBackend {
+    fn capabilities(&self) -> PlaybackCapabilities {
+        PlaybackCapabilities {
+            gapless_playback: false,
+        }
+    }
+
     fn plan_load(
         &self,
         requested_position_ms: u32,

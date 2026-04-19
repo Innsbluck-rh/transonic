@@ -7,6 +7,7 @@ mod index;
 mod json;
 mod playback;
 mod session;
+mod settings;
 
 pub use albums::get_album_list;
 pub use artist_image::get_artist_image;
@@ -24,6 +25,7 @@ pub use playback::{
     playback_play_queue_index, playback_prev, playback_seek, playback_set_queue, playback_stop,
 };
 pub use session::{bootstrap_app_state, connect_server_profile, delete_server_profile};
+pub use settings::settings_update;
 
 #[doc(hidden)]
 pub use albums::{__cmd__get_album_list, __specta__fn__get_album_list};
@@ -77,3 +79,5 @@ pub use session::{
     __specta__fn__bootstrap_app_state, __specta__fn__connect_server_profile,
     __specta__fn__delete_server_profile,
 };
+#[doc(hidden)]
+pub use settings::{__cmd__settings_update, __specta__fn__settings_update};

@@ -5,6 +5,7 @@ mod browse;
 mod cover_art;
 mod playback;
 mod session;
+mod settings;
 
 #[allow(unused_imports)]
 pub use albums::{AlbumListContext, AlbumListItem, AlbumListRequest, AlbumListResponse};
@@ -28,11 +29,14 @@ pub use cover_art::{CoverArtRequest, CoverArtResponse};
 pub use playback::{
     InterruptReason, MediaNotificationTap, PlaybackAppendToQueueRequest,
     PlaybackInsertAfterCurrentRequest, PlaybackPlayQueueIndexRequest, PlaybackSeekRequest,
-    PlaybackSetQueueRequest, PlaybackStatus, PlayingState, QueueSource,
+    PlaybackSetQueueRequest, PlaybackStatus, PlayingState, GaplessState, GaplessStatus,
+    QueueSource,
 };
 #[allow(unused_imports)]
 pub use session::{
     ActiveSession, AppBootstrap, CapabilityMatrix, ConnectServerProfileRequest,
-    ConnectServerProfileResult, LastConnectionState, OpenSubsonicExtension, ProfileIdRequest,
-    RestoreStatus, SavedProfileSummary,
+    ConnectServerProfileResult, LastConnectionState, OpenSubsonicExtension, PlaybackCapabilities,
+    ProfileIdRequest, RestoreStatus, SavedProfileSummary,
 };
+#[allow(unused_imports)]
+pub use settings::{AppSettings, PlaybackSettings, SettingsOrigin, SettingsUpdateRequest};

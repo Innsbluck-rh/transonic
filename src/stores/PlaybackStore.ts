@@ -3,6 +3,13 @@ import { PlaybackStatus } from '~/bindings';
 
 interface PlaybackStore {
   status?: PlaybackStatus;
+  authoritativeReceivedAtMs: number | null;
+  clockMs: number;
 }
 
-export const [playbackStore, setPlaybackStore] = createStore<PlaybackStore>();
+const initialClockMs = typeof performance === 'undefined' ? 0 : performance.now();
+
+export const [playbackStore, setPlaybackStore] = createStore<PlaybackStore>({
+  authoritativeReceivedAtMs: null,
+  clockMs: initialClockMs,
+});

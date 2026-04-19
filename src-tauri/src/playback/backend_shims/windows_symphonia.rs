@@ -13,8 +13,9 @@
 //!   streamed data.  Decoded f32 PCM samples are written into a shared ring
 //!   buffer.
 //! - A cpal output stream drains the ring buffer to produce audio.
-//! - End-of-stream is detected by the cpal callback (pump finished + buffer
-//!   drained) and signalled to the controller via `SymphoniaPlaybackEventHub`.
+//! - End-of-stream and same-format prepared-track handoff are detected by the
+//!   cpal callback and signalled to the controller via
+//!   `SymphoniaPlaybackEventHub`.
 //!
 //! Key difference from the MF backend: symphonia supports native seeking, so
 //! the `seek` method sends a command to the pump thread (via a secondary
@@ -27,6 +28,7 @@ use std::thread::JoinHandle;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
+use crate::models::PlaybackCapabilities;
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
@@ -61,6 +63,19 @@ struct DownloadBufferInner {
     error: Option<String>,
 }
 
+#[derive(Default)]
+struct PreparedActivationGate {
+    inner: Mutex<PreparedActivationGateInner>,
+    condvar: Condvar,
+}
+
+#[derive(Default)]
+struct PreparedActivationGateInner {
+    paused: bool,
+    activated: bool,
+    aborted: bool,
+}
+
 impl SharedDownloadBuffer {
     fn new(total_len: u64) -> Self {
         // Pre-allocate up to 64 MiB; for larger files the Vec will grow.
@@ -80,6 +95,61 @@ impl SharedDownloadBuffer {
     /// Signal cancellation and wake any blocked reader.
     fn cancel(&self) {
         self.cancel.store(true, Ordering::Release);
+        self.condvar.notify_all();
+    }
+}
+
+impl PreparedActivationGate {
+    fn is_activated(&self) -> bool {
+        self.inner.lock().unwrap().activated
+    }
+
+    fn wait_for_download_permission(&self, cancel: &AtomicBool) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        while inner.paused
+            && !inner.activated
+            && !inner.aborted
+            && !cancel.load(Ordering::Acquire)
+        {
+            inner = self.condvar.wait(inner).unwrap();
+        }
+        !inner.aborted && !cancel.load(Ordering::Acquire)
+    }
+
+    fn pause_until_activated(&self, cancel: &AtomicBool) {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.activated || inner.aborted || cancel.load(Ordering::Acquire) {
+            return;
+        }
+        if !inner.paused {
+            inner.paused = true;
+            self.condvar.notify_all();
+            log::info!("symphonia-gapless: buffered ~2s PCM, pausing prepared pipeline");
+        }
+        while inner.paused
+            && !inner.activated
+            && !inner.aborted
+            && !cancel.load(Ordering::Acquire)
+        {
+            inner = self.condvar.wait(inner).unwrap();
+        }
+    }
+
+    fn activate(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.activated || inner.aborted {
+            return;
+        }
+        inner.activated = true;
+        inner.paused = false;
+        self.condvar.notify_all();
+        log::info!("symphonia-gapless: prepared pipeline activated");
+    }
+
+    fn abort(&self) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.aborted = true;
+        inner.paused = false;
         self.condvar.notify_all();
     }
 }
@@ -204,33 +274,30 @@ impl symphonia::core::io::MediaSource for StreamingMediaSource {
 // and controller (via NativePlaybackEventSource).
 // ---------------------------------------------------------------------------
 
-/// Shared event channel between the symphonia playback backend and the
+/// Shared event queue between the symphonia playback backend and the
 /// controller.
-///
-/// The cpal output callback sets the `ended` flag once the pump thread has
-/// finished **and** the ring buffer has been fully drained.  The controller
-/// polls `drain_events()` (via `synced_state`) and receives a single
-/// `PlaybackNativeEvent::Ended` event per track.
 #[derive(Clone, Default)]
 pub struct SymphoniaPlaybackEventHub {
-    ended: Arc<AtomicBool>,
+    queue: Arc<Mutex<VecDeque<PlaybackNativeEvent>>>,
 }
 
 impl SymphoniaPlaybackEventHub {
     /// Reset the ended flag.  Called when a new track is loaded so that a
     /// stale flag from a previous session does not trigger a spurious event.
     fn reset(&self) {
-        self.ended.store(false, Ordering::Release);
+        self.queue.lock().unwrap().clear();
+    }
+
+    fn push(&self, event: PlaybackNativeEvent) {
+        self.queue.lock().unwrap().push_back(event);
+        crate::playback::spawn_controller_process_native_events();
     }
 }
 
 impl NativePlaybackEventSource for SymphoniaPlaybackEventHub {
     fn drain_events(&mut self) -> Vec<PlaybackNativeEvent> {
-        if self.ended.swap(false, Ordering::AcqRel) {
-            vec![PlaybackNativeEvent::Ended]
-        } else {
-            vec![]
-        }
+        let mut queue = self.queue.lock().unwrap();
+        queue.drain(..).collect()
     }
 }
 
@@ -246,9 +313,13 @@ pub fn create_playback_backend(event_hub: SymphoniaPlaybackEventHub) -> Box<dyn 
 // Worker-thread job enum (RPC messages)
 // ---------------------------------------------------------------------------
 
-enum WorkerJob {
+enum ActiveWorkerJob {
     Load {
         request: PlaybackBackendLoadRequest,
+        reply: std::sync::mpsc::Sender<Result<(), String>>,
+    },
+    ActivatePrepared {
+        autoplay: bool,
         reply: std::sync::mpsc::Sender<Result<(), String>>,
     },
     Seek {
@@ -266,6 +337,26 @@ enum WorkerJob {
     },
     Stop {
         reply: std::sync::mpsc::Sender<Result<(), String>>,
+    },
+    ClearPendingHandoff {
+        reply: std::sync::mpsc::Sender<Result<(), String>>,
+    },
+    PreparedReady {
+        generation: u64,
+    },
+    PrepareFailed {
+        generation: u64,
+        message: String,
+    },
+    CompleteGaplessTransition {
+        generation: u64,
+    },
+}
+
+enum PrepareWorkerJob {
+    Prepare {
+        request: PlaybackBackendLoadRequest,
+        generation: u64,
     },
 }
 
@@ -286,60 +377,167 @@ enum PumpCommand {
 
 #[derive(Clone)]
 struct SymphoniaPlaybackBackend {
-    tx: std::sync::mpsc::Sender<WorkerJob>,
+    active_tx: std::sync::mpsc::Sender<ActiveWorkerJob>,
+    prepare_tx: std::sync::mpsc::Sender<PrepareWorkerJob>,
+    prepared_state: Arc<SharedPreparedState>,
+}
+
+#[derive(Default)]
+struct SharedPreparedState {
+    inner: Mutex<PreparedStateInner>,
+}
+
+#[derive(Default)]
+struct PreparedStateInner {
+    generation: u64,
+    session: Option<PreparedSession>,
+}
+
+#[derive(Clone)]
+struct PreparedSessionSummary {
+    generation: u64,
+    ring: Arc<AudioRing>,
+    absolute_start_position_ms: u32,
+    channels: u16,
+    sample_rate: u32,
+}
+
+impl SharedPreparedState {
+    fn begin_prepare(&self) -> (u64, Option<PreparedSession>) {
+        let mut inner = self.inner.lock().unwrap();
+        inner.generation = inner.generation.wrapping_add(1);
+        let generation = inner.generation;
+        let session = inner.session.take();
+        (generation, session)
+    }
+
+    fn invalidate_and_take(&self) -> Option<PreparedSession> {
+        let mut inner = self.inner.lock().unwrap();
+        inner.generation = inner.generation.wrapping_add(1);
+        inner.session.take()
+    }
+
+    fn take_for_activation(&self) -> Option<PreparedSession> {
+        self.invalidate_and_take()
+    }
+
+    fn is_generation_current(&self, generation: u64) -> bool {
+        self.inner.lock().unwrap().generation == generation
+    }
+
+    fn summary_for_generation(&self, generation: u64) -> Option<PreparedSessionSummary> {
+        let inner = self.inner.lock().unwrap();
+        if inner.generation != generation {
+            return None;
+        }
+        let session = inner.session.as_ref()?;
+        Some(PreparedSessionSummary {
+            generation,
+            ring: Arc::clone(&session.core.ring),
+            absolute_start_position_ms: session.absolute_start_position_ms,
+            channels: session.core.channels,
+            sample_rate: session.core.sample_rate,
+        })
+    }
+
+    fn take_transitioned(&self, generation: u64) -> Option<PreparedSession> {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.generation != generation {
+            return None;
+        }
+        inner.generation = inner.generation.wrapping_add(1);
+        inner.session.take()
+    }
+
+    fn store_if_current(
+        &self,
+        generation: u64,
+        session: PreparedSession,
+    ) -> Result<Option<PreparedSession>, PreparedSession> {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.generation != generation {
+            return Err(session);
+        }
+        Ok(inner.session.replace(session))
+    }
 }
 
 impl SymphoniaPlaybackBackend {
     fn new(event_hub: SymphoniaPlaybackEventHub) -> Self {
-        let (tx, rx) = std::sync::mpsc::channel::<WorkerJob>();
+        let prepared_state = Arc::new(SharedPreparedState::default());
+        let active_state = Arc::clone(&prepared_state);
+        let prepare_state = Arc::clone(&prepared_state);
+        let (active_tx, active_rx) = std::sync::mpsc::channel::<ActiveWorkerJob>();
+        let (prepare_tx, prepare_rx) = std::sync::mpsc::channel::<PrepareWorkerJob>();
+        let active_tx_for_worker = active_tx.clone();
+        let active_tx_for_prepare = active_tx.clone();
         std::thread::Builder::new()
-            .name("symphonia-playback-worker".into())
-            .spawn(move || worker_main(rx, event_hub))
-            .expect("Failed to spawn symphonia playback worker thread");
-        Self { tx }
+            .name("symphonia-playback-active-worker".into())
+            .spawn(move || {
+                active_worker_main(active_rx, active_tx_for_worker, event_hub, active_state)
+            })
+            .expect("Failed to spawn symphonia playback active worker thread");
+        std::thread::Builder::new()
+            .name("symphonia-playback-prepare-worker".into())
+            .spawn(move || prepare_worker_main(prepare_rx, active_tx_for_prepare, prepare_state))
+            .expect("Failed to spawn symphonia playback prepare worker thread");
+        Self {
+            active_tx,
+            prepare_tx,
+            prepared_state,
+        }
     }
 
-    fn send_unit(
+    fn send_active_unit(
         &self,
-        build: impl FnOnce(std::sync::mpsc::Sender<Result<(), String>>) -> WorkerJob,
+        build: impl FnOnce(std::sync::mpsc::Sender<Result<(), String>>) -> ActiveWorkerJob,
     ) -> Result<(), String> {
         let (tx, rx) = std::sync::mpsc::channel();
-        self.tx
+        self.active_tx
             .send(build(tx))
-            .map_err(|_| "Symphonia playback worker is unavailable.".to_string())?;
+            .map_err(|_| "Symphonia playback active worker is unavailable.".to_string())?;
         rx.recv().unwrap_or_else(|_| {
-            Err("Symphonia playback worker terminated unexpectedly.".to_string())
+            Err("Symphonia playback active worker terminated unexpectedly.".to_string())
         })
     }
 
     fn send_u32(
         &self,
-        build: impl FnOnce(std::sync::mpsc::Sender<Result<u32, String>>) -> WorkerJob,
+        build: impl FnOnce(std::sync::mpsc::Sender<Result<u32, String>>) -> ActiveWorkerJob,
     ) -> Result<u32, String> {
         let (tx, rx) = std::sync::mpsc::channel();
-        self.tx
+        self.active_tx
             .send(build(tx))
-            .map_err(|_| "Symphonia playback worker is unavailable.".to_string())?;
+            .map_err(|_| "Symphonia playback active worker is unavailable.".to_string())?;
         rx.recv().unwrap_or_else(|_| {
-            Err("Symphonia playback worker terminated unexpectedly.".to_string())
+            Err("Symphonia playback active worker terminated unexpectedly.".to_string())
         })
     }
 
     fn send_seek_action(
         &self,
-        build: impl FnOnce(std::sync::mpsc::Sender<Result<PlaybackSeekAction, String>>) -> WorkerJob,
+        build: impl FnOnce(
+            std::sync::mpsc::Sender<Result<PlaybackSeekAction, String>>,
+        ) -> ActiveWorkerJob,
     ) -> Result<PlaybackSeekAction, String> {
         let (tx, rx) = std::sync::mpsc::channel();
-        self.tx
+        self.active_tx
             .send(build(tx))
-            .map_err(|_| "Symphonia playback worker is unavailable.".to_string())?;
+            .map_err(|_| "Symphonia playback active worker is unavailable.".to_string())?;
         rx.recv().unwrap_or_else(|_| {
-            Err("Symphonia playback worker terminated unexpectedly.".to_string())
+            Err("Symphonia playback active worker terminated unexpectedly.".to_string())
         })
     }
+
 }
 
 impl PlaybackBackend for SymphoniaPlaybackBackend {
+    fn capabilities(&self) -> PlaybackCapabilities {
+        PlaybackCapabilities {
+            gapless_playback: true,
+        }
+    }
+
     fn plan_load(
         &self,
         requested_position_ms: u32,
@@ -351,27 +549,53 @@ impl PlaybackBackend for SymphoniaPlaybackBackend {
     }
 
     fn load(&mut self, request: PlaybackBackendLoadRequest) -> Result<(), String> {
-        self.send_unit(|reply| WorkerJob::Load { request, reply })
+        self.send_active_unit(|reply| ActiveWorkerJob::Load { request, reply })
+    }
+
+    fn prepare(&mut self, request: PlaybackBackendLoadRequest) -> Result<u64, String> {
+        self.send_active_unit(|reply| ActiveWorkerJob::ClearPendingHandoff { reply })?;
+        let (generation, stale_session) = self.prepared_state.begin_prepare();
+        if let Some(session) = stale_session {
+            tear_down_prepared_session(session);
+        }
+        self.prepare_tx
+            .send(PrepareWorkerJob::Prepare {
+                request,
+                generation,
+            })
+            .map_err(|_| "Symphonia playback prepare worker is unavailable.".to_string())?;
+        Ok(generation)
+    }
+
+    fn activate_prepared(&mut self, autoplay: bool) -> Result<(), String> {
+        self.send_active_unit(|reply| ActiveWorkerJob::ActivatePrepared { autoplay, reply })
+    }
+
+    fn clear_prepared(&mut self) {
+        let _ = self.send_active_unit(|reply| ActiveWorkerJob::ClearPendingHandoff { reply });
+        if let Some(session) = self.prepared_state.invalidate_and_take() {
+            tear_down_prepared_session(session);
+        }
     }
 
     fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String> {
-        self.send_seek_action(|reply| WorkerJob::Seek { position_ms, reply })
+        self.send_seek_action(|reply| ActiveWorkerJob::Seek { position_ms, reply })
     }
 
     fn current_position_ms(&self) -> Result<u32, String> {
-        self.send_u32(|reply| WorkerJob::CurrentPosition { reply })
+        self.send_u32(|reply| ActiveWorkerJob::CurrentPosition { reply })
     }
 
     fn pause(&mut self) -> Result<(), String> {
-        self.send_unit(|reply| WorkerJob::Pause { reply })
+        self.send_active_unit(|reply| ActiveWorkerJob::Pause { reply })
     }
 
     fn resume(&mut self) -> Result<(), String> {
-        self.send_unit(|reply| WorkerJob::Resume { reply })
+        self.send_active_unit(|reply| ActiveWorkerJob::Resume { reply })
     }
 
     fn stop(&mut self) -> Result<(), String> {
-        self.send_unit(|reply| WorkerJob::Stop { reply })
+        self.send_active_unit(|reply| ActiveWorkerJob::Stop { reply })
     }
 }
 
@@ -419,55 +643,206 @@ impl AudioRing {
         }
         (consumed / ch) * 1000 / sr
     }
+
+    fn drain_into(&self, output: &mut [f32]) -> usize {
+        let mut buf = self.buf.lock().unwrap();
+        let available = buf.len().min(output.len());
+        for (i, sample) in buf.drain(..available).enumerate() {
+            output[i] = sample;
+        }
+        self.samples_consumed
+            .fetch_add(available as u64, Ordering::Relaxed);
+        available
+    }
+
+    fn is_drained_and_finished(&self) -> bool {
+        self.finished.load(Ordering::Acquire) && self.buf.lock().unwrap().is_empty()
+    }
+}
+
+#[derive(Clone)]
+struct RoutedTrack {
+    ring: Arc<AudioRing>,
+    base_position_ms: u32,
+}
+
+#[derive(Clone)]
+struct PendingGaplessTrack {
+    generation: u64,
+    ring: Arc<AudioRing>,
+    base_position_ms: u32,
+}
+
+struct StreamRouterState {
+    current: RoutedTrack,
+    pending: Option<PendingGaplessTrack>,
+}
+
+struct StreamRouter {
+    inner: Mutex<StreamRouterState>,
+}
+
+impl StreamRouter {
+    fn new(current_ring: Arc<AudioRing>, base_position_ms: u32) -> Self {
+        Self {
+            inner: Mutex::new(StreamRouterState {
+                current: RoutedTrack {
+                    ring: current_ring,
+                    base_position_ms,
+                },
+                pending: None,
+            }),
+        }
+    }
+
+    fn current_track(&self) -> RoutedTrack {
+        self.inner.lock().unwrap().current.clone()
+    }
+
+    fn current_position_ms(&self) -> u32 {
+        let current = self.current_track();
+        let elapsed_ms = u32::try_from(current.ring.elapsed_ms()).unwrap_or(u32::MAX);
+        current.base_position_ms.saturating_add(elapsed_ms)
+    }
+
+    fn update_current_base_position(&self, base_position_ms: u32) {
+        self.inner.lock().unwrap().current.base_position_ms = base_position_ms;
+    }
+
+    fn clear_pending(&self) {
+        self.inner.lock().unwrap().pending = None;
+    }
+
+    fn install_pending_if_compatible(
+        &self,
+        summary: PreparedSessionSummary,
+        current_channels: u16,
+        current_sample_rate: u32,
+    ) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        if summary.channels != current_channels || summary.sample_rate != current_sample_rate {
+            inner.pending = None;
+            return false;
+        }
+        inner.pending = Some(PendingGaplessTrack {
+            generation: summary.generation,
+            ring: summary.ring,
+            base_position_ms: summary.absolute_start_position_ms,
+        });
+        true
+    }
+
+    fn try_gapless_handoff(&self, completed_ring: &Arc<AudioRing>) -> Option<PendingGaplessTrack> {
+        let mut inner = self.inner.lock().unwrap();
+        if !Arc::ptr_eq(&inner.current.ring, completed_ring) {
+            return None;
+        }
+        let pending = inner.pending.take()?;
+        inner.current = RoutedTrack {
+            ring: Arc::clone(&pending.ring),
+            base_position_ms: pending.base_position_ms,
+        };
+        Some(pending)
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Active playback session (owned by worker thread)
 // ---------------------------------------------------------------------------
 
-struct ActiveSession {
+struct SessionCore {
     ring: Arc<AudioRing>,
-    cpal_stream: cpal::Stream,
     pump_handle: JoinHandle<()>,
     pump_cmd_tx: std::sync::mpsc::Sender<PumpCommand>,
     /// Handle for the background HTTP download thread (streaming mode only).
     download_handle: Option<JoinHandle<()>>,
     /// Shared buffer for the progressive download (used to cancel on teardown).
     download_buffer: Option<Arc<SharedDownloadBuffer>>,
+    /// Lifts the 2s prepared-track cap once the session becomes active.
+    activation_gate: Option<Arc<PreparedActivationGate>>,
+    channels: u16,
+    sample_rate: u32,
+}
+
+struct PreparedSession {
+    core: SessionCore,
+    absolute_start_position_ms: u32,
+}
+
+struct ActiveSession {
+    core: SessionCore,
+    cpal_stream: cpal::Stream,
     paused: bool,
+    stream_router: Arc<StreamRouter>,
+}
+
+impl SessionCore {
+    fn activate_gapless_preparation(&self) {
+        if let Some(ref gate) = self.activation_gate {
+            gate.activate();
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
 // Worker thread
 // ---------------------------------------------------------------------------
 
-fn worker_main(rx: std::sync::mpsc::Receiver<WorkerJob>, event_hub: SymphoniaPlaybackEventHub) {
+fn active_worker_main(
+    rx: std::sync::mpsc::Receiver<ActiveWorkerJob>,
+    active_tx: std::sync::mpsc::Sender<ActiveWorkerJob>,
+    event_hub: SymphoniaPlaybackEventHub,
+    prepared_state: Arc<SharedPreparedState>,
+) {
     let mut session: Option<ActiveSession> = None;
-    let mut base_position_ms: Option<u32> = None;
 
     while let Ok(job) = rx.recv() {
         match job {
-            WorkerJob::Load { request, reply } => {
-                tear_down(&mut session);
+            ActiveWorkerJob::Load { request, reply } => {
+                tear_down_active(&mut session);
+                if let Some(prepared) = prepared_state.invalidate_and_take() {
+                    tear_down_prepared_session(prepared);
+                }
                 event_hub.reset();
-                let abs = request.absolute_start_position_ms;
-                match do_load(&request, &event_hub) {
-                    Ok(s) => {
-                        base_position_ms = Some(abs);
-                        session = Some(s);
+                match prepare_session(&request, true).and_then(|prepared| {
+                    activate_session(prepared, &event_hub, &active_tx, request.autoplay)
+                }) {
+                    Ok(active_session) => {
+                        session = Some(active_session);
                         let _ = reply.send(Ok(()));
                     }
                     Err(e) => {
-                        base_position_ms = None;
                         let _ = reply.send(Err(e));
                     }
                 }
             }
 
-            WorkerJob::Seek { position_ms, reply } => {
+            ActiveWorkerJob::ActivatePrepared { autoplay, reply } => {
+                let Some(prepared) = prepared_state.take_for_activation() else {
+                    let _ = reply.send(Err(
+                        "No prepared stream is available for playback.".to_string()
+                    ));
+                    continue;
+                };
+
+                tear_down_active(&mut session);
+                event_hub.reset();
+                match activate_session(prepared, &event_hub, &active_tx, autoplay) {
+                    Ok(active_session) => {
+                        session = Some(active_session);
+                        let _ = reply.send(Ok(()));
+                    }
+                    Err(error) => {
+                        let _ = reply.send(Err(error));
+                    }
+                }
+            }
+
+            ActiveWorkerJob::Seek { position_ms, reply } => {
                 if let Some(ref s) = session {
                     let (seek_reply_tx, seek_reply_rx) = std::sync::mpsc::channel();
-                    if s.pump_cmd_tx
+                    if s.core
+                        .pump_cmd_tx
                         .send(PumpCommand::Seek {
                             position_ms,
                             reply: seek_reply_tx,
@@ -476,7 +851,8 @@ fn worker_main(rx: std::sync::mpsc::Receiver<WorkerJob>, event_hub: SymphoniaPla
                     {
                         match seek_reply_rx.recv() {
                             Ok(Ok(())) => {
-                                base_position_ms = Some(position_ms);
+                                s.stream_router.update_current_base_position(position_ms);
+                                event_hub.push(PlaybackNativeEvent::SeekProcessed { position_ms });
                                 let _ = reply.send(Ok(PlaybackSeekAction::Applied));
                             }
                             Ok(Err(e)) => {
@@ -495,18 +871,15 @@ fn worker_main(rx: std::sync::mpsc::Receiver<WorkerJob>, event_hub: SymphoniaPla
                 }
             }
 
-            WorkerJob::CurrentPosition { reply } => {
-                let result = match (&session, base_position_ms) {
-                    (Some(s), Some(base)) => {
-                        let elapsed = u32::try_from(s.ring.elapsed_ms()).unwrap_or(u32::MAX);
-                        Ok(base.saturating_add(elapsed))
-                    }
-                    _ => Err("No stream is loaded for playback.".to_string()),
-                };
+            ActiveWorkerJob::CurrentPosition { reply } => {
+                let result = session
+                    .as_ref()
+                    .map(|s| Ok(s.stream_router.current_position_ms()))
+                    .unwrap_or_else(|| Err("No stream is loaded for playback.".to_string()));
                 let _ = reply.send(result);
             }
 
-            WorkerJob::Pause { reply } => {
+            ActiveWorkerJob::Pause { reply } => {
                 let result = if let Some(s) = session.as_mut() {
                     match s.cpal_stream.pause() {
                         Ok(()) => {
@@ -521,7 +894,7 @@ fn worker_main(rx: std::sync::mpsc::Receiver<WorkerJob>, event_hub: SymphoniaPla
                 let _ = reply.send(result);
             }
 
-            WorkerJob::Resume { reply } => {
+            ActiveWorkerJob::Resume { reply } => {
                 let result = if let Some(s) = session.as_mut() {
                     match s.cpal_stream.play() {
                         Ok(()) => {
@@ -536,35 +909,137 @@ fn worker_main(rx: std::sync::mpsc::Receiver<WorkerJob>, event_hub: SymphoniaPla
                 let _ = reply.send(result);
             }
 
-            WorkerJob::Stop { reply } => {
-                tear_down(&mut session);
-                base_position_ms = None;
+            ActiveWorkerJob::Stop { reply } => {
+                tear_down_active(&mut session);
+                if let Some(prepared) = prepared_state.invalidate_and_take() {
+                    tear_down_prepared_session(prepared);
+                }
                 let _ = reply.send(Ok(()));
+            }
+
+            ActiveWorkerJob::ClearPendingHandoff { reply } => {
+                if let Some(ref s) = session {
+                    s.stream_router.clear_pending();
+                }
+                let _ = reply.send(Ok(()));
+            }
+
+            ActiveWorkerJob::PreparedReady { generation } => {
+                let Some(summary) = prepared_state.summary_for_generation(generation) else {
+                    continue;
+                };
+                if let Some(ref s) = session {
+                    let installed = s.stream_router.install_pending_if_compatible(
+                        summary,
+                        s.core.channels,
+                        s.core.sample_rate,
+                    );
+                    if installed {
+                        log::info!(
+                            "symphonia-worker.active: installed pending gapless handoff generation={generation}"
+                        );
+                    }
+                }
+                event_hub.push(PlaybackNativeEvent::GaplessPrepared { generation });
+            }
+
+            ActiveWorkerJob::PrepareFailed {
+                generation,
+                message,
+            } => {
+                if !prepared_state.is_generation_current(generation) {
+                    continue;
+                }
+                event_hub.push(PlaybackNativeEvent::GaplessFailed {
+                    generation,
+                    message,
+                });
+            }
+
+            ActiveWorkerJob::CompleteGaplessTransition { generation } => {
+                let Some(prepared) = prepared_state.take_transitioned(generation) else {
+                    continue;
+                };
+
+                if let Some(active_session) = session.as_mut() {
+                    prepared.core.activate_gapless_preparation();
+                    let previous_core = std::mem::replace(&mut active_session.core, prepared.core);
+                    tear_down_core(previous_core);
+                    event_hub.push(PlaybackNativeEvent::GaplessTransition);
+                } else {
+                    tear_down_prepared_session(prepared);
+                }
             }
         }
     }
 
     // Channel closed – clean up.
-    tear_down(&mut session);
+    tear_down_active(&mut session);
+    if let Some(prepared) = prepared_state.invalidate_and_take() {
+        tear_down_prepared_session(prepared);
+    }
 }
 
-fn tear_down(session: &mut Option<ActiveSession>) {
-    if let Some(s) = session.take() {
-        // Signal pump thread to stop.
-        s.ring.cancel.store(true, Ordering::Release);
-        // Signal download thread to stop (and unblock any waiting Read).
-        if let Some(ref buf) = s.download_buffer {
-            buf.cancel();
+fn prepare_worker_main(
+    rx: std::sync::mpsc::Receiver<PrepareWorkerJob>,
+    active_tx: std::sync::mpsc::Sender<ActiveWorkerJob>,
+    prepared_state: Arc<SharedPreparedState>,
+) {
+    while let Ok(job) = rx.recv() {
+        match job {
+            PrepareWorkerJob::Prepare { request, generation } => {
+                match prepare_session(&request, false) {
+                    Ok(session) => match prepared_state.store_if_current(generation, session) {
+                        Ok(replaced) => {
+                            if let Some(previous) = replaced {
+                                tear_down_prepared_session(previous);
+                            }
+                            let _ = active_tx.send(ActiveWorkerJob::PreparedReady { generation });
+                        }
+                        Err(session) => {
+                            tear_down_prepared_session(session);
+                        }
+                    },
+                    Err(message) => {
+                        let _ = active_tx.send(ActiveWorkerJob::PrepareFailed {
+                            generation,
+                            message,
+                        });
+                    }
+                }
+            }
         }
+    }
+
+    if let Some(prepared) = prepared_state.invalidate_and_take() {
+        tear_down_prepared_session(prepared);
+    }
+}
+
+fn tear_down_active(session: &mut Option<ActiveSession>) {
+    if let Some(s) = session.take() {
         let _ = s.cpal_stream.pause();
         drop(s.cpal_stream);
-        // Close the command channel so the pump thread's try_recv sees a
-        // disconnected channel and can exit cleanly.
-        drop(s.pump_cmd_tx);
-        let _ = s.pump_handle.join();
-        if let Some(h) = s.download_handle {
-            let _ = h.join();
-        }
+        tear_down_core(s.core);
+    }
+}
+
+fn tear_down_prepared_session(session: PreparedSession) {
+    tear_down_core(session.core);
+}
+
+fn tear_down_core(core: SessionCore) {
+    if let Some(ref gate) = core.activation_gate {
+        gate.abort();
+    }
+    core.ring.cancel.store(true, Ordering::Release);
+    if let Some(ref buffer) = core.download_buffer {
+        buffer.cancel();
+    }
+    drop(core.pump_cmd_tx);
+    let _ = core.pump_handle.join();
+    if let Some(handle) = core.download_handle {
+        let _ = handle.join();
     }
 }
 
@@ -580,18 +1055,18 @@ struct PumpInit {
     pump_cmd_tx: std::sync::mpsc::Sender<PumpCommand>,
 }
 
-fn do_load(
+fn prepare_session(
     request: &PlaybackBackendLoadRequest,
-    event_hub: &SymphoniaPlaybackEventHub,
-) -> Result<ActiveSession, String> {
+    allow_full_download: bool,
+) -> Result<PreparedSession, String> {
     let url = request.request.url.to_string();
     let start_ms = request.local_start_position_ms;
-    let autoplay = request.autoplay;
     let headers = request.request.headers.clone();
+    let activation_gate = (!allow_full_download).then(|| Arc::new(PreparedActivationGate::default()));
 
     log::info!(
-        "symphonia-worker.load: url_len={} start_ms={start_ms} autoplay={autoplay}",
-        url.len()
+        "symphonia-worker.prepare: url_len={} start_ms={start_ms} allow_full_download={allow_full_download}",
+        url.len(),
     );
 
     // 1. Start the HTTP request (but do NOT consume the full body yet).
@@ -615,38 +1090,45 @@ fn do_load(
         Option<Arc<SharedDownloadBuffer>>,
     ) = if let Some(total_len) = content_length {
         // --- Streaming mode: start decoding immediately. ---
-        log::info!("symphonia-worker.load: streaming mode, content_length={total_len}");
+        log::info!("symphonia-worker.prepare: streaming mode, content_length={total_len}");
         let shared = Arc::new(SharedDownloadBuffer::new(total_len));
         let dl_shared = Arc::clone(&shared);
+        let activation_gate_for_download = activation_gate.clone();
         let dl_handle = std::thread::Builder::new()
             .name("symphonia-download".into())
-            .spawn(move || download_response_body(response, &dl_shared))
+            .spawn(move || download_response_body(response, &dl_shared, activation_gate_for_download))
             .map_err(|e| format!("Failed to spawn download thread: {e}"))?;
         let source = StreamingMediaSource::new(Arc::clone(&shared));
         (Box::new(source), Some(dl_handle), Some(shared))
-    } else {
+    } else if allow_full_download {
         // --- Fallback: no Content-Length, download fully first. ---
         log::warn!(
-            "symphonia-worker.load: no Content-Length header, falling back to full download"
+            "symphonia-worker.prepare: no Content-Length header, falling back to full download"
         );
         let bytes = response
             .bytes()
             .map(|b| b.to_vec())
             .map_err(|e| format!("Failed to read response body: {e}"))?;
-        log::info!("symphonia-worker.load: downloaded {} bytes", bytes.len());
+        log::info!("symphonia-worker.prepare: downloaded {} bytes", bytes.len());
         (
             Box::new(std::io::Cursor::new(bytes)) as Box<dyn symphonia::core::io::MediaSource>,
             None,
             None,
         )
+    } else {
+        log::warn!(
+            "symphonia-worker.prepare: skipping gapless preparation because Content-Length is unavailable"
+        );
+        return Err("Gapless playback requires a known Content-Length response.".to_string());
     };
 
     // 3. Open with symphonia on a pump thread.
     let (init_tx, init_rx) = std::sync::mpsc::channel::<Result<PumpInit, String>>();
 
+    let activation_gate_for_pump = activation_gate.clone();
     let pump_handle = std::thread::Builder::new()
         .name("symphonia-pump".into())
-        .spawn(move || pump_entry(source, start_ms, init_tx))
+        .spawn(move || pump_entry(source, start_ms, init_tx, activation_gate_for_pump))
         .map_err(|e| format!("Failed to spawn pump thread: {e}"))?;
 
     // Wait for the pump thread to finish initialisation.
@@ -655,56 +1137,75 @@ fn do_load(
         .map_err(|_| "Pump thread exited before reporting init result.".to_string())??;
 
     log::info!(
-        "symphonia-worker.load: probed format ch={} sr={}",
+        "symphonia-worker.prepare: probed format ch={} sr={}",
         init.channels,
         init.sample_rate
     );
 
-    let ring = init.ring;
-    let pump_cmd_tx = init.pump_cmd_tx;
+    Ok(PreparedSession {
+        core: SessionCore {
+            ring: init.ring,
+            pump_handle,
+            pump_cmd_tx: init.pump_cmd_tx,
+            download_handle,
+            download_buffer,
+            activation_gate,
+            channels: init.channels,
+            sample_rate: init.sample_rate,
+        },
+        absolute_start_position_ms: request.absolute_start_position_ms,
+    })
+}
 
-    // 4. Build cpal output stream; on failure cancel everything.
-    let ended_flag = event_hub.ended.clone();
+fn activate_session(
+    prepared: PreparedSession,
+    event_hub: &SymphoniaPlaybackEventHub,
+    active_tx: &std::sync::mpsc::Sender<ActiveWorkerJob>,
+    autoplay: bool,
+) -> Result<ActiveSession, String> {
+    let PreparedSession {
+        core,
+        absolute_start_position_ms,
+    } = prepared;
+    core.activate_gapless_preparation();
+    let stream_router = Arc::new(StreamRouter::new(
+        Arc::clone(&core.ring),
+        absolute_start_position_ms,
+    ));
     let cpal_stream = match build_cpal_stream(
-        Arc::clone(&ring),
-        init.channels,
-        init.sample_rate,
-        ended_flag,
+        Arc::clone(&stream_router),
+        core.channels,
+        core.sample_rate,
+        event_hub.clone(),
+        active_tx.clone(),
     ) {
-        Ok(s) => s,
-        Err(e) => {
-            ring.cancel.store(true, Ordering::Release);
-            if let Some(ref buf) = download_buffer {
-                buf.cancel();
-            }
-            drop(pump_cmd_tx);
-            let _ = pump_handle.join();
-            if let Some(h) = download_handle {
-                let _ = h.join();
-            }
-            return Err(e);
+        Ok(stream) => stream,
+        Err(error) => {
+            tear_down_core(core);
+            return Err(error);
         }
     };
 
-    if autoplay {
+    let play_result = if autoplay {
         cpal_stream
             .play()
-            .map_err(|e| format!("Failed to start audio output: {e}"))?;
+            .map_err(|e| format!("Failed to start audio output: {e}"))
     } else {
-        // cpal streams start in an unspecified state; explicitly pause.
         cpal_stream
             .pause()
-            .map_err(|e| format!("Failed to pause audio output: {e}"))?;
+            .map_err(|e| format!("Failed to pause audio output: {e}"))
+    };
+    if let Err(error) = play_result {
+        drop(cpal_stream);
+        tear_down_core(core);
+        return Err(error);
     }
 
     Ok(ActiveSession {
-        ring,
+        core,
         cpal_stream,
-        pump_handle,
-        pump_cmd_tx,
-        download_handle,
-        download_buffer,
         paused: !autoplay,
+        stream_router,
     })
 }
 
@@ -717,6 +1218,7 @@ fn do_load(
 fn download_response_body(
     mut response: reqwest::blocking::Response,
     shared: &SharedDownloadBuffer,
+    activation_gate: Option<Arc<PreparedActivationGate>>,
 ) {
     use std::io::Read;
 
@@ -724,6 +1226,13 @@ fn download_response_body(
     let mut total_read: u64 = 0;
 
     loop {
+        if let Some(ref gate) = activation_gate {
+            if !gate.wait_for_download_permission(&shared.cancel) {
+                log::info!("symphonia-download: prepared download stopped after {total_read} bytes");
+                return;
+            }
+        }
+
         if shared.cancel.load(Ordering::Acquire) {
             log::info!("symphonia-download: cancelled after {total_read} bytes");
             return;
@@ -770,8 +1279,9 @@ fn pump_entry(
     source: Box<dyn symphonia::core::io::MediaSource>,
     start_ms: u32,
     init_tx: std::sync::mpsc::Sender<Result<PumpInit, String>>,
+    activation_gate: Option<Arc<PreparedActivationGate>>,
 ) {
-    let result = pump_init_and_run(source, start_ms, init_tx);
+    let result = pump_init_and_run(source, start_ms, init_tx, activation_gate);
     if let Err(e) = &result {
         log::error!("symphonia-pump: terminated with error: {e}");
     }
@@ -781,6 +1291,7 @@ fn pump_init_and_run(
     source: Box<dyn symphonia::core::io::MediaSource>,
     start_ms: u32,
     init_tx: std::sync::mpsc::Sender<Result<PumpInit, String>>,
+    activation_gate: Option<Arc<PreparedActivationGate>>,
 ) -> Result<(), String> {
     use symphonia::core::codecs::DecoderOptions;
     use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo};
@@ -799,7 +1310,10 @@ fn pump_init_and_run(
         .format(
             &Hint::new(),
             mss,
-            &FormatOptions::default(),
+            &FormatOptions {
+                enable_gapless: true,
+                ..FormatOptions::default()
+            },
             &MetadataOptions::default(),
         )
         .map_err(|e| {
@@ -870,6 +1384,7 @@ fn pump_init_and_run(
         &cmd_rx,
         channels,
         sample_rate,
+        activation_gate,
     )
 }
 
@@ -881,6 +1396,7 @@ fn pump_decode_loop(
     cmd_rx: &std::sync::mpsc::Receiver<PumpCommand>,
     channels: u16,
     sample_rate: u32,
+    activation_gate: Option<Arc<PreparedActivationGate>>,
 ) -> Result<(), String> {
     use symphonia::core::audio::SampleBuffer;
 
@@ -915,12 +1431,19 @@ fn pump_decode_loop(
             }
         }
 
-        // Back-pressure: sleep briefly when the ring already has >= 2 s of
-        // data.
+        // Back-pressure: active sessions keep the ring near 2 s; prepared
+        // sessions park entirely at ~2 s until activation so they do not keep
+        // downloading the full file.
         {
             let buf = ring.buf.lock().unwrap();
             if buf.len() >= two_seconds {
                 drop(buf);
+                if let Some(ref gate) = activation_gate {
+                    if !gate.is_activated() {
+                        gate.pause_until_activated(&ring.cancel);
+                        continue;
+                    }
+                }
                 std::thread::sleep(std::time::Duration::from_millis(20));
                 continue;
             }
@@ -1051,10 +1574,11 @@ fn symphonia_seek_inner(
 // ---------------------------------------------------------------------------
 
 fn build_cpal_stream(
-    ring: Arc<AudioRing>,
+    stream_router: Arc<StreamRouter>,
     channels: u16,
     sample_rate: u32,
-    ended_flag: Arc<AtomicBool>,
+    event_hub: SymphoniaPlaybackEventHub,
+    active_tx: std::sync::mpsc::Sender<ActiveWorkerJob>,
 ) -> Result<cpal::Stream, String> {
     let host = cpal::default_host();
     let device = host
@@ -1071,33 +1595,40 @@ fn build_cpal_stream(
         .build_output_stream(
             &config,
             move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-                let mut buf = ring.buf.lock().unwrap();
-                let available = buf.len().min(data.len());
+                let mut written = 0usize;
 
-                // Copy available samples.
-                for (i, sample) in buf.drain(..available).enumerate() {
-                    data[i] = sample;
+                while written < data.len() {
+                    let current = stream_router.current_track();
+                    let wrote = current.ring.drain_into(&mut data[written..]);
+                    written += wrote;
+                    if written == data.len() {
+                        break;
+                    }
+
+                    if !current.ring.is_drained_and_finished() {
+                        break;
+                    }
+
+                    if let Some(pending) = stream_router.try_gapless_handoff(&current.ring) {
+                        let _ = active_tx.send(ActiveWorkerJob::CompleteGaplessTransition {
+                            generation: pending.generation,
+                        });
+                        log::info!(
+                            "symphonia-cpal: gapless handoff generation={} completed",
+                            pending.generation
+                        );
+                        continue;
+                    }
+
+                    if !current.ring.ended_notified.swap(true, Ordering::AcqRel) {
+                        event_hub.push(PlaybackNativeEvent::Ended);
+                        log::info!("symphonia-cpal: end-of-stream signalled to event hub");
+                    }
+                    break;
                 }
-                // Fill the remainder with silence.
-                for sample in &mut data[available..] {
+
+                for sample in &mut data[written..] {
                     *sample = 0.0;
-                }
-
-                // Only count *real* audio samples for position tracking.
-                ring.samples_consumed
-                    .fetch_add(available as u64, Ordering::Relaxed);
-
-                // EOS detection: the pump has finished producing samples AND
-                // the ring buffer has been fully drained.  The
-                // `ended_notified` guard ensures we only fire the flag once
-                // per session (the cpal callback keeps running even after the
-                // audio ends).
-                if available == 0
-                    && ring.finished.load(Ordering::Acquire)
-                    && !ring.ended_notified.swap(true, Ordering::AcqRel)
-                {
-                    ended_flag.store(true, Ordering::Release);
-                    log::info!("symphonia-cpal: end-of-stream signalled to event hub");
                 }
             },
             |err| {

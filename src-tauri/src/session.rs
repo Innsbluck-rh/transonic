@@ -9,8 +9,9 @@ use uuid::Uuid;
 use crate::{
     connection::{ConnectedServer, ConnectionApi},
     models::{
-        ActiveSession, AppBootstrap, AuthInput, ConnectServerProfileRequest,
-        ConnectServerProfileResult, LastConnectionState, RestoreStatus,
+        ActiveSession, AppBootstrap, AppSettings, AuthInput, ConnectServerProfileRequest,
+        ConnectServerProfileResult, LastConnectionState, PlaybackCapabilities, RestoreStatus,
+        SettingsOrigin,
     },
     profiles::{
         load_profiles_file, metadata_path, save_profiles_file, ProfilesFile, StoredProfileMetadata,
@@ -49,12 +50,12 @@ where
         let mut profiles = self.load_profiles()?;
         let current_active = current_active_session(active_session_state);
         if current_active.is_some() {
-            return Ok(AppBootstrap {
-                profiles: profiles.summaries(),
-                active_session: current_active,
-                restore_status: RestoreStatus::None,
-                message: None,
-            });
+            return Ok(bootstrap_response(
+                profiles.summaries(),
+                current_active,
+                RestoreStatus::None,
+                None,
+            ));
         }
 
         let Some(active_profile_id) = profiles
@@ -63,21 +64,21 @@ where
             .find(|profile| profile.is_last_active)
             .map(|profile| profile.profile_id.clone())
         else {
-            return Ok(AppBootstrap {
-                profiles: profiles.summaries(),
-                active_session: None,
-                restore_status: RestoreStatus::None,
-                message: None,
-            });
+            return Ok(bootstrap_response(
+                profiles.summaries(),
+                None,
+                RestoreStatus::None,
+                None,
+            ));
         };
 
         let Some(profile) = profiles.find_profile(&active_profile_id).cloned() else {
-            return Ok(AppBootstrap {
-                profiles: profiles.summaries(),
-                active_session: None,
-                restore_status: RestoreStatus::None,
-                message: None,
-            });
+            return Ok(bootstrap_response(
+                profiles.summaries(),
+                None,
+                RestoreStatus::None,
+                None,
+            ));
         };
 
         let Some(secret) = self
@@ -92,15 +93,15 @@ where
             );
             self.save_profiles(&profiles)?;
             set_active_session(active_session_state, None);
-            return Ok(AppBootstrap {
-                profiles: profiles.summaries(),
-                active_session: None,
-                restore_status: RestoreStatus::ConnectionError,
-                message: Some(
+            return Ok(bootstrap_response(
+                profiles.summaries(),
+                None,
+                RestoreStatus::ConnectionError,
+                Some(
                     "Stored credentials are missing. Re-enter the credentials for the active profile."
                         .to_string(),
                 ),
-            });
+            ));
         };
 
         let auth = AuthInput::restored(profile.auth_kind.clone(), profile.username.clone(), secret);
@@ -119,12 +120,12 @@ where
                 self.save_profiles(&profiles)?;
                 set_active_session(active_session_state, Some(active_session.clone()));
 
-                Ok(AppBootstrap {
-                    profiles: profiles.summaries(),
-                    active_session: Some(active_session),
-                    restore_status: RestoreStatus::Restored,
-                    message: Some("Restored the last active server profile.".to_string()),
-                })
+                Ok(bootstrap_response(
+                    profiles.summaries(),
+                    Some(active_session),
+                    RestoreStatus::Restored,
+                    Some("Restored the last active server profile.".to_string()),
+                ))
             }
             Err(failure) => {
                 update_profile_failure(
@@ -135,12 +136,12 @@ where
                 );
                 self.save_profiles(&profiles)?;
                 set_active_session(active_session_state, None);
-                Ok(AppBootstrap {
-                    profiles: profiles.summaries(),
-                    active_session: None,
-                    restore_status: failure.restore_status(),
-                    message: Some(failure.message().to_string()),
-                })
+                Ok(bootstrap_response(
+                    profiles.summaries(),
+                    None,
+                    failure.restore_status(),
+                    Some(failure.message().to_string()),
+                ))
             }
         }
     }
@@ -240,16 +241,16 @@ where
             set_active_session(active_session_state, None);
         }
 
-        Ok(AppBootstrap {
-            profiles: profiles.summaries(),
-            active_session: if deleted_active_profile {
+        Ok(bootstrap_response(
+            profiles.summaries(),
+            if deleted_active_profile {
                 None
             } else {
                 current_active_session(active_session_state)
             },
-            restore_status: RestoreStatus::None,
-            message: Some("Deleted the selected server profile.".to_string()),
-        })
+            RestoreStatus::None,
+            Some("Deleted the selected server profile.".to_string()),
+        ))
     }
 
     #[allow(dead_code)]
@@ -367,6 +368,25 @@ fn current_timestamp_millis() -> u64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_millis() as u64)
         .unwrap_or_default()
+}
+
+fn bootstrap_response(
+    profiles: Vec<crate::models::SavedProfileSummary>,
+    active_session: Option<ActiveSession>,
+    restore_status: RestoreStatus,
+    message: Option<String>,
+) -> AppBootstrap {
+    AppBootstrap {
+        profiles,
+        active_session,
+        restore_status,
+        message,
+        playback_capabilities: PlaybackCapabilities {
+            gapless_playback: false,
+        },
+        settings: AppSettings::default(),
+        settings_origin: SettingsOrigin::Default,
+    }
 }
 
 fn current_active_session(

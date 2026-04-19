@@ -1,0 +1,193 @@
+use std::{
+    fs,
+    io::{ErrorKind, Write},
+    path::{Path, PathBuf},
+};
+
+use serde::{Deserialize, Serialize};
+
+use crate::models::{AppSettings, PlaybackSettings, SettingsOrigin};
+
+const APP_SETTINGS_FILENAME: &str = "app-settings.json";
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppSettingsFile {
+    #[serde(default = "default_version")]
+    version: u32,
+    #[serde(default)]
+    playback: PlaybackSettings,
+}
+
+impl Default for AppSettingsFile {
+    fn default() -> Self {
+        Self {
+            version: default_version(),
+            playback: PlaybackSettings::default(),
+        }
+    }
+}
+
+impl From<AppSettingsFile> for AppSettings {
+    fn from(value: AppSettingsFile) -> Self {
+        Self {
+            playback: value.playback,
+        }
+    }
+}
+
+impl From<AppSettings> for AppSettingsFile {
+    fn from(value: AppSettings) -> Self {
+        Self {
+            version: default_version(),
+            playback: value.playback,
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct AppSettingsStore {
+    path: PathBuf,
+    settings: AppSettings,
+    origin: SettingsOrigin,
+}
+
+impl AppSettingsStore {
+    pub fn load(path: PathBuf) -> Result<Self, String> {
+        match load_app_settings_file(&path)? {
+            Some(file) => Ok(Self {
+                path,
+                settings: file.into(),
+                origin: SettingsOrigin::Stored,
+            }),
+            None => Ok(Self::default_at(path)),
+        }
+    }
+
+    pub fn default_at(path: PathBuf) -> Self {
+        Self {
+            path,
+            settings: AppSettings::default(),
+            origin: SettingsOrigin::Default,
+        }
+    }
+
+    pub fn snapshot(&self) -> (AppSettings, SettingsOrigin) {
+        (self.settings.clone(), self.origin.clone())
+    }
+
+    pub fn replace(&mut self, settings: AppSettings) -> Result<AppSettings, String> {
+        save_app_settings_file(&self.path, &settings)?;
+        self.settings = settings.clone();
+        self.origin = SettingsOrigin::Stored;
+        Ok(settings)
+    }
+}
+
+pub fn app_settings_path(config_dir: &Path) -> PathBuf {
+    config_dir.join(APP_SETTINGS_FILENAME)
+}
+
+fn load_app_settings_file(path: &Path) -> Result<Option<AppSettingsFile>, String> {
+    match fs::read_to_string(path) {
+        Ok(contents) => {
+            let file: AppSettingsFile = serde_json::from_str(&contents)
+                .map_err(|error| format!("Failed to parse app settings: {error}"))?;
+            if file.version != default_version() {
+                return Err(format!(
+                    "Unsupported app settings version {}.",
+                    file.version
+                ));
+            }
+            Ok(Some(file))
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(format!("Failed to read app settings: {error}")),
+    }
+}
+
+fn save_app_settings_file(path: &Path, settings: &AppSettings) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Failed to create the settings directory: {error}"))?;
+    }
+
+    let json = serde_json::to_string_pretty(&AppSettingsFile::from(settings.clone()))
+        .map_err(|error| format!("Failed to serialize app settings: {error}"))?;
+
+    let mut file = fs::File::create(path)
+        .map_err(|error| format!("Failed to open the app settings file for writing: {error}"))?;
+    file.write_all(json.as_bytes())
+        .map_err(|error| format!("Failed to write the app settings file: {error}"))?;
+    Ok(())
+}
+
+fn default_version() -> u32 {
+    1
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use super::{app_settings_path, AppSettingsStore};
+    use crate::models::AppSettings;
+
+    #[test]
+    fn missing_settings_file_uses_defaults() {
+        let dir = tempdir().unwrap();
+        let store = AppSettingsStore::load(app_settings_path(dir.path())).unwrap();
+        let (settings, origin) = store.snapshot();
+
+        assert_eq!(settings, AppSettings::default());
+        assert_eq!(origin, crate::models::SettingsOrigin::Default);
+    }
+
+    #[test]
+    fn settings_store_persists_updates() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        let mut store = AppSettingsStore::load(path.clone()).unwrap();
+        let mut settings = AppSettings::default();
+        settings.playback.gapless_playback_enabled = true;
+
+        store.replace(settings.clone()).unwrap();
+
+        let reloaded = AppSettingsStore::load(path).unwrap();
+        let (restored_settings, origin) = reloaded.snapshot();
+        assert_eq!(restored_settings, settings);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn legacy_gapless_setting_key_is_migrated() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"prebufferEnabled\": true\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert!(settings.playback.gapless_playback_enabled);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn legacy_gapless_strategy_is_migrated() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"prebufferStrategy\": \"next_track\"\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert!(settings.playback.gapless_playback_enabled);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+}

@@ -18,7 +18,7 @@ export async function deleteProfile(profileId: string) {
       throw new Error(result.error);
     }
 
-    loadBootstrapToStore(result.data);
+    await loadBootstrapToStore(result.data);
   } catch (invokeError) {
     console.error(invokeError);
   }

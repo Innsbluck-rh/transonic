@@ -19,7 +19,7 @@ const InitLoad: ParentComponent = (props) => {
       }
 
       const bootstrap = result.data;
-      loadBootstrapToStore(bootstrap);
+      await loadBootstrapToStore(bootstrap);
 
       const nextRoute = resolveBootstrapRoute(bootstrap);
       const currentRoute = `${location.pathname}${location.search}`;

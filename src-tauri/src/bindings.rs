@@ -45,6 +45,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback_seek,
             commands::playback_next,
             commands::playback_prev,
+            commands::settings_update,
             commands::consume_pending_notification_tap,
         ])
         .events(collect_events![PlaybackStatus, MediaNotificationTap])

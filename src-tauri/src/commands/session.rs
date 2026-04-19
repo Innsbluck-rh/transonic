@@ -5,10 +5,37 @@ use crate::{
         AppBootstrap, ConnectServerProfileRequest, ConnectServerProfileResult, ProfileIdRequest,
     },
     playback_state::{load_playback_state_file, playback_state_path},
-    ActiveSessionState, ArtistImageCacheState, CoverArtCacheState, PlaybackControllerState,
+    ActiveSessionState, AppSettingsState, ArtistImageCacheState, CoverArtCacheState,
+    PlaybackControllerState,
 };
 
 use super::common::service;
+
+fn apply_settings_snapshot(
+    settings: &State<'_, AppSettingsState>,
+    bootstrap: &mut AppBootstrap,
+) -> Result<(), String> {
+    let guard = settings
+        .0
+        .lock()
+        .map_err(|_| "The app settings state is unavailable.".to_string())?;
+    let (app_settings, settings_origin) = guard.snapshot();
+    bootstrap.settings = app_settings;
+    bootstrap.settings_origin = settings_origin;
+    Ok(())
+}
+
+fn apply_playback_capabilities(
+    playback: &State<'_, PlaybackControllerState>,
+    bootstrap: &mut AppBootstrap,
+) -> Result<(), String> {
+    let controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+    bootstrap.playback_capabilities = controller.capabilities();
+    Ok(())
+}
 
 fn reset_playback_state(playback: &State<'_, PlaybackControllerState>, source: &str) {
     let mut controller = playback.0.lock().unwrap();
@@ -74,9 +101,12 @@ fn set_active_profile_id(playback: &State<'_, PlaybackControllerState>, profile_
 pub async fn bootstrap_app_state(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    settings: State<'_, AppSettingsState>,
     playback: State<'_, PlaybackControllerState>,
 ) -> Result<AppBootstrap, String> {
-    let result = service(&app)?.bootstrap_app_state(&state.0).await?;
+    let mut result = service(&app)?.bootstrap_app_state(&state.0).await?;
+    apply_playback_capabilities(&playback, &mut result)?;
+    apply_settings_snapshot(&settings, &mut result)?;
     if let Some(ref active_session) = result.active_session {
         restore_playback_state(&app, &playback, &active_session.profile_id);
     } else {
@@ -111,6 +141,7 @@ pub async fn connect_server_profile(
 pub fn delete_server_profile(
     app: AppHandle,
     state: State<'_, ActiveSessionState>,
+    settings: State<'_, AppSettingsState>,
     cover_art_cache: State<'_, CoverArtCacheState>,
     artist_image_cache: State<'_, ArtistImageCacheState>,
     playback: State<'_, PlaybackControllerState>,
@@ -118,7 +149,9 @@ pub fn delete_server_profile(
 ) -> Result<AppBootstrap, String> {
     cover_art_cache.0.remove_profile(&payload.profile_id)?;
     artist_image_cache.0.remove_profile(&payload.profile_id)?;
-    let result = service(&app)?.delete_server_profile(&state.0, &payload.profile_id)?;
+    let mut result = service(&app)?.delete_server_profile(&state.0, &payload.profile_id)?;
+    apply_playback_capabilities(&playback, &mut result)?;
+    apply_settings_snapshot(&settings, &mut result)?;
     if result.active_session.is_none() {
         reset_playback_state(&playback, "delete_server_profile");
     }

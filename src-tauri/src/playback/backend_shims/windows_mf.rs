@@ -26,6 +26,7 @@ use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
 use crate::playback::native_events::{NativePlaybackEventSource, PlaybackNativeEvent};
+use crate::models::PlaybackCapabilities;
 
 // ---------------------------------------------------------------------------
 // Constants – defined locally to avoid type-conversion issues across
@@ -153,6 +154,12 @@ impl MfPlaybackBackend {
 }
 
 impl PlaybackBackend for MfPlaybackBackend {
+    fn capabilities(&self) -> PlaybackCapabilities {
+        PlaybackCapabilities {
+            gapless_playback: false,
+        }
+    }
+
     fn plan_load(
         &self,
         requested_position_ms: u32,

@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-use super::auth::{AuthInput, AuthKind};
+use super::{
+    auth::{AuthInput, AuthKind},
+    settings::{AppSettings, SettingsOrigin},
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -108,6 +111,12 @@ pub struct ActiveSession {
     pub capability_matrix: CapabilityMatrix,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackCapabilities {
+    pub gapless_playback: bool,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RestoreStatus {
@@ -125,6 +134,9 @@ pub struct AppBootstrap {
     pub active_session: Option<ActiveSession>,
     pub restore_status: RestoreStatus,
     pub message: Option<String>,
+    pub playback_capabilities: PlaybackCapabilities,
+    pub settings: AppSettings,
+    pub settings_origin: SettingsOrigin,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]

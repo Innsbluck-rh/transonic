@@ -12,7 +12,8 @@ const themeOptions = [
 
 function SettingsRoute() {
   const activeSession = () => sessionStore.activeSession;
-  const isPrebufferEnabled = () => settingsStore.playback.prebufferEnabled;
+  const isGaplessEnabled = () => settingsStore.playback.gaplessPlaybackEnabled;
+  const supportsGaplessPlayback = () => sessionStore.playbackCapabilities.gaplessPlayback;
 
   return (
     <div class='home-surface-root gap-4 p-4 lg:p-5'>
@@ -38,19 +39,21 @@ function SettingsRoute() {
         </div>
       </section>
 
-      <section class='bg-primary-plane border-primary-border flex flex-col gap-4 rounded-lg border p-4'>
-        <Heading2>Playback Defaults</Heading2>
+      <Show when={supportsGaplessPlayback()}>
+        <section class='bg-primary-plane border-primary-border flex flex-col gap-4 rounded-lg border p-4'>
+          <Heading2>Playback Defaults</Heading2>
 
-        <label class='flex items-center justify-between gap-4'>
-          <span>Prebuffer</span>
-          <input
-            type='checkbox'
-            checked={isPrebufferEnabled()}
-            class='accent-accent h-4 w-4 border border-current'
-            onChange={(event) => setPlaybackSetting('prebufferEnabled', event.currentTarget.checked)}
-          />
-        </label>
-      </section>
+          <label class='flex items-center justify-between gap-4'>
+            <span>Gapless Playback</span>
+            <input
+              type='checkbox'
+              checked={isGaplessEnabled()}
+              class='accent-accent h-4 w-4 border border-current'
+              onChange={(event) => setPlaybackSetting('gaplessPlaybackEnabled', event.currentTarget.checked)}
+            />
+          </label>
+        </section>
+      </Show>
 
       <section class='bg-primary-plane border-primary-border flex flex-col gap-3 rounded-lg border p-4'>
         <Heading2>Server</Heading2>
