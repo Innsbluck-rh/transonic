@@ -3,6 +3,7 @@ mod controller;
 mod native_events;
 mod queue_sync;
 mod reporting;
+mod server_reporting;
 #[cfg(target_os = "windows")]
 mod windows_runtime;
 use crate::playback_state::PlaybackStatePersister;
@@ -14,6 +15,7 @@ mod android_runtime;
 
 use queue_sync::NoopQueueSyncGateway;
 use reporting::TauriPlaybackReporter;
+use server_reporting::BackgroundPlaybackServerReporter;
 
 #[cfg(not(any(target_os = "android", target_os = "windows")))]
 use crate::playback::native_events::NoopNativePlaybackEventSource;
@@ -47,6 +49,7 @@ pub(crate) fn create_playback_controller(
             return PlaybackController::new(
                 backend_shims::create_playback_backend(runtime_state.bridge.clone()),
                 Box::new(TauriPlaybackReporter::new(app_handle)),
+                Box::new(BackgroundPlaybackServerReporter::new()),
                 Box::new(NoopQueueSyncGateway),
                 Box::new(runtime_state.event_hub.clone()),
                 persister,
@@ -61,6 +64,7 @@ pub(crate) fn create_playback_controller(
         return PlaybackController::new(
             backend_shims::create_playback_backend(event_hub.clone()),
             Box::new(TauriPlaybackReporter::new(app_handle)),
+            Box::new(BackgroundPlaybackServerReporter::new()),
             Box::new(NoopQueueSyncGateway),
             Box::new(event_hub),
             persister,
@@ -73,6 +77,7 @@ pub(crate) fn create_playback_controller(
         return PlaybackController::new(
             backend_shims::create_playback_backend(),
             Box::new(TauriPlaybackReporter::new(app_handle)),
+            Box::new(BackgroundPlaybackServerReporter::new()),
             Box::new(NoopQueueSyncGateway),
             Box::new(NoopNativePlaybackEventSource),
             persister,

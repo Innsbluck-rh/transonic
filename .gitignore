@@ -8,3 +8,4 @@ keystore.properties
 .agents
 .codex-plugins
 .serena
+./skills-lock.json

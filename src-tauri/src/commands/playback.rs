@@ -321,12 +321,42 @@ pub fn playback_play(app: AppHandle) -> Result<(), String> {
 pub fn playback_pause(app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
+            let sessions = app.state::<ActiveSessionState>();
+            let cover_art_cache = app.state::<CoverArtCacheState>();
             let playback = app.state::<PlaybackControllerState>();
+
+            let runtime_context = active_runtime_parts(&app, &sessions).ok().map(
+                |(active_client, active_capability_matrix, active_profile_id)| {
+                    (
+                        active_client,
+                        active_capability_matrix,
+                        active_profile_id,
+                        cover_art_cache.0.clone(),
+                    )
+                },
+            );
+
             let mut controller = playback
                 .0
                 .lock()
                 .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.pause().map(|_| ())
+            if let Some((
+                active_client,
+                active_capability_matrix,
+                active_profile_id,
+                cover_art_cache,
+            )) = runtime_context.as_ref()
+            {
+                let runtime_context = PlaybackRuntimeContext {
+                    client: active_client,
+                    capability_matrix: active_capability_matrix,
+                    cover_art_cache: Some(cover_art_cache),
+                    profile_id: Some(active_profile_id),
+                };
+                controller.pause_with_context(Some(&runtime_context)).map(|_| ())
+            } else {
+                controller.pause().map(|_| ())
+            }
         })();
 
         if let Err(error) = result {
@@ -341,12 +371,42 @@ pub fn playback_pause(app: AppHandle) -> Result<(), String> {
 pub fn playback_stop(app: AppHandle) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
+            let sessions = app.state::<ActiveSessionState>();
+            let cover_art_cache = app.state::<CoverArtCacheState>();
             let playback = app.state::<PlaybackControllerState>();
+
+            let runtime_context = active_runtime_parts(&app, &sessions).ok().map(
+                |(active_client, active_capability_matrix, active_profile_id)| {
+                    (
+                        active_client,
+                        active_capability_matrix,
+                        active_profile_id,
+                        cover_art_cache.0.clone(),
+                    )
+                },
+            );
+
             let mut controller = playback
                 .0
                 .lock()
                 .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.stop().map(|_| ())
+            if let Some((
+                active_client,
+                active_capability_matrix,
+                active_profile_id,
+                cover_art_cache,
+            )) = runtime_context.as_ref()
+            {
+                let runtime_context = PlaybackRuntimeContext {
+                    client: active_client,
+                    capability_matrix: active_capability_matrix,
+                    cover_art_cache: Some(cover_art_cache),
+                    profile_id: Some(active_profile_id),
+                };
+                controller.stop_with_context(Some(&runtime_context)).map(|_| ())
+            } else {
+                controller.stop().map(|_| ())
+            }
         })();
 
         if let Err(error) = result {

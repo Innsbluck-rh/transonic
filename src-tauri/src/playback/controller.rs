@@ -1,6 +1,6 @@
 use opensubsonic_client::{
     api::retrieval::{RetrievalApi, StreamRequest},
-    ApiError, OpenSubsonicClient, PreparedBinaryRequest,
+    ApiError, MediaType, OpenSubsonicClient, PreparedBinaryRequest,
 };
 
 use crate::{
@@ -17,6 +17,10 @@ use super::{
     native_events::{NativePlaybackEventSource, PlaybackNativeEvent},
     queue_sync::QueueSyncGateway,
     reporting::PlaybackReporter,
+    server_reporting::{
+        PlaybackServerReporter, ServerPlaybackReportingContext, ServerPlaybackState,
+        ServerPlaybackTrack,
+    },
 };
 
 pub struct PlaybackRuntimeContext<'a> {
@@ -70,6 +74,7 @@ impl PreparedGaplessTrackState {
 pub struct PlaybackController {
     backend: Box<dyn PlaybackBackend>,
     reporter: Box<dyn PlaybackReporter>,
+    server_reporter: Box<dyn PlaybackServerReporter>,
     queue_sync: Box<dyn QueueSyncGateway>,
     native_events: Box<dyn NativePlaybackEventSource>,
     persister: Box<dyn PlaybackStatePersister>,
@@ -86,6 +91,7 @@ impl PlaybackController {
     pub fn new(
         backend: Box<dyn PlaybackBackend>,
         reporter: Box<dyn PlaybackReporter>,
+        server_reporter: Box<dyn PlaybackServerReporter>,
         queue_sync: Box<dyn QueueSyncGateway>,
         native_events: Box<dyn NativePlaybackEventSource>,
         persister: Box<dyn PlaybackStatePersister>,
@@ -95,6 +101,7 @@ impl PlaybackController {
         Self {
             backend,
             reporter,
+            server_reporter,
             queue_sync,
             native_events,
             persister,
@@ -111,6 +118,7 @@ impl PlaybackController {
     pub fn set_active_profile_id(&mut self, profile_id: Option<String>) {
         if self.active_profile_id != profile_id {
             self.clear_gapless_preparation();
+            self.clear_server_reporting();
         }
         self.active_profile_id = profile_id;
     }
@@ -163,6 +171,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
         self.clear_gapless_preparation();
+        self.clear_server_reporting();
         self.active_profile_id = Some(profile_id);
 
         log::info!(
@@ -218,6 +227,7 @@ impl PlaybackController {
         validate_queue_index(&entries, current_index)?;
         self.backend.stop()?;
         self.clear_gapless_preparation();
+        self.clear_server_reporting();
         self.clear_native_events();
 
         let next_song_id = current_song_id(&entries, current_index);
@@ -339,6 +349,16 @@ impl PlaybackController {
             self.status.error = None;
             self.status.interrupt_reason = None;
             self.process_native_events_inner(Some(context), false)?;
+            if let Some(entry) =
+                current_queue_entry(&self.status.queue, self.status.current_index).cloned()
+            {
+                self.report_server_playback_state(
+                    context,
+                    &entry,
+                    self.status.current_position_ms,
+                    ServerPlaybackState::Playing,
+                );
+            }
             self.report_status();
             return Ok(self.state());
         }
@@ -378,6 +398,13 @@ impl PlaybackController {
     }
 
     pub fn pause(&mut self) -> Result<PlaybackStatus, String> {
+        self.pause_with_context(None)
+    }
+
+    pub fn pause_with_context(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<PlaybackStatus, String> {
         self.sync_current_position_from_backend()?;
         self.backend.pause()?;
         self.status.playing_state = PlayingState::Paused;
@@ -387,14 +414,44 @@ impl PlaybackController {
         self.interrupted_resume_state = None;
         self.process_native_events_inner(None, false)?;
         self.persist_state();
+        if let (Some(context), Some(entry)) = (
+            context,
+            current_queue_entry(&self.status.queue, self.status.current_index).cloned(),
+        ) {
+            self.report_server_playback_state(
+                context,
+                &entry,
+                self.status.current_position_ms,
+                ServerPlaybackState::Paused,
+            );
+        }
         self.report_status();
         Ok(self.state())
     }
 
     pub fn stop(&mut self) -> Result<PlaybackStatus, String> {
+        self.stop_with_context(None)
+    }
+
+    pub fn stop_with_context(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<PlaybackStatus, String> {
+        self.sync_current_position_from_backend()?;
+        let stop_position_ms = self.status.current_position_ms;
+        let stop_entry = current_queue_entry(&self.status.queue, self.status.current_index).cloned();
         self.clear_gapless_preparation();
         self.backend.stop()?;
         self.clear_native_events();
+        if let (Some(context), Some(entry)) = (context, stop_entry.as_ref()) {
+            self.report_server_playback_state(
+                context,
+                entry,
+                stop_position_ms,
+                ServerPlaybackState::Stopped,
+            );
+        }
+        self.clear_server_reporting();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
         self.status.error = None;
@@ -467,6 +524,29 @@ impl PlaybackController {
         }
 
         self.process_native_events_inner(Some(context), false)?;
+        if let Some(entry) =
+            current_queue_entry(&self.status.queue, self.status.current_index).cloned()
+        {
+            let reported_position_ms = self
+                .status
+                .pending_seek_position_ms
+                .unwrap_or(self.status.current_position_ms);
+            match self.status.playing_state {
+                PlayingState::Playing => self.report_server_playback_state(
+                    context,
+                    &entry,
+                    reported_position_ms,
+                    ServerPlaybackState::Playing,
+                ),
+                PlayingState::Paused => self.report_server_playback_state(
+                    context,
+                    &entry,
+                    reported_position_ms,
+                    ServerPlaybackState::Paused,
+                ),
+                _ => {}
+            }
+        }
         self.report_status();
         Ok(self.state())
     }
@@ -539,6 +619,7 @@ impl PlaybackController {
     #[allow(dead_code)]
     pub fn on_track_finished(&mut self) -> PlaybackStatus {
         self.clear_gapless_preparation();
+        self.clear_server_reporting();
         self.clear_native_events();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
@@ -552,6 +633,7 @@ impl PlaybackController {
 
     pub fn reset(&mut self) -> PlaybackStatus {
         self.clear_gapless_preparation();
+        self.clear_server_reporting();
         if let Err(error) = self.backend.stop() {
             log::warn!("controller.reset: failed to stop backend: {error}");
         }
@@ -644,6 +726,12 @@ impl PlaybackController {
         self.status.error = None;
         self.interrupted_resume_state = None;
         self.report_status();
+        self.report_server_playback_state(
+            context,
+            &entry,
+            requested_position_ms,
+            ServerPlaybackState::Starting,
+        );
 
         let load_result = match self.try_activate_prepared_gapless_track(
             index,
@@ -669,6 +757,7 @@ impl PlaybackController {
             self.status.error = Some(error.clone());
             self.status.interrupt_reason = None;
             self.status.pending_seek_position_ms = None;
+            self.clear_server_reporting();
             self.report_status();
             return Err(error);
         }
@@ -688,6 +777,16 @@ impl PlaybackController {
         if let Err(error) = self.sync_gapless_for_current_track(Some(context)) {
             log::warn!("controller.load_track_at_index: gapless refresh failed: {error}");
         }
+        self.report_server_playback_state(
+            context,
+            &entry,
+            requested_position_ms,
+            if autoplay {
+                ServerPlaybackState::Playing
+            } else {
+                ServerPlaybackState::Paused
+            },
+        );
 
         Ok(())
     }
@@ -715,12 +814,19 @@ impl PlaybackController {
         self.status.error = None;
         self.interrupted_resume_state = None;
         self.report_status();
+        self.report_server_playback_state(
+            context,
+            &entry,
+            requested_position_ms,
+            ServerPlaybackState::Starting,
+        );
 
         if let Err(error) =
             self.load_stream_for_song(context, &entry, requested_position_ms, autoplay)
         {
             self.status = previous_status;
             self.interrupted_resume_state = previous_resume_state;
+            self.clear_server_reporting();
             self.report_status();
             return Err(error);
         }
@@ -740,6 +846,16 @@ impl PlaybackController {
         if let Err(error) = self.sync_gapless_for_current_track(Some(context)) {
             log::warn!("controller.reload_track_at_index_exact: gapless refresh failed: {error}");
         }
+        self.report_server_playback_state(
+            context,
+            &entry,
+            requested_position_ms,
+            if autoplay {
+                ServerPlaybackState::Playing
+            } else {
+                ServerPlaybackState::Paused
+            },
+        );
 
         Ok(())
     }
@@ -1228,6 +1344,17 @@ impl PlaybackController {
         if let Err(error) = self.sync_gapless_for_current_track(context) {
             log::warn!("controller.handle_gapless_transition: gapless refresh failed: {error}");
         }
+        if let (Some(context), Some(entry)) = (
+            context,
+            current_queue_entry(&self.status.queue, self.status.current_index).cloned(),
+        ) {
+            self.report_server_playback_state(
+                context,
+                &entry,
+                self.status.current_position_ms,
+                ServerPlaybackState::Playing,
+            );
+        }
 
         Ok(true)
     }
@@ -1236,11 +1363,21 @@ impl PlaybackController {
         &mut self,
         context: Option<&PlaybackRuntimeContext<'_>>,
     ) -> Result<bool, String> {
+        let ended_entry = current_queue_entry(&self.status.queue, self.status.current_index).cloned();
+        let ended_position_ms = self.status.current_position_ms;
         let Some(current_index) = self.status.current_index else {
             return Ok(false);
         };
         let Some(next_index) = current_index.checked_add(1) else {
             self.transition_to_stopped_end_of_queue();
+            if let (Some(context), Some(entry)) = (context, ended_entry.as_ref()) {
+                self.report_server_playback_state(
+                    context,
+                    entry,
+                    ended_position_ms,
+                    ServerPlaybackState::Stopped,
+                );
+            }
             return Ok(true);
         };
         let has_next = usize::try_from(next_index)
@@ -1248,6 +1385,14 @@ impl PlaybackController {
             .is_some_and(|index| index < self.status.queue.len());
         if !has_next {
             self.transition_to_stopped_end_of_queue();
+            if let (Some(context), Some(entry)) = (context, ended_entry.as_ref()) {
+                self.report_server_playback_state(
+                    context,
+                    entry,
+                    ended_position_ms,
+                    ServerPlaybackState::Stopped,
+                );
+            }
             return Ok(true);
         }
 
@@ -1262,6 +1407,7 @@ impl PlaybackController {
 
     fn transition_to_stopped_end_of_queue(&mut self) {
         self.clear_gapless_preparation();
+        self.clear_server_reporting();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
         self.status.error = None;
@@ -1362,9 +1508,46 @@ impl PlaybackController {
         let _ = self.queue_sync.sync_queue(&self.status);
     }
 
+    fn clear_server_reporting(&mut self) {
+        self.server_reporter.clear();
+    }
+
+    fn report_server_playback_state(
+        &mut self,
+        context: &PlaybackRuntimeContext<'_>,
+        entry: &SongResponse,
+        position_ms: u32,
+        state: ServerPlaybackState,
+    ) {
+        let Some(profile_id) = context.profile_id else {
+            return;
+        };
+
+        self.server_reporter.report_state(
+            ServerPlaybackReportingContext {
+                client: context.client.clone(),
+                capability_matrix: context.capability_matrix.clone(),
+                profile_id: profile_id.to_string(),
+            },
+            ServerPlaybackTrack {
+                song_id: entry.id.clone(),
+                media_type: server_playback_media_type(entry),
+            },
+            position_ms,
+            state,
+        );
+    }
+
     fn report_status(&mut self) {
         self.update_gapless_status();
         let _ = self.reporter.report_state(&self.status);
+    }
+}
+
+fn server_playback_media_type(entry: &SongResponse) -> MediaType {
+    match entry.media_type.as_deref() {
+        Some("podcast") => MediaType::Podcast,
+        _ => MediaType::Song,
     }
 }
 
@@ -1497,6 +1680,10 @@ mod tests {
             },
             queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
             reporting::PlaybackReporter,
+            server_reporting::{
+                NoopPlaybackServerReporter, PlaybackServerReporter,
+                ServerPlaybackReportingContext, ServerPlaybackState, ServerPlaybackTrack,
+            },
         },
         playback_state::NoopPlaybackStatePersister,
     };
@@ -1545,6 +1732,19 @@ mod tests {
         reported_states: Vec<PlaybackStatus>,
     }
 
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    struct MockServerReportEvent {
+        profile_id: String,
+        song_id: String,
+        position_ms: u32,
+        state: ServerPlaybackState,
+    }
+
+    #[derive(Debug, Default)]
+    struct MockServerReporterState {
+        reported_events: Vec<MockServerReportEvent>,
+    }
+
     struct MockBackend {
         state: Arc<Mutex<MockBackendState>>,
         playback_capabilities: PlaybackCapabilities,
@@ -1553,6 +1753,10 @@ mod tests {
 
     struct MockReporter {
         state: Arc<Mutex<MockReporterState>>,
+    }
+
+    struct MockServerReporter {
+        state: Arc<Mutex<MockServerReporterState>>,
     }
 
     #[derive(Default)]
@@ -1700,6 +1904,29 @@ mod tests {
         }
     }
 
+    impl PlaybackServerReporter for MockServerReporter {
+        fn report_state(
+            &mut self,
+            context: ServerPlaybackReportingContext,
+            track: ServerPlaybackTrack,
+            position_ms: u32,
+            state: ServerPlaybackState,
+        ) {
+            self.state
+                .lock()
+                .unwrap()
+                .reported_events
+                .push(MockServerReportEvent {
+                    profile_id: context.profile_id,
+                    song_id: track.song_id,
+                    position_ms,
+                    state,
+                });
+        }
+
+        fn clear(&mut self) {}
+    }
+
     impl NativePlaybackEventSource for MockNativeEventSource {
         fn drain_events(&mut self) -> Vec<PlaybackNativeEvent> {
             let mut events = self.events.lock().unwrap();
@@ -1710,8 +1937,16 @@ mod tests {
     fn runtime_context(
         transcode_offset: bool,
     ) -> (opensubsonic_client::OpenSubsonicClient, CapabilityMatrix) {
+        runtime_context_with_reporting(transcode_offset, false)
+    }
+
+    fn runtime_context_with_reporting(
+        transcode_offset: bool,
+        playback_report: bool,
+    ) -> (opensubsonic_client::OpenSubsonicClient, CapabilityMatrix) {
         let mut capability_matrix = CapabilityMatrix::empty();
         capability_matrix.transcode_offset = transcode_offset;
+        capability_matrix.playback_report = playback_report;
         let client = opensubsonic_client::OpenSubsonicClient::new(ClientConfig::new(
             normalize_base_url("https://demo.example").unwrap(),
             Auth::Token {
@@ -1784,10 +2019,13 @@ mod tests {
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
         });
+        let server_reporter: Box<dyn PlaybackServerReporter> =
+            Box::new(NoopPlaybackServerReporter);
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
         let controller = PlaybackController::new(
             backend,
             reporter,
+            server_reporter,
             queue_sync,
             Box::new(NoopNativePlaybackEventSource),
             Box::new(NoopPlaybackStatePersister),
@@ -1820,10 +2058,13 @@ mod tests {
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
         });
+        let server_reporter: Box<dyn PlaybackServerReporter> =
+            Box::new(NoopPlaybackServerReporter);
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
         let controller = PlaybackController::new(
             backend,
             reporter,
+            server_reporter,
             queue_sync,
             Box::new(MockNativeEventSource {
                 events: native_events.clone(),
@@ -1864,16 +2105,58 @@ mod tests {
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
         });
+        let server_reporter: Box<dyn PlaybackServerReporter> =
+            Box::new(NoopPlaybackServerReporter);
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
         let controller = PlaybackController::new(
             backend,
             reporter,
+            server_reporter,
             queue_sync,
             Box::new(NoopNativePlaybackEventSource),
             Box::new(NoopPlaybackStatePersister),
             false,
         );
         (controller, state, reporter_state)
+    }
+
+    fn controller_with_mock_backend_and_server_reporter(
+        playback_report: bool,
+    ) -> (
+        PlaybackController,
+        Arc<Mutex<MockBackendState>>,
+        Arc<Mutex<MockServerReporterState>>,
+    ) {
+        let state = Arc::new(Mutex::new(MockBackendState::default()));
+        let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
+        let server_reporter_state = Arc::new(Mutex::new(MockServerReporterState::default()));
+        let backend = Box::new(MockBackend {
+            state: state.clone(),
+            playback_capabilities: PlaybackCapabilities {
+                gapless_playback: true,
+            },
+            native_events: None,
+        });
+        let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
+            state: reporter_state,
+        });
+        let server_reporter: Box<dyn PlaybackServerReporter> = Box::new(MockServerReporter {
+            state: server_reporter_state.clone(),
+        });
+        let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
+        let mut controller = PlaybackController::new(
+            backend,
+            reporter,
+            server_reporter,
+            queue_sync,
+            Box::new(NoopNativePlaybackEventSource),
+            Box::new(NoopPlaybackStatePersister),
+            false,
+        );
+        if playback_report {
+            controller.set_active_profile_id(Some("profile-1".to_string()));
+        }
+        (controller, state, server_reporter_state)
     }
 
     fn queue_entries(song_ids: &[&str]) -> Vec<SongResponse> {
@@ -1976,6 +2259,65 @@ mod tests {
         assert_eq!(
             controller.stop().unwrap().playing_state,
             PlayingState::Stopped
+        );
+    }
+
+    #[test]
+    fn server_reporting_uses_explicit_playback_transition_points() {
+        let (mut controller, backend_state, server_reporter_state) =
+            controller_with_mock_backend_and_server_reporter(true);
+        let (client, capability_matrix) = runtime_context_with_reporting(true, true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: Some("profile-1"),
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 2_500;
+        controller.pause_with_context(Some(&runtime_context)).unwrap();
+        controller.seek(&runtime_context, 8_000).unwrap();
+        controller.stop_with_context(Some(&runtime_context)).unwrap();
+
+        let events = server_reporter_state.lock().unwrap().reported_events.clone();
+        assert_eq!(
+            events,
+            vec![
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Starting,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Playing,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 2_500,
+                    state: ServerPlaybackState::Paused,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 8_000,
+                    state: ServerPlaybackState::Paused,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 8_000,
+                    state: ServerPlaybackState::Stopped,
+                },
+            ]
         );
     }
 

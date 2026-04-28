@@ -7,6 +7,7 @@ import { useCoverArt } from '~/features/albums/useCoverArt';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
+import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 import QueueList from '../common/list/song/QueueList';
 import { closePlayerBar } from './SPExpandablePlayerBar';
 
@@ -30,12 +31,21 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
     next,
     seek,
     previewSeek,
+    queue,
+    currentIndex,
   } = usePlayback();
 
   const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId);
 
   const navigate = useSPNavigate();
-  const { queue, isQueueIndexActive, playQueueIndex } = usePlayback();
+  const { setScrollContainerRef, setItemRef } = useQueueAutoScroll({
+    currentIndex,
+    currentEntryId: () => currentEntry()?.id ?? null,
+    queueKey: () => buildQueueAutoScrollKey(queue()),
+    defaultBehavior: 'smooth',
+    initialBehavior: 'instant',
+    queueChangeBehavior: 'instant',
+  });
 
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
@@ -117,8 +127,8 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
       <div class='bg-primary-plane border-secondary-border secondar flex flex-row items-center border-b px-3 pt-3.5 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
-      <div class='flex-1 overflow-y-auto'>
-        <QueueList queue={queue()} />
+      <div ref={setScrollContainerRef} class='flex-1 overflow-y-auto'>
+        <QueueList queue={queue()} itemRef={setItemRef} />
       </div>
     </div>
   );

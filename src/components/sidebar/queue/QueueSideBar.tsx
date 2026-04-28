@@ -3,9 +3,19 @@ import interact from 'interactjs';
 import { Component } from 'solid-js';
 import QueueList from '~/components/common/list/song/QueueList';
 import { usePlayback } from '~/features/playback/usePlayback';
+import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 
 const QueueSideBar: Component = () => {
-  const { queue, playSongs } = usePlayback();
+  const { queue, currentEntry, currentIndex, playSongs } = usePlayback();
+  const { setScrollContainerRef, setItemRef } = useQueueAutoScroll({
+    currentIndex,
+    currentEntryId: () => currentEntry()?.id ?? null,
+    queueKey: () => buildQueueAutoScrollKey(queue()),
+    defaultBehavior: 'smooth',
+    initialBehavior: 'instant',
+    queueChangeBehavior: 'instant',
+  });
+
   interact('.queue-sidebar').resizable({
     edges: { left: true },
     listeners: {
@@ -44,8 +54,8 @@ const QueueSideBar: Component = () => {
           }}
         />
       </div>
-      <div class='flex-1 overflow-y-auto'>
-        <QueueList queue={queue()} />
+      <div ref={setScrollContainerRef} class='flex-1 overflow-y-auto'>
+        <QueueList queue={queue()} itemRef={setItemRef} />
       </div>
     </div>
   );

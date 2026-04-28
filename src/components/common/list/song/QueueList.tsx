@@ -9,6 +9,7 @@ import { formatCompactDuration } from '~/utils/duration';
 
 interface QueueListProps {
   queue: SongResponse[];
+  itemRef?: (index: number, element: HTMLDivElement | undefined) => void;
   onClickQueue?: (song: SongResponse, index: number, songs: SongResponse[]) => void;
 }
 
@@ -40,6 +41,7 @@ const QueueList: Component<QueueListProps> = (props) => {
 
           return (
             <div
+              ref={(element) => props.itemRef?.(i(), element)}
               class='group ripple hover:bg-primary-hover flex h-auto cursor-pointer flex-row items-center overflow-x-hidden px-4 py-2.5'
               classList={{
                 'bg-primary-playing': isPlaying(),
