@@ -1,7 +1,9 @@
 mod albums;
 mod artist_image;
+mod backup;
 mod browse;
 pub(crate) mod common;
+mod connect;
 mod cover_art;
 mod index;
 mod json;
@@ -11,11 +13,13 @@ mod settings;
 
 pub use albums::get_album_list;
 pub use artist_image::get_artist_image;
+pub use backup::{export_server_backup, import_server_backup};
 pub use browse::album::{get_album_info, get_album_songs};
 pub use browse::artist::{get_artist, get_artist_info2, get_artists, get_music_directory};
 pub use browse::folder_structure::get_folder_structure_albums;
 pub use browse::folder_structure_album_songs::get_folder_structure_album_songs;
 pub use browse::song::get_song;
+pub use connect::{connect_get_devices_with_playback, connect_get_runtime_status};
 pub use cover_art::get_cover_art;
 pub use index::artist::get_artist_indexes;
 pub use index::folder_structure::{get_folder_structure_roots, get_music_folders};
@@ -25,12 +29,17 @@ pub use playback::{
     playback_play_queue_index, playback_prev, playback_seek, playback_set_queue, playback_stop,
 };
 pub use session::{bootstrap_app_state, connect_server_profile, delete_server_profile};
-pub use settings::settings_update;
+pub use settings::{get_default_device_name, settings_update};
 
 #[doc(hidden)]
 pub use albums::{__cmd__get_album_list, __specta__fn__get_album_list};
 #[doc(hidden)]
 pub use artist_image::{__cmd__get_artist_image, __specta__fn__get_artist_image};
+#[doc(hidden)]
+pub use backup::{
+    __cmd__export_server_backup, __cmd__import_server_backup, __specta__fn__export_server_backup,
+    __specta__fn__import_server_backup,
+};
 #[doc(hidden)]
 pub use browse::album::{
     __cmd__get_album_info, __cmd__get_album_songs, __specta__fn__get_album_info,
@@ -52,6 +61,11 @@ pub use browse::folder_structure_album_songs::{
 };
 #[doc(hidden)]
 pub use browse::song::{__cmd__get_song, __specta__fn__get_song};
+#[doc(hidden)]
+pub use connect::{
+    __cmd__connect_get_devices_with_playback, __cmd__connect_get_runtime_status,
+    __specta__fn__connect_get_devices_with_playback, __specta__fn__connect_get_runtime_status,
+};
 #[doc(hidden)]
 pub use cover_art::{__cmd__get_cover_art, __specta__fn__get_cover_art};
 #[doc(hidden)]
@@ -80,4 +94,7 @@ pub use session::{
     __specta__fn__delete_server_profile,
 };
 #[doc(hidden)]
-pub use settings::{__cmd__settings_update, __specta__fn__settings_update};
+pub use settings::{
+    __cmd__get_default_device_name, __cmd__settings_update, __specta__fn__get_default_device_name,
+    __specta__fn__settings_update,
+};

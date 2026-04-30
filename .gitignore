@@ -9,3 +9,5 @@ keystore.properties
 .codex-plugins
 .serena
 ./skills-lock.json
+server/*.sqlite3
+server/data

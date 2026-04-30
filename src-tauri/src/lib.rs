@@ -2,6 +2,7 @@ mod app_settings;
 mod artist_image_cache;
 pub mod bindings;
 mod commands;
+mod connect;
 mod connection;
 mod cover_art_cache;
 mod models;
@@ -63,6 +64,7 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         .manage(ActiveSessionState::default())
+        .manage(connect::ConnectState::default())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .level(log::LevelFilter::Info)
@@ -93,7 +95,11 @@ pub fn run() {
                     AppSettingsStore::default_at(settings_path)
                 }
             };
-            let initial_gapless_playback_enabled = settings_store.snapshot().0.playback.gapless_playback_enabled;
+            let initial_gapless_playback_enabled = settings_store
+                .snapshot()
+                .0
+                .playback
+                .gapless_playback_enabled;
             app.manage(AppSettingsState::new(settings_store));
             let persister_path = playback_state_path(&config_dir);
             let persister = Box::new(FilePlaybackStatePersister::new(persister_path));

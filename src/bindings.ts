@@ -21,9 +21,31 @@ async connectServerProfile(payload: ConnectServerProfileRequest) : Promise<Resul
     else return { status: "error", error: e  as any };
 }
 },
+async connectGetDevicesWithPlayback() : Promise<ConnectDeviceWithPlayback[]> {
+    return await TAURI_INVOKE("connect_get_devices_with_playback");
+},
+async connectGetRuntimeStatus() : Promise<ConnectRuntimeStatus> {
+    return await TAURI_INVOKE("connect_get_runtime_status");
+},
 async deleteServerProfile(payload: ProfileIdRequest) : Promise<Result<AppBootstrap, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("delete_server_profile", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async exportServerBackup() : Promise<Result<ServerBackupExportResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_server_backup") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async importServerBackup(payload: ServerBackupImportRequest) : Promise<Result<ServerBackupImportResult, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_server_backup", { payload }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -245,6 +267,9 @@ async settingsUpdate(payload: SettingsUpdateRequest) : Promise<Result<AppSetting
     else return { status: "error", error: e  as any };
 }
 },
+async getDefaultDeviceName() : Promise<string> {
+    return await TAURI_INVOKE("get_default_device_name");
+},
 async consumePendingNotificationTap() : Promise<boolean> {
     return await TAURI_INVOKE("consume_pending_notification_tap");
 }
@@ -254,9 +279,11 @@ async consumePendingNotificationTap() : Promise<boolean> {
 
 
 export const events = __makeEvents__<{
+connectDevicesUpdated: ConnectDevicesUpdated,
 mediaNotificationTap: MediaNotificationTap,
 playbackStatus: PlaybackStatus
 }>({
+connectDevicesUpdated: "connect-devices-updated",
 mediaNotificationTap: "media-notification-tap",
 playbackStatus: "playback-status"
 })
@@ -275,7 +302,7 @@ export type AlbumListResponse = { context: AlbumListContext; albums: AlbumListIt
 export type AlbumSongsRequest = { id: string }
 export type AlbumSongsResponse = { id: string; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; created: string | null; starred: string | null; songs: SongResponse[] }
 export type AppBootstrap = { profiles: SavedProfileSummary[]; activeSession: ActiveSession | null; restoreStatus: RestoreStatus; message: string | null; playbackCapabilities: PlaybackCapabilities; settings: AppSettings; settingsOrigin: SettingsOrigin }
-export type AppSettings = { playback: PlaybackSettings }
+export type AppSettings = { playback: PlaybackSettings; connect: ConnectSettings }
 export type ArtistAlbum = { id: string; parentId: string | null; title: string | null; album: string | null; name: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; songCount: number | null; duration: number | null; playCount: number | null; year: number | null; genre: string | null; starred: string | null }
 export type ArtistGroup = { name: string; artists: ArtistSummary[] }
 export type ArtistImageRequest = { url: string }
@@ -290,8 +317,14 @@ export type ArtistsResponse = { ignoredArticles: string | null; indexes: ArtistG
 export type AuthInput = { kind: "password"; username: string; password: string } | { kind: "api_key"; apiKey: string }
 export type AuthKind = "password" | "api_key"
 export type CapabilityMatrix = { openSubsonic: boolean; rawExtensions: OpenSubsonicExtension[]; apiKeyAuth: boolean; indexBasedQueue: boolean; playbackReport: boolean; transcoding: boolean; transcodeOffset: boolean; songLyrics: boolean }
+export type ConnectDevicePresence = { deviceId: string; displayName: string; platform: string; appVersion: string; lastSeenAt: string; online: boolean }
+export type ConnectDeviceWithPlayback = { device: ConnectDevicePresence; playback: ConnectPlaybackDeviceState | null }
+export type ConnectDevicesUpdated = { devices: ConnectDeviceWithPlayback[] }
+export type ConnectPlaybackDeviceState = { seq: number; sourceDeviceId: string; state: PlaybackStatus; positionMs: number; updatedAt: string }
+export type ConnectRuntimeStatus = { enabled: boolean; connected: boolean; message: string | null; serverUrl: string | null; seq: number }
 export type ConnectServerProfileRequest = { profileId: string | null; displayName: string | null; serverUrl: string; auth: AuthInput }
 export type ConnectServerProfileResult = { status: "connected"; activeSession: ActiveSession; profiles: SavedProfileSummary[] } | { status: "auth_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "network_error"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "server_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "unsupported_auth"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] }
+export type ConnectSettings = { enabled?: boolean; useSubsonicServerHost?: boolean; connectServerHost?: string | null; connectServerPort?: number; deviceId?: string; deviceName?: string | null; allowInsecureConnectServer?: boolean }
 export type CoverArtRequest = { coverArtId: string; size: number | null }
 export type CoverArtResponse = { localPath: string }
 export type FolderStructureAlbumItem = { id: string; name: string; artist: string | null; coverArtId: string | null; year: number | null }
@@ -326,7 +359,10 @@ export type PlayingState = "idle" | "playing" | "paused" | "stopped" | "interrup
 export type ProfileIdRequest = { profileId: string }
 export type QueueSource = { type: "songs"; songs: SongResponse[] } | { type: "album"; albumId: string } | { type: "folder_album"; libraryId: string; nodeId: string; albumId: string }
 export type RestoreStatus = "none" | "restored" | "network_error" | "connection_error" | "reauth_required"
-export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }
+export type SavedProfileSummary = { profileId: string; displayName: string; normalizedServerUrl: string; serverUrlHost: string; serverUrlPort: number | null; serverUrlPath: string | null; authKind: AuthKind; username: string; lastConnectionState: LastConnectionState; isActive: boolean }
+export type ServerBackupExportResult = { path: string; profileCount: number }
+export type ServerBackupImportRequest = { replaceExisting?: boolean }
+export type ServerBackupImportResult = { path: string; profileCount: number }
 export type SettingsOrigin = "default" | "stored"
 export type SettingsUpdateRequest = { settings: AppSettings }
 export type SongRequest = { id: string }

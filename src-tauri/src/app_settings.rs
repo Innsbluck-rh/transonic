@@ -6,7 +6,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{AppSettings, PlaybackSettings, SettingsOrigin};
+use crate::models::{AppSettings, ConnectSettings, PlaybackSettings, SettingsOrigin};
 
 const APP_SETTINGS_FILENAME: &str = "app-settings.json";
 
@@ -17,6 +17,8 @@ struct AppSettingsFile {
     version: u32,
     #[serde(default)]
     playback: PlaybackSettings,
+    #[serde(default)]
+    connect: ConnectSettings,
 }
 
 impl Default for AppSettingsFile {
@@ -24,6 +26,7 @@ impl Default for AppSettingsFile {
         Self {
             version: default_version(),
             playback: PlaybackSettings::default(),
+            connect: ConnectSettings::default(),
         }
     }
 }
@@ -32,6 +35,7 @@ impl From<AppSettingsFile> for AppSettings {
     fn from(value: AppSettingsFile) -> Self {
         Self {
             playback: value.playback,
+            connect: value.connect,
         }
     }
 }
@@ -41,6 +45,7 @@ impl From<AppSettings> for AppSettingsFile {
         Self {
             version: default_version(),
             playback: value.playback,
+            connect: value.connect,
         }
     }
 }
@@ -188,6 +193,42 @@ mod tests {
         let store = AppSettingsStore::load(path).unwrap();
         let (settings, origin) = store.snapshot();
         assert!(settings.playback.gapless_playback_enabled);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn missing_connect_settings_use_defaults() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"gaplessPlaybackEnabled\": true\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert_eq!(settings.connect, crate::models::ConnectSettings::default());
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn legacy_connect_server_url_is_split_into_host_and_port() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"connect\": {\n    \"serverUrl\": \"http://100.86.122.91:4747\",\n    \"connectServerPort\": 9999\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert_eq!(
+            settings.connect.connect_server_host.as_deref(),
+            Some("http://100.86.122.91")
+        );
+        assert_eq!(settings.connect.connect_server_port, 4747);
         assert_eq!(origin, crate::models::SettingsOrigin::Stored);
     }
 }

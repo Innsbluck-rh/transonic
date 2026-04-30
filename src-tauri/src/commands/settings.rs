@@ -52,12 +52,30 @@ pub fn settings_update(
             Some(&runtime_context),
         )
     } else {
-        controller.set_gapless_playback_enabled(updated_settings.playback.gapless_playback_enabled, None)
+        controller
+            .set_gapless_playback_enabled(updated_settings.playback.gapless_playback_enabled, None)
     };
 
     if let Err(error) = update_result {
         log::warn!("settings_update: failed to refresh gapless: {error}");
     }
 
+    crate::connect::restart(&app);
     snapshot_settings(&settings)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_default_device_name(_app: AppHandle) -> String {
+    #[cfg(target_os = "android")]
+    if let Some(name) = crate::playback::android_default_device_name(&_app) {
+        return name;
+    }
+
+    let hostname = tauri_plugin_os::hostname();
+    if !hostname.trim().is_empty() {
+        return hostname;
+    }
+
+    std::env::consts::OS.to_string()
 }

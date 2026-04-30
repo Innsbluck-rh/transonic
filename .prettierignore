@@ -11,3 +11,4 @@ src-tauri/gen
 
 pnpm-lock.yaml
 src/bindings.ts
+server/packaging/windows/*.wxs

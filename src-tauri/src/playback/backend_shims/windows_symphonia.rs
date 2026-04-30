@@ -106,10 +106,7 @@ impl PreparedActivationGate {
 
     fn wait_for_download_permission(&self, cancel: &AtomicBool) -> bool {
         let mut inner = self.inner.lock().unwrap();
-        while inner.paused
-            && !inner.activated
-            && !inner.aborted
-            && !cancel.load(Ordering::Acquire)
+        while inner.paused && !inner.activated && !inner.aborted && !cancel.load(Ordering::Acquire)
         {
             inner = self.condvar.wait(inner).unwrap();
         }
@@ -126,10 +123,7 @@ impl PreparedActivationGate {
             self.condvar.notify_all();
             log::info!("symphonia-gapless: buffered ~2s PCM, pausing prepared pipeline");
         }
-        while inner.paused
-            && !inner.activated
-            && !inner.aborted
-            && !cancel.load(Ordering::Acquire)
+        while inner.paused && !inner.activated && !inner.aborted && !cancel.load(Ordering::Acquire)
         {
             inner = self.condvar.wait(inner).unwrap();
         }
@@ -528,7 +522,6 @@ impl SymphoniaPlaybackBackend {
             Err("Symphonia playback active worker terminated unexpectedly.".to_string())
         })
     }
-
 }
 
 impl PlaybackBackend for SymphoniaPlaybackBackend {
@@ -987,27 +980,28 @@ fn prepare_worker_main(
 ) {
     while let Ok(job) = rx.recv() {
         match job {
-            PrepareWorkerJob::Prepare { request, generation } => {
-                match prepare_session(&request, false) {
-                    Ok(session) => match prepared_state.store_if_current(generation, session) {
-                        Ok(replaced) => {
-                            if let Some(previous) = replaced {
-                                tear_down_prepared_session(previous);
-                            }
-                            let _ = active_tx.send(ActiveWorkerJob::PreparedReady { generation });
+            PrepareWorkerJob::Prepare {
+                request,
+                generation,
+            } => match prepare_session(&request, false) {
+                Ok(session) => match prepared_state.store_if_current(generation, session) {
+                    Ok(replaced) => {
+                        if let Some(previous) = replaced {
+                            tear_down_prepared_session(previous);
                         }
-                        Err(session) => {
-                            tear_down_prepared_session(session);
-                        }
-                    },
-                    Err(message) => {
-                        let _ = active_tx.send(ActiveWorkerJob::PrepareFailed {
-                            generation,
-                            message,
-                        });
+                        let _ = active_tx.send(ActiveWorkerJob::PreparedReady { generation });
                     }
+                    Err(session) => {
+                        tear_down_prepared_session(session);
+                    }
+                },
+                Err(message) => {
+                    let _ = active_tx.send(ActiveWorkerJob::PrepareFailed {
+                        generation,
+                        message,
+                    });
                 }
-            }
+            },
         }
     }
 
@@ -1062,7 +1056,8 @@ fn prepare_session(
     let url = request.request.url.to_string();
     let start_ms = request.local_start_position_ms;
     let headers = request.request.headers.clone();
-    let activation_gate = (!allow_full_download).then(|| Arc::new(PreparedActivationGate::default()));
+    let activation_gate =
+        (!allow_full_download).then(|| Arc::new(PreparedActivationGate::default()));
 
     log::info!(
         "symphonia-worker.prepare: url_len={} start_ms={start_ms} allow_full_download={allow_full_download}",
@@ -1096,7 +1091,9 @@ fn prepare_session(
         let activation_gate_for_download = activation_gate.clone();
         let dl_handle = std::thread::Builder::new()
             .name("symphonia-download".into())
-            .spawn(move || download_response_body(response, &dl_shared, activation_gate_for_download))
+            .spawn(move || {
+                download_response_body(response, &dl_shared, activation_gate_for_download)
+            })
             .map_err(|e| format!("Failed to spawn download thread: {e}"))?;
         let source = StreamingMediaSource::new(Arc::clone(&shared));
         (Box::new(source), Some(dl_handle), Some(shared))
@@ -1228,7 +1225,9 @@ fn download_response_body(
     loop {
         if let Some(ref gate) = activation_gate {
             if !gate.wait_for_download_permission(&shared.cancel) {
-                log::info!("symphonia-download: prepared download stopped after {total_read} bytes");
+                log::info!(
+                    "symphonia-download: prepared download stopped after {total_read} bytes"
+                );
                 return;
             }
         }

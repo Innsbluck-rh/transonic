@@ -104,6 +104,10 @@ pub async fn bootstrap_app_state(
     settings: State<'_, AppSettingsState>,
     playback: State<'_, PlaybackControllerState>,
 ) -> Result<AppBootstrap, String> {
+    if let Err(error) = super::backup::maybe_auto_import_server_backup(&app, &settings) {
+        log::warn!("bootstrap_app_state: failed to auto import server backup: {error}");
+    }
+
     let mut result = service(&app)?.bootstrap_app_state(&state.0).await?;
     apply_playback_capabilities(&playback, &mut result)?;
     apply_settings_snapshot(&settings, &mut result)?;
@@ -112,6 +116,7 @@ pub async fn bootstrap_app_state(
     } else {
         reset_playback_state(&playback, "bootstrap_app_state");
     }
+    crate::connect::restart(&app);
     Ok(result)
 }
 
@@ -132,6 +137,7 @@ pub async fn connect_server_profile(
     {
         reset_playback_state(&playback, "connect_server_profile");
         set_active_profile_id(&playback, &active_session.profile_id);
+        crate::connect::restart(&app);
     }
     Ok(result)
 }
@@ -155,5 +161,6 @@ pub fn delete_server_profile(
     if result.active_session.is_none() {
         reset_playback_state(&playback, "delete_server_profile");
     }
+    crate::connect::restart(&app);
     Ok(result)
 }

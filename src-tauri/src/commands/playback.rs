@@ -353,7 +353,9 @@ pub fn playback_pause(app: AppHandle) -> Result<(), String> {
                     cover_art_cache: Some(cover_art_cache),
                     profile_id: Some(active_profile_id),
                 };
-                controller.pause_with_context(Some(&runtime_context)).map(|_| ())
+                controller
+                    .pause_with_context(Some(&runtime_context))
+                    .map(|_| ())
             } else {
                 controller.pause().map(|_| ())
             }
@@ -403,7 +405,9 @@ pub fn playback_stop(app: AppHandle) -> Result<(), String> {
                     cover_art_cache: Some(cover_art_cache),
                     profile_id: Some(active_profile_id),
                 };
-                controller.stop_with_context(Some(&runtime_context)).map(|_| ())
+                controller
+                    .stop_with_context(Some(&runtime_context))
+                    .map(|_| ())
             } else {
                 controller.stop().map(|_| ())
             }
