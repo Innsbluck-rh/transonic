@@ -60,7 +60,7 @@ const SongList: Component<SongListProps> = (props) => {
                     />
                   }
                 >
-                  <p class='group-hover:text-primary-text archivo text-xs font-bold'>{i() + 1}</p>
+                  <p class='group-hover:text-primary-text archivo text-xs font-bold'>{song.track || '?'}</p>
                 </Show>
               </div>
 
