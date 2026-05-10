@@ -42,6 +42,12 @@ struct AndroidPositionResponse {
     position_ms: u64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AndroidDeviceNameResponse {
+    device_name: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct AndroidPlaybackBridge {
     handle: PluginHandle<Wry>,
@@ -109,6 +115,14 @@ impl AndroidPlaybackBridge {
             .run_mobile_plugin::<AndroidPositionResponse>("currentPositionMs", ())
             .map_err(|error| format!("Failed to query the Android playback position: {error}"))?;
         Ok(u32::try_from(response.position_ms).unwrap_or(u32::MAX))
+    }
+
+    pub fn default_device_name(&self) -> Result<String, String> {
+        let response = self
+            .handle
+            .run_mobile_plugin::<AndroidDeviceNameResponse>("defaultDeviceName", ())
+            .map_err(|error| format!("Failed to query the Android device name: {error}"))?;
+        Ok(response.device_name)
     }
 }
 

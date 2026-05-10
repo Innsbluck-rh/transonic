@@ -1,0 +1,102 @@
+version: 2
+
+project_name: transonic-server
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: transonic-server
+    main: ./cmd/transonic-server
+    binary: transonic-server
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/Innsbluck-rh/transonic/server/internal/version.Version={{ .Version }}
+      - -X github.com/Innsbluck-rh/transonic/server/internal/version.Commit={{ .Commit }}
+      - -X github.com/Innsbluck-rh/transonic/server/internal/version.BuildDate={{ .Date }}
+
+archives:
+  - id: default
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - README.md
+      - packaging/systemd/transonic-server.service
+      - packaging/macos/com.transonic.server.plist
+
+checksum:
+  name_template: checksums.txt
+
+nfpms:
+  - id: linux-packages
+    package_name: transonic-server
+    builds:
+      - transonic-server
+    vendor: transonic
+    homepage: https://github.com/Innsbluck-rh/transonic
+    maintainer: transonic maintainers
+    description: Optional Connect broker for transonic.
+    license: MIT
+    formats:
+      - deb
+      - rpm
+    contents:
+      - src: packaging/systemd/transonic-server.service
+        dst: /lib/systemd/system/transonic-server.service
+      - dst: /etc/transonic-server
+        type: dir
+        file_info:
+          mode: 0750
+      - dst: /var/lib/transonic-server
+        type: dir
+        file_info:
+          mode: 0750
+    scripts:
+      postinstall: packaging/scripts/postinstall.sh
+      preremove: packaging/scripts/preremove.sh
+
+dockers_v2:
+  - id: transonic-server
+    ids:
+      - transonic-server
+    dockerfile: Dockerfile
+    images:
+      - ghcr.io/innsbluck-rh/transonic-server
+    tags:
+      - '{{ .Version }}'
+      - '{{ if not .IsPrerelease }}latest{{ end }}'
+    platforms:
+      - linux/amd64
+      - linux/arm64
+    labels:
+      org.opencontainers.image.source: https://github.com/Innsbluck-rh/transonic
+      org.opencontainers.image.description: Optional Connect broker for transonic.
+      org.opencontainers.image.licenses: MIT
+
+brews:
+  - name: transonic-server
+    repository:
+      owner: Innsbluck-rh
+      name: homebrew-tap
+    homepage: https://github.com/Innsbluck-rh/transonic
+    description: Optional Connect broker for transonic.
+    license: MIT
+    service: |
+      run [opt_bin/"transonic-server", "serve", "--config", etc/"transonic-server/config.json"]
+      keep_alive true
+      log_path var/"log/transonic-server.log"
+      error_log_path var/"log/transonic-server.log"

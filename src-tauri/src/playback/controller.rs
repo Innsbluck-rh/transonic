@@ -135,6 +135,9 @@ impl PlaybackController {
         enabled: bool,
         context: Option<&PlaybackRuntimeContext<'_>>,
     ) -> Result<(), String> {
+        if self.gapless_playback_enabled == enabled {
+            return Ok(());
+        }
         self.gapless_playback_enabled = enabled;
         let result = self.sync_gapless_for_current_track(context);
         self.report_status();
@@ -261,6 +264,31 @@ impl PlaybackController {
         }
 
         self.sync_queue_state();
+        self.persist_state();
+        self.report_status();
+        Ok(self.state())
+    }
+
+    pub fn set_position(&mut self, position_ms: u32) -> Result<PlaybackStatus, String> {
+        let index = self.ensure_current_index()?;
+        if matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+        ) {
+            self.backend.stop()?;
+            self.clear_gapless_preparation();
+            self.clear_native_events();
+            self.clear_server_reporting();
+            self.status.playing_state = PlayingState::Stopped;
+        }
+
+        self.status.current_song_id = current_song_id(&self.status.queue, Some(index));
+        self.status.current_position_ms = position_ms;
+        self.status.error = None;
+        self.status.interrupt_reason = None;
+        self.status.pending_seek_position_ms = None;
+        self.interrupted_resume_state = None;
+
         self.persist_state();
         self.report_status();
         Ok(self.state())
@@ -439,7 +467,8 @@ impl PlaybackController {
     ) -> Result<PlaybackStatus, String> {
         self.sync_current_position_from_backend()?;
         let stop_position_ms = self.status.current_position_ms;
-        let stop_entry = current_queue_entry(&self.status.queue, self.status.current_index).cloned();
+        let stop_entry =
+            current_queue_entry(&self.status.queue, self.status.current_index).cloned();
         self.clear_gapless_preparation();
         self.backend.stop()?;
         self.clear_native_events();
@@ -1121,7 +1150,8 @@ impl PlaybackController {
         match self.prepare_stream_for_song(context, &entry) {
             Ok(generation) => {
                 self.gapless_failure = None;
-                self.prepared_next = Some(PreparedGaplessTrackState::Preparing { target, generation });
+                self.prepared_next =
+                    Some(PreparedGaplessTrackState::Preparing { target, generation });
                 self.update_gapless_status();
                 Ok(())
             }
@@ -1314,14 +1344,14 @@ impl PlaybackController {
             return Ok(false);
         }
 
-        let Some(target) = self
-            .prepared_next
-            .clone()
-            .and_then(|prepared_state| match prepared_state {
-                PreparedGaplessTrackState::Preparing { target, .. }
-                | PreparedGaplessTrackState::Ready { target, .. } => Some(target),
-                PreparedGaplessTrackState::Failed { .. } => None,
-            })
+        let Some(target) =
+            self.prepared_next
+                .clone()
+                .and_then(|prepared_state| match prepared_state {
+                    PreparedGaplessTrackState::Preparing { target, .. }
+                    | PreparedGaplessTrackState::Ready { target, .. } => Some(target),
+                    PreparedGaplessTrackState::Failed { .. } => None,
+                })
         else {
             return Ok(false);
         };
@@ -1363,7 +1393,8 @@ impl PlaybackController {
         &mut self,
         context: Option<&PlaybackRuntimeContext<'_>>,
     ) -> Result<bool, String> {
-        let ended_entry = current_queue_entry(&self.status.queue, self.status.current_index).cloned();
+        let ended_entry =
+            current_queue_entry(&self.status.queue, self.status.current_index).cloned();
         let ended_position_ms = self.status.current_position_ms;
         let Some(current_index) = self.status.current_index else {
             return Ok(false);
@@ -1448,10 +1479,7 @@ impl PlaybackController {
             match prepared {
                 PreparedGaplessTrackState::Preparing { target, .. } => GaplessStatus {
                     state: GaplessState::Preparing,
-                    message: format!(
-                        "gapless: preparing {}",
-                        self.gapless_target_label(target)
-                    ),
+                    message: format!("gapless: preparing {}", self.gapless_target_label(target)),
                 },
                 PreparedGaplessTrackState::Ready { target, .. } => GaplessStatus {
                     state: GaplessState::Ready,
@@ -1681,8 +1709,8 @@ mod tests {
             queue_sync::{NoopQueueSyncGateway, QueueSyncGateway},
             reporting::PlaybackReporter,
             server_reporting::{
-                NoopPlaybackServerReporter, PlaybackServerReporter,
-                ServerPlaybackReportingContext, ServerPlaybackState, ServerPlaybackTrack,
+                NoopPlaybackServerReporter, PlaybackServerReporter, ServerPlaybackReportingContext,
+                ServerPlaybackState, ServerPlaybackTrack,
             },
         },
         playback_state::NoopPlaybackStatePersister,
@@ -2019,8 +2047,7 @@ mod tests {
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
         });
-        let server_reporter: Box<dyn PlaybackServerReporter> =
-            Box::new(NoopPlaybackServerReporter);
+        let server_reporter: Box<dyn PlaybackServerReporter> = Box::new(NoopPlaybackServerReporter);
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
         let controller = PlaybackController::new(
             backend,
@@ -2058,8 +2085,7 @@ mod tests {
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
         });
-        let server_reporter: Box<dyn PlaybackServerReporter> =
-            Box::new(NoopPlaybackServerReporter);
+        let server_reporter: Box<dyn PlaybackServerReporter> = Box::new(NoopPlaybackServerReporter);
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
         let controller = PlaybackController::new(
             backend,
@@ -2105,8 +2131,7 @@ mod tests {
         let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
             state: reporter_state.clone(),
         });
-        let server_reporter: Box<dyn PlaybackServerReporter> =
-            Box::new(NoopPlaybackServerReporter);
+        let server_reporter: Box<dyn PlaybackServerReporter> = Box::new(NoopPlaybackServerReporter);
         let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
         let controller = PlaybackController::new(
             backend,
@@ -2279,11 +2304,19 @@ mod tests {
 
         controller.play(&runtime_context).unwrap();
         backend_state.lock().unwrap().current_position_ms = 2_500;
-        controller.pause_with_context(Some(&runtime_context)).unwrap();
+        controller
+            .pause_with_context(Some(&runtime_context))
+            .unwrap();
         controller.seek(&runtime_context, 8_000).unwrap();
-        controller.stop_with_context(Some(&runtime_context)).unwrap();
+        controller
+            .stop_with_context(Some(&runtime_context))
+            .unwrap();
 
-        let events = server_reporter_state.lock().unwrap().reported_events.clone();
+        let events = server_reporter_state
+            .lock()
+            .unwrap()
+            .reported_events
+            .clone();
         assert_eq!(
             events,
             vec![
@@ -3124,7 +3157,8 @@ mod tests {
 
     #[test]
     fn native_seek_processed_event_queued_during_seek_clears_pending_before_seek_returns() {
-        let (mut controller, backend_state, _, _) = controller_with_mock_backend_and_native_events(false);
+        let (mut controller, backend_state, _, _) =
+            controller_with_mock_backend_and_native_events(false);
         backend_state.lock().unwrap().seek_behavior = MockSeekBehavior::ApplyAndEmitSeekProcessed;
         let (client, capability_matrix) = runtime_context(true);
         let runtime_context = PlaybackRuntimeContext {
@@ -3321,7 +3355,9 @@ mod tests {
             Some(PlayingState::Idle)
         );
         assert_eq!(
-            reported_states.last().map(|state| state.gapless_status.state.clone()),
+            reported_states
+                .last()
+                .map(|state| state.gapless_status.state.clone()),
             Some(GaplessState::Off)
         );
     }
@@ -3401,6 +3437,48 @@ mod tests {
             .unwrap();
         let status = controller.append_to_queue(vec![]).unwrap();
         assert_eq!(status.queue.len(), 1);
+    }
+
+    #[test]
+    fn set_position_updates_stopped_queue_position() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+
+        let status = controller.set_position(12_345).unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+        assert_eq!(status.current_position_ms, 12_345);
+        assert_eq!(status.current_index, Some(0));
+        assert_eq!(status.current_song_id, Some("song-a".to_string()));
+    }
+
+    #[test]
+    fn set_position_stops_loaded_paused_track() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller.pause().unwrap();
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        let status = controller.set_position(30_000).unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+        assert_eq!(status.current_position_ms, 30_000);
+        assert_eq!(
+            backend_state.lock().unwrap().stop_calls,
+            stop_calls_before + 1
+        );
     }
 
     #[test]

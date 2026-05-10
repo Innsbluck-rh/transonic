@@ -10,6 +10,32 @@ pub trait PlaybackReporter: Send {
     fn report_state(&mut self, status: &PlaybackStatus) -> Result<(), String>;
 }
 
+pub struct CompositePlaybackReporter {
+    reporters: Vec<Box<dyn PlaybackReporter>>,
+}
+
+impl CompositePlaybackReporter {
+    pub fn new(reporters: Vec<Box<dyn PlaybackReporter>>) -> Self {
+        Self { reporters }
+    }
+}
+
+impl PlaybackReporter for CompositePlaybackReporter {
+    fn report_state(&mut self, status: &PlaybackStatus) -> Result<(), String> {
+        let mut last_error = None;
+        for reporter in &mut self.reporters {
+            if let Err(error) = reporter.report_state(status) {
+                last_error = Some(error);
+            }
+        }
+
+        if let Some(error) = last_error {
+            return Err(error);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct TauriPlaybackReporter {
     app_handle: PlaybackEventAppHandle,

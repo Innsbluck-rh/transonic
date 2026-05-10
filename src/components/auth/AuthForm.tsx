@@ -25,15 +25,97 @@ const DEFAULT_FORM_DATA: AuthFormData = {
   secret: '',
 } as const;
 
+interface AuthFormFields {
+  displayName: string;
+  serverBaseUrl: string;
+  serverPort: string;
+  serverPath: string;
+  authKind: AuthKind;
+  username: string;
+  secret: string;
+}
+
+function parseServerUrlFields(serverUrl: string): Pick<AuthFormFields, 'serverBaseUrl' | 'serverPort' | 'serverPath'> {
+  try {
+    const parsed = new URL(serverUrl);
+    const port = parsed.port;
+    parsed.port = '';
+    parsed.pathname = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return {
+      serverBaseUrl: parsed.toString().replace(/\/$/, ''),
+      serverPort: port,
+      serverPath: new URL(serverUrl).pathname === '/' ? '' : new URL(serverUrl).pathname.replace(/^\/+/, ''),
+    };
+  } catch {
+    return {
+      serverBaseUrl: '',
+      serverPort: '',
+      serverPath: '',
+    };
+  }
+}
+
+function toFormFields(data: AuthFormData): AuthFormFields {
+  return {
+    ...parseServerUrlFields(data.serverUrl),
+    displayName: data.displayName,
+    authKind: data.authKind,
+    username: data.username,
+    secret: data.secret,
+  };
+}
+
+function buildServerUrl(fields: AuthFormFields) {
+  const port = fields.serverPort.trim();
+  const path = fields.serverPath.trim().replace(/^\/+/, '');
+  const parsed = new URL(fields.serverBaseUrl.trim());
+  if (port.length > 0) {
+    parsed.port = port;
+  }
+  parsed.pathname = path.length > 0 ? `/${path}` : '';
+  parsed.search = '';
+  parsed.hash = '';
+  return parsed.toString().replace(/\/$/, '');
+}
+
+function splitServerBaseUrl(rawUrl: string) {
+  try {
+    const parsed = new URL(rawUrl);
+    const port = parsed.port;
+    parsed.port = '';
+    parsed.pathname = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return {
+      serverBaseUrl: parsed.toString().replace(/\/$/, ''),
+      serverPort: port,
+    };
+  } catch {
+    return {
+      serverBaseUrl: rawUrl,
+      serverPort: '',
+    };
+  }
+}
+
 const AuthForm: Component<AuthFormProps> = (props) => {
-  const [formData, setFormData] = createStore<AuthFormData>(props.defaultData ?? DEFAULT_FORM_DATA);
+  const [formData, setFormData] = createStore<AuthFormFields>(toFormFields(props.defaultData ?? DEFAULT_FORM_DATA));
+  const resetForm = () => setFormData(toFormFields(DEFAULT_FORM_DATA));
 
   return (
     <form
       class='flex w-full flex-col gap-3'
       onSubmit={(e) => {
         e.preventDefault();
-        props.onSubmit(formData);
+        props.onSubmit({
+          displayName: formData.displayName,
+          serverUrl: buildServerUrl(formData),
+          authKind: formData.authKind,
+          username: formData.username,
+          secret: formData.secret,
+        });
       }}
     >
       <div class='grid grid-cols-[auto_1fr] gap-x-3 gap-y-3'>
@@ -50,13 +132,42 @@ const AuthForm: Component<AuthFormProps> = (props) => {
 
         <label class='contents items-center'>
           <span>Server URL</span>
+          <div class='grid grid-cols-[minmax(0,1fr)_7rem] gap-2'>
+            <input
+              type='text'
+              value={formData.serverBaseUrl}
+              onInput={(event) => setFormData('serverBaseUrl', event.currentTarget.value)}
+              onBlur={(event) => {
+                const split = splitServerBaseUrl(event.currentTarget.value);
+                setFormData('serverBaseUrl', split.serverBaseUrl);
+                if (split.serverPort.length > 0) {
+                  setFormData('serverPort', split.serverPort);
+                }
+              }}
+              placeholder='https://your-server.example'
+              autocomplete='url'
+              required
+            />
+            <input
+              type='number'
+              min='1'
+              max='65535'
+              value={formData.serverPort}
+              onInput={(event) => setFormData('serverPort', event.currentTarget.value)}
+              placeholder='443'
+              autocomplete='off'
+            />
+          </div>
+        </label>
+
+        <label class='contents items-center'>
+          <span>Base path</span>
           <input
-            type='url'
-            value={formData.serverUrl}
-            onInput={(event) => setFormData('serverUrl', event.currentTarget.value)}
-            placeholder='https://your-server.example'
-            autocomplete='url'
-            required
+            type='text'
+            value={formData.serverPath}
+            onInput={(event) => setFormData('serverPath', event.currentTarget.value)}
+            placeholder='rest'
+            autocomplete='off'
           />
         </label>
 
@@ -99,7 +210,7 @@ const AuthForm: Component<AuthFormProps> = (props) => {
         <button class='disabled:text-zinc-400' type='submit' disabled={props.busy}>
           {props.busy ? 'Connecting...' : 'Connect'}
         </button>
-        <button type='button' disabled={props.busy} onClick={() => setFormData(DEFAULT_FORM_DATA)}>
+        <button type='button' disabled={props.busy} onClick={resetForm}>
           Reset form
         </button>
       </div>

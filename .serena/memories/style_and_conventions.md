@@ -1,5 +1,0 @@
-- Prefer backend-centric design: Subsonic API access and playback logic should live in Rust/native layers; frontend should mostly gather input and render backend state.
-- Use UTF-8 carefully, especially when files may contain Japanese comments.
-- In PowerShell, avoid Linux heredoc/redirection syntax and avoid grep/sed unless explicitly via WSL.
-- For mistake/omission checks, report only issues found; if none, say none were found.
-- Current frontend style is simple Solid functional component style with createSignal and direct invoke usage.

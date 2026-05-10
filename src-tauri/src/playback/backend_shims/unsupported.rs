@@ -1,7 +1,7 @@
+use crate::models::PlaybackCapabilities;
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
-use crate::models::PlaybackCapabilities;
 
 #[derive(Debug, Default)]
 struct UnsupportedPlaybackBackend;

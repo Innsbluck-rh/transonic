@@ -14,7 +14,7 @@ mod android_mobile_plugin;
 mod android_runtime;
 
 use queue_sync::NoopQueueSyncGateway;
-use reporting::TauriPlaybackReporter;
+use reporting::{CompositePlaybackReporter, TauriPlaybackReporter};
 use server_reporting::BackgroundPlaybackServerReporter;
 
 #[cfg(not(any(target_os = "android", target_os = "windows")))]
@@ -28,10 +28,20 @@ pub(crate) use android_runtime::consume_pending_notification_tap;
 pub(crate) use android_runtime::install_android_app_handle;
 pub use controller::{PlaybackController, PlaybackRuntimeContext};
 pub use reporting::PlaybackEventAppHandle;
+pub(crate) use reporting::PlaybackReporter;
 #[cfg(target_os = "windows")]
 pub(crate) use windows_runtime::install_windows_app_handle;
 #[cfg(target_os = "windows")]
 pub(crate) use windows_runtime::spawn_controller_process_native_events;
+
+#[cfg(target_os = "android")]
+pub(crate) fn android_default_device_name(app: &tauri::AppHandle) -> Option<String> {
+    use tauri::Manager;
+
+    app.try_state::<android_mobile_plugin::AndroidPlaybackRuntimeState>()
+        .and_then(|state| state.bridge.default_device_name().ok())
+        .filter(|name| !name.trim().is_empty())
+}
 
 pub(crate) fn create_playback_controller(
     _app: &tauri::AppHandle,
@@ -39,6 +49,12 @@ pub(crate) fn create_playback_controller(
     persister: Box<dyn PlaybackStatePersister>,
     gapless_playback_enabled: bool,
 ) -> PlaybackController {
+    let reporter: Box<dyn reporting::PlaybackReporter> =
+        Box::new(CompositePlaybackReporter::new(vec![
+            Box::new(TauriPlaybackReporter::new(app_handle)),
+            Box::new(crate::connect::ConnectPlaybackReporter::from_app(_app)),
+        ]));
+
     #[cfg(target_os = "android")]
     {
         use tauri::Manager;
@@ -48,7 +64,7 @@ pub(crate) fn create_playback_controller(
         {
             return PlaybackController::new(
                 backend_shims::create_playback_backend(runtime_state.bridge.clone()),
-                Box::new(TauriPlaybackReporter::new(app_handle)),
+                reporter,
                 Box::new(BackgroundPlaybackServerReporter::new()),
                 Box::new(NoopQueueSyncGateway),
                 Box::new(runtime_state.event_hub.clone()),
@@ -63,7 +79,7 @@ pub(crate) fn create_playback_controller(
         let event_hub = backend_shims::SymphoniaPlaybackEventHub::default();
         return PlaybackController::new(
             backend_shims::create_playback_backend(event_hub.clone()),
-            Box::new(TauriPlaybackReporter::new(app_handle)),
+            reporter,
             Box::new(BackgroundPlaybackServerReporter::new()),
             Box::new(NoopQueueSyncGateway),
             Box::new(event_hub),
@@ -76,7 +92,7 @@ pub(crate) fn create_playback_controller(
     {
         return PlaybackController::new(
             backend_shims::create_playback_backend(),
-            Box::new(TauriPlaybackReporter::new(app_handle)),
+            reporter,
             Box::new(BackgroundPlaybackServerReporter::new()),
             Box::new(NoopQueueSyncGateway),
             Box::new(NoopNativePlaybackEventSource),

@@ -1,5 +1,0 @@
-- Purpose: desktop music player client for Subsonic/OpenSubsonic servers.
-- Stack: Tauri v2 backend in Rust, frontend in Solid + TypeScript + Vite.
-- Current state: template app only. Frontend still shows default greet form in src/App.tsx. Rust backend exposes only a greet command in src-tauri/src/lib.rs.
-- Structure: src/ contains Solid frontend; src-tauri/ contains Rust/Tauri app; src-tauri/src/main.rs delegates to transonic_lib::run().
-- Important project guidance: read actual code first; keep backend-heavy architecture; consult latest OpenSubsonic/Subsonic docs; preserve UTF-8 when reading/writing files with Japanese comments.

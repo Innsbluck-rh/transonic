@@ -22,11 +22,11 @@ use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 use windows::Win32::System::Variant::VT_I8;
 
+use crate::models::PlaybackCapabilities;
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
 use crate::playback::native_events::{NativePlaybackEventSource, PlaybackNativeEvent};
-use crate::models::PlaybackCapabilities;
 
 // ---------------------------------------------------------------------------
 // Constants – defined locally to avoid type-conversion issues across

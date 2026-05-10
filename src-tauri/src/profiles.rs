@@ -7,6 +7,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::models::{AuthKind, CapabilityMatrix, LastConnectionState, SavedProfileSummary};
+use reqwest::Url;
 
 const PROFILES_FILENAME: &str = "profiles-v1.json";
 
@@ -24,6 +25,12 @@ pub struct StoredProfileMetadata {
     pub profile_id: String,
     pub display_name: String,
     pub normalized_server_url: String,
+    #[serde(default)]
+    pub server_url_host: String,
+    #[serde(default)]
+    pub server_url_port: Option<u16>,
+    #[serde(default)]
+    pub server_url_path: Option<String>,
     pub auth_kind: AuthKind,
     pub username: String,
     pub last_connection_state: LastConnectionState,
@@ -39,11 +46,61 @@ impl StoredProfileMetadata {
             profile_id: self.profile_id.clone(),
             display_name: self.display_name.clone(),
             normalized_server_url: self.normalized_server_url.clone(),
+            server_url_host: self.server_url_host.clone(),
+            server_url_port: self.server_url_port,
+            server_url_path: self.server_url_path.clone(),
             auth_kind: self.auth_kind.clone(),
             username: self.username.clone(),
             last_connection_state: self.last_connection_state.clone(),
             is_active: self.is_last_active,
         }
+    }
+
+    pub fn ensure_url_components(&mut self) {
+        let components = server_url_components(&self.normalized_server_url);
+        if self.server_url_host.trim().is_empty() {
+            self.server_url_host = components.host;
+        }
+        if self.server_url_port.is_none() {
+            self.server_url_port = components.port;
+        }
+        if self.server_url_path.is_none() {
+            self.server_url_path = components.path;
+        }
+    }
+}
+
+pub struct ServerUrlComponents {
+    pub host: String,
+    pub port: Option<u16>,
+    pub path: Option<String>,
+}
+
+pub fn server_url_components(server_url: &str) -> ServerUrlComponents {
+    let Ok(mut parsed) = Url::parse(server_url) else {
+        return ServerUrlComponents {
+            host: server_url.trim().to_string(),
+            port: None,
+            path: None,
+        };
+    };
+
+    let port = parsed.port();
+    let path = parsed.path().trim_matches('/');
+    let path = if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    };
+    parsed.set_path("");
+    parsed.set_query(None);
+    parsed.set_fragment(None);
+    let _ = parsed.set_port(None);
+
+    ServerUrlComponents {
+        host: parsed.to_string().trim_end_matches('/').to_string(),
+        port,
+        path,
     }
 }
 
@@ -114,8 +171,14 @@ pub fn metadata_path(config_dir: &Path) -> PathBuf {
 
 pub fn load_profiles_file(path: &Path) -> Result<ProfilesFile, String> {
     match fs::read_to_string(path) {
-        Ok(contents) => serde_json::from_str(&contents)
-            .map_err(|error| format!("Failed to parse saved profiles: {error}")),
+        Ok(contents) => {
+            let mut profiles: ProfilesFile = serde_json::from_str(&contents)
+                .map_err(|error| format!("Failed to parse saved profiles: {error}"))?;
+            for profile in &mut profiles.profiles {
+                profile.ensure_url_components();
+            }
+            Ok(profiles)
+        }
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(ProfilesFile::default()),
         Err(error) => Err(format!("Failed to read saved profiles: {error}")),
     }
@@ -153,6 +216,9 @@ mod tests {
             profile_id: "profile-1".to_string(),
             display_name: "Demo".to_string(),
             normalized_server_url: "https://demo.example/rest".to_string(),
+            server_url_host: "https://demo.example".to_string(),
+            server_url_port: None,
+            server_url_path: Some("rest".to_string()),
             auth_kind: AuthKind::Password,
             username: "demo".to_string(),
             last_connection_state: LastConnectionState::Ok,
@@ -179,6 +245,9 @@ mod tests {
                     profile_id: "one".to_string(),
                     display_name: "One".to_string(),
                     normalized_server_url: "https://one.example/rest".to_string(),
+                    server_url_host: "https://one.example".to_string(),
+                    server_url_port: None,
+                    server_url_path: Some("rest".to_string()),
                     auth_kind: AuthKind::Password,
                     username: "one".to_string(),
                     last_connection_state: LastConnectionState::Never,
@@ -191,6 +260,9 @@ mod tests {
                     profile_id: "two".to_string(),
                     display_name: "Two".to_string(),
                     normalized_server_url: "https://two.example/rest".to_string(),
+                    server_url_host: "https://two.example".to_string(),
+                    server_url_port: None,
+                    server_url_path: Some("rest".to_string()),
                     auth_kind: AuthKind::ApiKey,
                     username: "two".to_string(),
                     last_connection_state: LastConnectionState::Never,

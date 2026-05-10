@@ -3,6 +3,7 @@ package com.innsb.transonic.playback
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
 import androidx.annotation.Keep
 import androidx.core.content.ContextCompat
@@ -72,6 +73,9 @@ class SeekToArgs {
 
 @Keep
 data class CurrentPositionResponse(val positionMs: Long)
+
+@Keep
+data class DeviceNameResponse(val deviceName: String)
 
 private data class ControllerMediaState(
   val mediaId: String,
@@ -335,6 +339,22 @@ internal object PlaybackControllerHost {
 @TauriPlugin
 @Keep
 class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
+  @Command
+  @Keep
+  fun defaultDeviceName(invoke: Invoke) {
+    val manufacturer = Build.MANUFACTURER?.trim().orEmpty()
+    val model = Build.MODEL?.trim().orEmpty()
+    val deviceName =
+      when {
+        manufacturer.isBlank() -> model
+        model.isBlank() -> manufacturer
+        model.startsWith(manufacturer, ignoreCase = true) -> model
+        else -> "$manufacturer $model"
+      }
+
+    invoke.resolveObject(DeviceNameResponse(deviceName.ifBlank { "Android device" }))
+  }
+
   @Command
   @Keep
   fun play(invoke: Invoke) {

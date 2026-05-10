@@ -1,0 +1,22 @@
+[Unit]
+Description=transonic server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=transonic-server
+Group=transonic-server
+ExecStart=/usr/bin/transonic-server serve --config /etc/transonic-server/config.json
+Restart=on-failure
+RestartSec=5s
+StateDirectory=transonic-server
+ConfigurationDirectory=transonic-server
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/transonic-server
+
+[Install]
+WantedBy=multi-user.target

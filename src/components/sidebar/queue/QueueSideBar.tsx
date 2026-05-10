@@ -40,7 +40,7 @@ const QueueSideBar: Component = () => {
     },
   });
   return (
-    <div class='queue-sidebar bg-primary-plane border-primary-border flex h-full w-72 max-w-96 min-w-56 flex-col overflow-y-hidden border-l'>
+    <div class='queue-sidebar bg-primary-plane border-primary-border flex h-full w-80 max-w-[50%] min-w-56 flex-col overflow-y-hidden border-l'>
       <div class='border-secondary-border flex h-6 w-full flex-row items-center border-b px-2'>
         <p class='archivo text-secondary-text min-w-0 flex-1 text-[10px] font-black'>Playback Queue</p>
         <Icon

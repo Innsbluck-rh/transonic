@@ -14,7 +14,7 @@ const SPBottomNavigation: Component<SPBottomNavigationProps> = (props) => {
         navState={'index'}
         icon='material-symbols:library-music-sharp'
       />
-      <SPBottomNavigationItem onClick={(nav, prevNav) => props.onClickNav?.(nav, prevNav)} navState={'player'} icon='material-symbols:play-circle' />
+      {/*<SPBottomNavigationItem onClick={(nav, prevNav) => props.onClickNav?.(nav, prevNav)} navState={'player'} icon='material-symbols:play-circle' />*/}
       <SPBottomNavigationItem onClick={(nav, prevNav) => props.onClickNav?.(nav, prevNav)} navState={'setting'} icon='material-symbols:settings' />
       {/* <SPBottomNavigationItem onClick={(nav) => props.onClickNav?.(nav)} navState={'queue'} icon='material-symbols:playlist-play' label='queue' /> */}
     </div>

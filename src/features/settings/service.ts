@@ -7,6 +7,15 @@ const DEFAULT_SETTINGS: AppSettings = {
   playback: {
     gaplessPlaybackEnabled: false,
   },
+  connect: {
+    enabled: false,
+    useSubsonicServerHost: true,
+    connectServerPort: 4747,
+    connectServerHost: null,
+    deviceId: '',
+    deviceName: null,
+    allowInsecureConnectServer: false,
+  },
 };
 
 export const [settingsStore, setSettingsStore] = createStore<AppSettings>(DEFAULT_SETTINGS);
@@ -29,7 +38,80 @@ function normalizeSettings(raw: unknown): AppSettings {
   const candidate = typeof raw === 'object' && raw !== null ? (raw as Partial<AppSettings>) : null;
   return {
     playback: normalizePlaybackSettings(candidate?.playback),
+    connect: normalizeConnectSettings(candidate?.connect),
   };
+}
+
+function normalizeConnectSettings(raw: Partial<AppSettings['connect']> | null | undefined): AppSettings['connect'] {
+  const hasConnectServerHost = typeof raw?.connectServerHost === 'string' && raw.connectServerHost.trim().length > 0;
+  const legacyServerUrl = raw && 'serverUrl' in raw && typeof raw.serverUrl === 'string' ? raw.serverUrl : null;
+  const splitSource = hasConnectServerHost ? raw.connectServerHost : legacyServerUrl;
+  const split = splitUrlHostAndPort(splitSource);
+  const rawPort = raw?.connectServerPort;
+  const normalizedRawPort = typeof rawPort === 'number' && Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : null;
+  const connectServerPort = hasConnectServerHost ? (normalizedRawPort ?? split.port ?? 4747) : (split.port ?? normalizedRawPort ?? 4747);
+
+  return {
+    enabled: typeof raw?.enabled === 'boolean' ? raw.enabled : false,
+    useSubsonicServerHost: typeof raw?.useSubsonicServerHost === 'boolean' ? raw.useSubsonicServerHost : true,
+    connectServerPort,
+    connectServerHost: split.host.length > 0 ? split.host : null,
+    deviceId: typeof raw?.deviceId === 'string' ? raw.deviceId : '',
+    deviceName: typeof raw?.deviceName === 'string' && raw.deviceName.trim().length > 0 ? raw.deviceName : null,
+    allowInsecureConnectServer: typeof raw?.allowInsecureConnectServer === 'boolean' ? raw.allowInsecureConnectServer : false,
+  };
+}
+
+function splitUrlHostAndPort(rawUrl: string | null | undefined) {
+  const trimmed = rawUrl?.trim();
+  if (!trimmed) {
+    return { host: '', port: null as number | null };
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const port = parsed.port ? Number(parsed.port) : null;
+    parsed.pathname = '';
+    parsed.search = '';
+    parsed.hash = '';
+    parsed.port = '';
+    return {
+      host: parsed.toString().replace(/\/$/, ''),
+      port: Number.isInteger(port) && port !== null ? port : null,
+    };
+  } catch {
+    return { host: trimmed, port: null };
+  }
+}
+
+function generateDeviceId() {
+  if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+    return crypto.randomUUID();
+  }
+
+  return `device-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function ensureConnectDeviceId(settings: AppSettings) {
+  if ((settings.connect.deviceId ?? '').trim().length > 0) {
+    return settings;
+  }
+
+  const nextSettings: AppSettings = {
+    ...settings,
+    connect: {
+      ...settings.connect,
+      deviceId: generateDeviceId(),
+    },
+  };
+  setSettingsStore(nextSettings);
+  const result = await commands.settingsUpdate({ settings: nextSettings });
+  if (result.status === 'error') {
+    console.error(result.error);
+    return nextSettings;
+  }
+  setSettingsStore(result.data);
+  return result.data;
 }
 
 function readLegacySettings(): AppSettings | null {
@@ -60,14 +142,17 @@ function clearLegacySettings() {
 }
 
 export async function hydrateSettings(settings: AppSettings, settingsOrigin: SettingsOrigin) {
-  setSettingsStore(settings);
+  const normalizedSettings = normalizeSettings(settings);
+  setSettingsStore(normalizedSettings);
 
   if (settingsOrigin !== 'default') {
+    await ensureConnectDeviceId(normalizedSettings);
     return;
   }
 
   const legacySettings = readLegacySettings();
   if (!legacySettings) {
+    await ensureConnectDeviceId(normalizedSettings);
     return;
   }
 
@@ -80,6 +165,7 @@ export async function hydrateSettings(settings: AppSettings, settingsOrigin: Set
 
   setSettingsStore(result.data);
   clearLegacySettings();
+  await ensureConnectDeviceId(result.data);
 }
 
 export async function setPlaybackSetting<K extends keyof AppSettings['playback']>(key: K, value: AppSettings['playback'][K]) {
@@ -87,10 +173,46 @@ export async function setPlaybackSetting<K extends keyof AppSettings['playback']
     playback: {
       ...settingsStore.playback,
     },
+    connect: {
+      ...settingsStore.connect,
+    },
   };
   const nextSettings: AppSettings = {
     playback: {
       ...settingsStore.playback,
+      [key]: value,
+    },
+    connect: {
+      ...settingsStore.connect,
+    },
+  };
+
+  setSettingsStore(nextSettings);
+  const result = await commands.settingsUpdate({ settings: nextSettings });
+  if (result.status === 'error') {
+    console.error(result.error);
+    setSettingsStore(previousSettings);
+    return;
+  }
+
+  setSettingsStore(result.data);
+}
+
+export async function setConnectSetting<K extends keyof AppSettings['connect']>(key: K, value: AppSettings['connect'][K]) {
+  const previousSettings: AppSettings = {
+    playback: {
+      ...settingsStore.playback,
+    },
+    connect: {
+      ...settingsStore.connect,
+    },
+  };
+  const nextSettings: AppSettings = {
+    playback: {
+      ...settingsStore.playback,
+    },
+    connect: {
+      ...settingsStore.connect,
       [key]: value,
     },
   };
@@ -104,4 +226,32 @@ export async function setPlaybackSetting<K extends keyof AppSettings['playback']
   }
 
   setSettingsStore(result.data);
+}
+
+export async function setConnectSettings(connect: AppSettings['connect']) {
+  const previousSettings: AppSettings = {
+    playback: {
+      ...settingsStore.playback,
+    },
+    connect: {
+      ...settingsStore.connect,
+    },
+  };
+  const nextSettings: AppSettings = {
+    playback: {
+      ...settingsStore.playback,
+    },
+    connect: normalizeConnectSettings(connect),
+  };
+
+  setSettingsStore(nextSettings);
+  const result = await commands.settingsUpdate({ settings: nextSettings });
+  if (result.status === 'error') {
+    console.error(result.error);
+    setSettingsStore(previousSettings);
+    return { status: 'error' as const, error: result.error };
+  }
+
+  setSettingsStore(result.data);
+  return { status: 'ok' as const, data: result.data };
 }

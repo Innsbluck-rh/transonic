@@ -72,7 +72,9 @@ pub fn spawn_controller_process_native_events() {
     }
 
     if let Err(error) = controller_event_dispatcher().send(()) {
-        log::error!("windows_runtime: failed to schedule native playback event processing: {error}");
+        log::error!(
+            "windows_runtime: failed to schedule native playback event processing: {error}"
+        );
     }
 }
 

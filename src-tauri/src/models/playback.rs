@@ -72,6 +72,12 @@ pub struct PlaybackSeekRequest {
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct PlaybackSetPositionRequest {
+    pub position_ms: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaybackPlayQueueIndexRequest {
     pub index: u32,
 }

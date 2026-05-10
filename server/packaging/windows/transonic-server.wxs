@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="transonic server" Manufacturer="transonic" Version="$(var.Version)" UpgradeCode="8B53354A-9314-4C21-8BDA-1E8F7A8DA0D5">
+    <MajorUpgrade DowngradeErrorMessage="A newer transonic server is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <StandardDirectory Id="ProgramFilesFolder">
+      <Directory Id="INSTALLFOLDER" Name="transonic-server">
+        <Component Id="TransonicServerExe" Guid="1E079516-1F76-4F1F-9F0B-B0559430892F">
+          <File Source="$(var.BinaryPath)" KeyPath="yes" />
+          <ServiceInstall Id="TransonicServerService" Type="ownProcess" Name="transonic-server" DisplayName="transonic server" Start="auto" ErrorControl="normal" Arguments="serve" />
+          <ServiceControl Id="TransonicServerServiceControl" Name="transonic-server" Stop="both" Remove="uninstall" Wait="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+    <Feature Id="DefaultFeature" Level="1">
+      <ComponentRef Id="TransonicServerExe" />
+    </Feature>
+  </Package>
+</Wix>

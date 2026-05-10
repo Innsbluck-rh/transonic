@@ -15,6 +15,7 @@
     "vite:build": "vite build",
     "cargo:check": "cd src-tauri && cargo check --manifest-path Cargo.toml",
     "cargo:test": "cd src-tauri && cargo test --manifest-path Cargo.toml",
+    "test": "vitest run",
     "format": "prettier --write . --config .prettierrc",
     "format:check": "prettier --check . --config .prettierrc",
     "prettier": "pnpm format",
@@ -34,12 +35,14 @@
     "@tauri-apps/plugin-os": "^2.3.2",
     "css-ripple-effect": "^1.0.5",
     "interactjs": "^1.10.27",
+    "jsdom": "^29.1.0",
     "prettier-plugin-tailwindcss": "^0.7.2",
     "solid-js": "^1.9.12"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
     "@types/node": "^25.5.0",
     "@vitest/browser-playwright": "^4.1.2",
     "@vitest/coverage-v8": "^4.1.2",

@@ -1,6 +1,7 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
+import { useCoverArtMap } from '~/features/albums/useCoverArtMap';
 import { buildQueueItemMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
@@ -15,6 +16,8 @@ interface QueueListProps {
 
 const QueueList: Component<QueueListProps> = (props) => {
   const navigate = useSPNavigate();
+
+  const coverArtMap = useCoverArtMap(() => props.queue.map((song) => song.coverArtId), 48);
 
   return (
     <div class='flex w-full flex-col'>
@@ -49,7 +52,7 @@ const QueueList: Component<QueueListProps> = (props) => {
               onClick={onClickEntry}
               {...contextMenuProps}
             >
-              <div class='group-hover:text-primary-text flex w-8 flex-row items-start'>
+              <div class='group-hover:text-primary-text flex w-7 flex-row items-start'>
                 <Show
                   when={!isPlaying()}
                   fallback={
@@ -63,7 +66,9 @@ const QueueList: Component<QueueListProps> = (props) => {
                 </Show>
               </div>
 
-              {/* <img src={coverArts[i()] || ''} class='mr-3 aspect-square max-h-8 w-8 rounded-md' /> */}
+              <Show when={coverArtMap.src(entry.coverArtId)} fallback={<div class='mr-3 aspect-square max-h-8 w-8 rounded-md' />}>
+                {(assetUrl) => <img src={assetUrl()} class='mr-3 aspect-square max-h-8 w-8 rounded-md' loading='lazy' decoding='async' />}
+              </Show>
 
               <div class='flex min-w-0 flex-1 flex-col gap-1'>
                 <p

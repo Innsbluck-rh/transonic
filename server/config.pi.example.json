@@ -1,0 +1,12 @@
+{
+  "listenAddress": "0.0.0.0:4747",
+  "publicUrl": "",
+  "tlsCertFile": "",
+  "tlsKeyFile": "",
+  "dataDir": "./data",
+  "sessionSigningSecret": "change-me-generate-a-long-random-secret",
+  "sessionTokenTtl": "24h",
+  "allowedOrigins": ["*"],
+  "logLevel": "info",
+  "presenceTimeout": "45s"
+}

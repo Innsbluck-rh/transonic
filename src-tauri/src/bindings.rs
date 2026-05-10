@@ -10,7 +10,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::{
     commands,
-    models::{MediaNotificationTap, PlaybackStatus},
+    models::{ConnectDevicesUpdated, MediaNotificationTap, PlaybackStatus},
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -18,7 +18,13 @@ pub fn builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             commands::bootstrap_app_state,
             commands::connect_server_profile,
+            commands::connect_get_devices_with_playback,
+            commands::connect_get_runtime_status,
+            commands::connect_takeover_playback,
+            commands::connect_pause_device_playback,
             commands::delete_server_profile,
+            commands::export_server_backup,
+            commands::import_server_backup,
             commands::get_music_folders,
             commands::get_folder_structure_roots,
             commands::get_folder_structure_albums,
@@ -33,6 +39,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::get_song,
             commands::get_album_list,
             commands::get_cover_art,
+            commands::get_cover_art_cache_status,
+            commands::clear_cover_art_cache,
             commands::get_artist_image,
             commands::playback_get_state,
             commands::playback_set_queue,
@@ -43,12 +51,18 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback_pause,
             commands::playback_stop,
             commands::playback_seek,
+            commands::playback_set_position,
             commands::playback_next,
             commands::playback_prev,
             commands::settings_update,
+            commands::get_default_device_name,
             commands::consume_pending_notification_tap,
         ])
-        .events(collect_events![PlaybackStatus, MediaNotificationTap])
+        .events(collect_events![
+            PlaybackStatus,
+            MediaNotificationTap,
+            ConnectDevicesUpdated
+        ])
 }
 
 pub fn export_typescript_bindings() -> Result<(), specta_typescript::ExportError> {

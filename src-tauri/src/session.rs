@@ -14,8 +14,8 @@ use crate::{
         SettingsOrigin,
     },
     profiles::{
-        load_profiles_file, metadata_path, save_profiles_file, ProfilesFile, StoredProfileMetadata,
-        StoredServerInfo,
+        load_profiles_file, metadata_path, save_profiles_file, server_url_components, ProfilesFile,
+        StoredProfileMetadata, StoredServerInfo,
     },
     secrets::SecretStore,
 };
@@ -262,6 +262,13 @@ where
             return Err("No active session is available.".to_string());
         };
 
+        self.build_client_from_session(&session)
+    }
+
+    pub fn build_client_from_session(
+        &self,
+        session: &ActiveSession,
+    ) -> Result<OpenSubsonicClient, String> {
         let Some(secret) = self
             .secret_store
             .load_secret(&self.secret_service_name, &session.profile_id)?
@@ -272,7 +279,29 @@ where
             );
         };
 
-        self.api.build_client_from_active_session(&session, &secret)
+        self.api.build_client_from_active_session(session, &secret)
+    }
+
+    pub fn active_auth_input(
+        &self,
+        active_session_state: &Mutex<Option<ActiveSession>>,
+    ) -> Result<(ActiveSession, AuthInput), String> {
+        let Some(session) = current_active_session(active_session_state) else {
+            return Err("No active session is available.".to_string());
+        };
+
+        let Some(secret) = self
+            .secret_store
+            .load_secret(&self.secret_service_name, &session.profile_id)?
+        else {
+            return Err(
+                "Stored credentials are missing. Re-enter the credentials for the active profile."
+                    .to_string(),
+            );
+        };
+
+        let auth = AuthInput::restored(session.auth_kind.clone(), session.username.clone(), secret);
+        Ok((session, auth))
     }
 
     fn load_profiles(&self) -> Result<ProfilesFile, String> {
@@ -292,12 +321,16 @@ fn store_connected_profile(
 ) -> ActiveSession {
     let display_name = display_name.unwrap_or_else(|| connection.normalized_server_url.clone());
     let active_session = connection.clone().into_active_session(profile_id.clone());
+    let url_components = server_url_components(&active_session.normalized_server_url);
 
     profiles.set_last_active(Some(&profile_id));
     profiles.upsert_profile(StoredProfileMetadata {
         profile_id: profile_id.clone(),
         display_name,
         normalized_server_url: active_session.normalized_server_url.clone(),
+        server_url_host: url_components.host,
+        server_url_port: url_components.port,
+        server_url_path: url_components.path,
         auth_kind: active_session.auth_kind.clone(),
         username: active_session.username.clone(),
         last_connection_state: LastConnectionState::Ok,

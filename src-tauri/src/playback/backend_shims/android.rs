@@ -1,3 +1,4 @@
+use crate::models::PlaybackCapabilities;
 use crate::playback::android_mobile_plugin::{
     AndroidActivatePreparedMediaRequest, AndroidPlaybackBridge, AndroidPlaybackHeader,
     AndroidPreparedMediaRequest,
@@ -5,7 +6,6 @@ use crate::playback::android_mobile_plugin::{
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
-use crate::models::PlaybackCapabilities;
 
 trait AndroidPlaybackControl: Send {
     fn play(&self) -> Result<(), String>;
@@ -85,8 +85,7 @@ impl AndroidPlaybackBackend {
         request: PlaybackBackendLoadRequest,
     ) -> Result<AndroidPreparedMediaRequest, String> {
         self.next_media_instance_id = self.next_media_instance_id.wrapping_add(1);
-        let media_instance_id =
-            format!("{}#{}", request.media_id, self.next_media_instance_id);
+        let media_instance_id = format!("{}#{}", request.media_id, self.next_media_instance_id);
         let headers = request
             .request
             .headers
@@ -283,7 +282,8 @@ mod tests {
 
     #[test]
     fn prepare_increments_generation_and_activate_clears_local_state() {
-        let bridge = std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
+        let bridge =
+            std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
         let mut backend = AndroidPlaybackBackend::new(Box::new(bridge.clone()));
 
         let first_generation = backend.prepare(load_request("song-a")).unwrap();
@@ -304,7 +304,8 @@ mod tests {
 
     #[test]
     fn clear_prepared_and_stop_reset_prepared_generation() {
-        let bridge = std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
+        let bridge =
+            std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
         let mut backend = AndroidPlaybackBackend::new(Box::new(bridge.clone()));
 
         backend.prepare(load_request("song-a")).unwrap();
@@ -328,7 +329,8 @@ mod tests {
 
     #[test]
     fn load_uses_unique_media_instance_ids() {
-        let bridge = std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
+        let bridge =
+            std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
         let mut backend = AndroidPlaybackBackend::new(Box::new(bridge.clone()));
 
         backend.load(load_request("song-a")).unwrap();

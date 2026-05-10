@@ -296,10 +296,7 @@ fn spawn_report_playback(
     });
 }
 
-fn spawn_now_playing_scrobble(
-    context: ServerPlaybackReportingContext,
-    track: ServerPlaybackTrack,
-) {
+fn spawn_now_playing_scrobble(context: ServerPlaybackReportingContext, track: ServerPlaybackTrack) {
     tauri::async_runtime::spawn(async move {
         if let Err(error) = context
             .client
