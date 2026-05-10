@@ -177,6 +177,7 @@ export async function refreshConnectRuntimeStatus() {
       enabled: status.enabled,
       connected: status.connected,
       message: status.message,
+      deviceId: status.deviceId,
       seq: status.seq,
     });
     if (!status.enabled) {
@@ -187,6 +188,7 @@ export async function refreshConnectRuntimeStatus() {
       enabled: false,
       connected: false,
       message: error instanceof Error ? error.message : String(error),
+      deviceId: null,
       seq: 0,
     });
     setConnectStore('devices', []);

@@ -1,5 +1,4 @@
 import { Component, JSX, Show } from 'solid-js';
-import Heading3 from '~/components/common/Heading3';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import PlayerIcon from '~/components/player/PlayerIcon';
 import PlayerSlider from '~/components/player/PlayerSlider';
@@ -8,6 +7,7 @@ import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/rou
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
+import Heading3 from '../common/Heading3';
 import QueueList from '../common/list/song/QueueList';
 import { closePlayerBar } from './SPExpandablePlayerBar';
 
@@ -35,7 +35,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
     currentIndex,
   } = usePlayback();
 
-  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId);
+  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, 1024);
 
   const navigate = useSPNavigate();
   const { setScrollContainerRef, setItemRef } = useQueueAutoScroll({
@@ -49,16 +49,13 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
 
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
-      <div
-        {...props.topSectionProps}
-        class={`relative flex h-auto w-full shrink-0 flex-col items-center shadow-lg ${props.topSectionProps?.class ?? ''}`}
-      >
-        <div class='z-10 mt-7 flex h-full w-full flex-col items-center'>
+      <div {...props.topSectionProps} class={`relative flex h-auto w-full shrink-0 flex-col items-center ${props.topSectionProps?.class ?? ''}`}>
+        <div class='z-10 mt-6 flex h-full w-full flex-col items-center'>
           <div class='flex h-full w-full flex-col items-center px-8'>
             <Show when={coverArt()}>
               {(assetUrl) => (
                 <img
-                  class='aspect-square h-auto w-48 max-w-[70%] min-w-1/3 object-cover object-center shadow-xl'
+                  class='aspect-square h-auto w-56 max-w-[70vw] min-w-1/3 object-cover object-center shadow-xl'
                   src={assetUrl()}
                   loading='lazy'
                   decoding='async'
@@ -68,7 +65,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
 
             <MarqueeParagraph
               text={currentEntry()?.title || ''}
-              class='archivo mt-5 w-full text-center text-2xl font-black tracking-tighter'
+              class='archivo mt-4 w-full text-center text-2xl font-black tracking-tighter'
               onClick={() => {
                 const albumId = currentEntry()?.albumId;
                 if (!albumId) return;
@@ -124,7 +121,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
         </div>
       </div>
 
-      <div class='bg-primary-plane border-secondary-border secondar flex flex-row items-center border-b px-3 pt-3.5 pb-1.5'>
+      <div class='bg-primary-plane border-secondary-border secondar flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
       <div ref={setScrollContainerRef} class='flex-1 overflow-y-auto'>

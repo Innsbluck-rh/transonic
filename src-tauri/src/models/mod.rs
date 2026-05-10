@@ -30,7 +30,8 @@ pub use browse::{
 #[allow(unused_imports)]
 pub use connect::{
     ConnectDevicePresence, ConnectDeviceWithPlayback, ConnectDevicesUpdated,
-    ConnectPlaybackDeviceState, ConnectRuntimeStatus,
+    ConnectPlaybackDeviceState, ConnectPlaybackTakeoverRequest, ConnectRemotePlaybackRequest,
+    ConnectRuntimeStatus,
 };
 #[allow(unused_imports)]
 pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
@@ -38,7 +39,8 @@ pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
 pub use playback::{
     GaplessState, GaplessStatus, InterruptReason, MediaNotificationTap,
     PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest, PlaybackPlayQueueIndexRequest,
-    PlaybackSeekRequest, PlaybackSetQueueRequest, PlaybackStatus, PlayingState, QueueSource,
+    PlaybackSeekRequest, PlaybackSetPositionRequest, PlaybackSetQueueRequest, PlaybackStatus,
+    PlayingState, QueueSource,
 };
 #[allow(unused_imports)]
 pub use session::{

@@ -269,6 +269,31 @@ impl PlaybackController {
         Ok(self.state())
     }
 
+    pub fn set_position(&mut self, position_ms: u32) -> Result<PlaybackStatus, String> {
+        let index = self.ensure_current_index()?;
+        if matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+        ) {
+            self.backend.stop()?;
+            self.clear_gapless_preparation();
+            self.clear_native_events();
+            self.clear_server_reporting();
+            self.status.playing_state = PlayingState::Stopped;
+        }
+
+        self.status.current_song_id = current_song_id(&self.status.queue, Some(index));
+        self.status.current_position_ms = position_ms;
+        self.status.error = None;
+        self.status.interrupt_reason = None;
+        self.status.pending_seek_position_ms = None;
+        self.interrupted_resume_state = None;
+
+        self.persist_state();
+        self.report_status();
+        Ok(self.state())
+    }
+
     pub fn insert_after_current(
         &mut self,
         songs: Vec<SongResponse>,
@@ -3412,6 +3437,48 @@ mod tests {
             .unwrap();
         let status = controller.append_to_queue(vec![]).unwrap();
         assert_eq!(status.queue.len(), 1);
+    }
+
+    #[test]
+    fn set_position_updates_stopped_queue_position() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+
+        let status = controller.set_position(12_345).unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+        assert_eq!(status.current_position_ms, 12_345);
+        assert_eq!(status.current_index, Some(0));
+        assert_eq!(status.current_song_id, Some("song-a".to_string()));
+    }
+
+    #[test]
+    fn set_position_stops_loaded_paused_track() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller.pause().unwrap();
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        let status = controller.set_position(30_000).unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+        assert_eq!(status.current_position_ms, 30_000);
+        assert_eq!(
+            backend_state.lock().unwrap().stop_calls,
+            stop_calls_before + 1
+        );
     }
 
     #[test]

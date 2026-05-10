@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use futures_util::{SinkExt, StreamExt};
@@ -20,12 +20,13 @@ use tokio_tungstenite::{
 };
 
 use crate::{
-    commands::common::service,
+    commands::{common::service, playback::active_runtime_parts},
     models::{
         AuthInput, ConnectDevicePresence, ConnectDeviceWithPlayback, ConnectDevicesUpdated,
         ConnectPlaybackDeviceState, ConnectRuntimeStatus, ConnectSettings, PlaybackStatus,
     },
-    ActiveSessionState, AppSettingsState,
+    playback::PlaybackRuntimeContext,
+    ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
 };
 
 const CONNECT_PROTOCOL_VERSION: u32 = 1;
@@ -48,11 +49,22 @@ pub(crate) struct ConnectRuntime {
 struct ConnectRuntimeInner {
     generation: u64,
     status: ConnectRuntimeStatus,
-    sender: Option<mpsc::UnboundedSender<PlaybackStatus>>,
+    sender: Option<mpsc::UnboundedSender<ConnectOutbound>>,
     device_id: Option<String>,
     last_status: Option<PlaybackStatus>,
     devices: Vec<ConnectDevicePresence>,
     playback_by_device: BTreeMap<String, ConnectPlaybackDeviceState>,
+}
+
+enum ConnectOutbound {
+    PlaybackStatus(PlaybackStatus),
+    Envelope(ConnectOutboundEnvelope),
+}
+
+struct ConnectOutboundEnvelope {
+    id: Option<String>,
+    message_type: &'static str,
+    payload: serde_json::Value,
 }
 
 impl Default for ConnectRuntimeStatus {
@@ -62,6 +74,7 @@ impl Default for ConnectRuntimeStatus {
             connected: false,
             message: None,
             server_url: None,
+            device_id: None,
             seq: 0,
         }
     }
@@ -115,7 +128,7 @@ impl ConnectRuntime {
         generation: u64,
         server_url: String,
         device_id: String,
-        sender: mpsc::UnboundedSender<PlaybackStatus>,
+        sender: mpsc::UnboundedSender<ConnectOutbound>,
     ) {
         let cached_status = {
             let mut inner = self.inner.lock().unwrap();
@@ -123,15 +136,16 @@ impl ConnectRuntime {
                 return;
             }
             inner.sender = Some(sender.clone());
-            inner.device_id = Some(device_id);
+            inner.device_id = Some(device_id.clone());
             inner.status.enabled = true;
             inner.status.connected = true;
             inner.status.server_url = Some(server_url);
+            inner.status.device_id = Some(device_id);
             inner.status.message = Some("connect: websocket connected".to_string());
             inner.last_status.clone()
         };
         if let Some(status) = cached_status {
-            let _ = sender.send(status);
+            let _ = sender.send(ConnectOutbound::PlaybackStatus(status));
         }
     }
 
@@ -152,8 +166,145 @@ impl ConnectRuntime {
             inner.sender.clone()
         };
         if let Some(sender) = sender {
-            let _ = sender.send(status);
+            let _ = sender.send(ConnectOutbound::PlaybackStatus(status));
         }
+    }
+
+    pub(crate) fn request_handoff(&self, source_device_id: String) -> Result<(), String> {
+        self.send_envelope(
+            None,
+            "handoff.request",
+            serde_json::json!({ "sourceDeviceId": source_device_id }),
+        )
+    }
+
+    pub(crate) fn pause_remote_device(&self, target_device_id: String) -> Result<(), String> {
+        self.send_envelope(
+            None,
+            "remote.command",
+            serde_json::json!({
+                "targetDeviceId": target_device_id,
+                "command": "pause",
+            }),
+        )
+    }
+
+    fn send_handoff_accept(
+        &self,
+        generation: u64,
+        handoff_id: String,
+        target_device_id: String,
+        snapshot: ConnectPlaybackDeviceState,
+    ) -> Result<(), String> {
+        self.send_envelope(
+            Some(generation),
+            "handoff.accept",
+            serde_json::json!({
+                "handoffId": handoff_id,
+                "targetDeviceId": target_device_id,
+                "snapshot": snapshot,
+            }),
+        )
+    }
+
+    fn send_handoff_reject(
+        &self,
+        generation: u64,
+        handoff_id: String,
+        target_device_id: String,
+        reason: String,
+    ) -> Result<(), String> {
+        self.send_envelope(
+            Some(generation),
+            "handoff.reject",
+            serde_json::json!({
+                "handoffId": handoff_id,
+                "targetDeviceId": target_device_id,
+                "reason": reason,
+            }),
+        )
+    }
+
+    fn send_handoff_complete(
+        &self,
+        generation: u64,
+        handoff_id: String,
+        source_device_id: String,
+    ) -> Result<(), String> {
+        self.send_envelope(
+            Some(generation),
+            "handoff.complete",
+            serde_json::json!({
+                "handoffId": handoff_id,
+                "sourceDeviceId": source_device_id,
+            }),
+        )
+    }
+
+    fn send_remote_ack(&self, generation: u64, command_id: String) -> Result<(), String> {
+        self.send_envelope(
+            Some(generation),
+            "remote.ack",
+            serde_json::json!({ "commandId": command_id }),
+        )
+    }
+
+    fn send_remote_error(
+        &self,
+        generation: u64,
+        command_id: String,
+        message: String,
+    ) -> Result<(), String> {
+        self.send_envelope(
+            Some(generation),
+            "remote.error",
+            serde_json::json!({
+                "commandId": command_id,
+                "message": message,
+            }),
+        )
+    }
+
+    fn send_envelope(
+        &self,
+        generation: Option<u64>,
+        message_type: &'static str,
+        payload: serde_json::Value,
+    ) -> Result<(), String> {
+        let sender = {
+            let inner = self.inner.lock().unwrap();
+            if generation.is_some_and(|expected| inner.generation != expected) {
+                return Err("connect: runtime restarted".to_string());
+            }
+            inner.sender.clone()
+        }
+        .ok_or_else(|| "connect: websocket is not connected".to_string())?;
+
+        sender
+            .send(ConnectOutbound::Envelope(ConnectOutboundEnvelope {
+                id: Some(connect_message_id(message_type)),
+                message_type,
+                payload,
+            }))
+            .map_err(|_| "connect: websocket writer is not available".to_string())
+    }
+
+    fn snapshot_for_status(
+        &self,
+        status: PlaybackStatus,
+    ) -> Result<ConnectPlaybackDeviceState, String> {
+        let inner = self.inner.lock().unwrap();
+        let device_id = inner
+            .device_id
+            .clone()
+            .ok_or_else(|| "connect: device id is unavailable".to_string())?;
+        Ok(ConnectPlaybackDeviceState {
+            seq: inner.status.seq.saturating_add(1),
+            source_device_id: device_id,
+            position_ms: status.current_position_ms,
+            updated_at: connect_timestamp(),
+            state: status,
+        })
     }
 
     pub(crate) fn status(&self) -> ConnectRuntimeStatus {
@@ -216,7 +367,7 @@ impl ConnectRuntime {
             (inner.devices_with_playback(), republish)
         };
         if let Some((sender, status)) = republish {
-            let _ = sender.send(status);
+            let _ = sender.send(ConnectOutbound::PlaybackStatus(status));
         }
         Some(devices)
     }
@@ -367,7 +518,7 @@ async fn run_connect_once(
         .await
         .map_err(|error| format!("connect: websocket failed: {error}"))?;
     let (mut write, mut read) = ws.split();
-    let (sender, mut receiver) = mpsc::unbounded_channel::<PlaybackStatus>();
+    let (sender, mut receiver) = mpsc::unbounded_channel::<ConnectOutbound>();
     runtime.set_connected(
         generation,
         connect_server_url.clone(),
@@ -379,21 +530,35 @@ async fn run_connect_once(
 
     loop {
         tokio::select! {
-            Some(status) = receiver.recv() => {
-                let Some(seq) = runtime.next_seq(generation) else {
-                    return Ok(ConnectRunResult::Restart);
-                };
-                let envelope = ConnectEnvelope {
-                    id: Some(format!("playback-{seq}")),
-                    message_type: "playback.state.publish",
-                    protocol_version: CONNECT_PROTOCOL_VERSION,
-                    device_id: &login_response.device_id,
-                    payload: PlaybackPublishPayload {
-                        seq,
-                        state: status,
-                    },
-                };
-                write_json_message(&mut write, &envelope).await?;
+            Some(outbound) = receiver.recv() => {
+                match outbound {
+                    ConnectOutbound::PlaybackStatus(status) => {
+                        let Some(seq) = runtime.next_seq(generation) else {
+                            return Ok(ConnectRunResult::Restart);
+                        };
+                        let envelope = ConnectEnvelope {
+                            id: Some(format!("playback-{seq}")),
+                            message_type: "playback.state.publish",
+                            protocol_version: CONNECT_PROTOCOL_VERSION,
+                            device_id: &login_response.device_id,
+                            payload: PlaybackPublishPayload {
+                                seq,
+                                state: status,
+                            },
+                        };
+                        write_json_message(&mut write, &envelope).await?;
+                    }
+                    ConnectOutbound::Envelope(outbound) => {
+                        let envelope = ConnectEnvelope {
+                            id: outbound.id,
+                            message_type: outbound.message_type,
+                            protocol_version: CONNECT_PROTOCOL_VERSION,
+                            device_id: &login_response.device_id,
+                            payload: outbound.payload,
+                        };
+                        write_json_message(&mut write, &envelope).await?;
+                    }
+                }
             }
             _ = heartbeat.tick() => {
                 let envelope = ConnectEnvelope {
@@ -478,10 +643,278 @@ async fn handle_incoming_message(
                 emit_devices_updated(app, devices);
             }
         }
+        "handoff.request" => {
+            handle_handoff_request(app.clone(), runtime, generation, payload).await?;
+        }
+        "handoff.accept" => {
+            handle_handoff_accept(app.clone(), runtime, generation, payload).await?;
+        }
+        "handoff.reject" => {
+            let payload: HandoffRejectPayload = serde_json::from_value(payload)
+                .map_err(|error| format!("connect: handoff reject decode failed: {error}"))?;
+            log::warn!(
+                "connect: handoff rejected handoff_id={} reason={}",
+                payload.handoff_id,
+                payload.reason.unwrap_or_default()
+            );
+        }
+        "handoff.complete" => {
+            handle_handoff_complete(app.clone(), payload).await?;
+        }
+        "remote.command" => {
+            handle_remote_command(app.clone(), runtime, generation, payload).await?;
+        }
+        "remote.error" => {
+            let payload: RemoteErrorPayload = serde_json::from_value(payload)
+                .map_err(|error| format!("connect: remote error decode failed: {error}"))?;
+            log::warn!(
+                "connect: remote command failed command_id={} message={}",
+                payload.command_id,
+                payload.message.unwrap_or_default()
+            );
+        }
+        "remote.ack" => {}
         _ => {}
     }
 
     Ok(())
+}
+
+async fn handle_handoff_request(
+    app: tauri::AppHandle,
+    runtime: &ConnectRuntime,
+    generation: u64,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let payload: HandoffRequestPayload = serde_json::from_value(payload)
+        .map_err(|error| format!("connect: handoff request decode failed: {error}"))?;
+
+    let status = match current_playback_status(app).await {
+        Ok(status) => status,
+        Err(error) => {
+            let _ = runtime.send_handoff_reject(
+                generation,
+                payload.handoff_id,
+                payload.target_device_id,
+                error,
+            );
+            return Ok(());
+        }
+    };
+
+    let snapshot = runtime.snapshot_for_status(status)?;
+    runtime.send_handoff_accept(
+        generation,
+        payload.handoff_id,
+        payload.target_device_id,
+        snapshot,
+    )?;
+    Ok(())
+}
+
+async fn handle_handoff_accept(
+    app: tauri::AppHandle,
+    runtime: &ConnectRuntime,
+    generation: u64,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let payload: HandoffAcceptPayload = serde_json::from_value(payload)
+        .map_err(|error| format!("connect: handoff accept decode failed: {error}"))?;
+
+    if let Some(snapshot) = payload.snapshot {
+        let snapshot = decode_handoff_snapshot(snapshot)?;
+        apply_takeover_snapshot(app, snapshot).await?;
+    }
+
+    runtime.send_handoff_complete(generation, payload.handoff_id, payload.source_device_id)?;
+    Ok(())
+}
+
+async fn handle_handoff_complete(
+    app: tauri::AppHandle,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let payload: HandoffCompletePayload = serde_json::from_value(payload)
+        .map_err(|error| format!("connect: handoff complete decode failed: {error}"))?;
+    if let Some(snapshot) = payload.snapshot {
+        let snapshot = decode_handoff_snapshot(snapshot)?;
+        apply_takeover_snapshot(app, snapshot).await?;
+    }
+    Ok(())
+}
+
+async fn handle_remote_command(
+    app: tauri::AppHandle,
+    runtime: &ConnectRuntime,
+    generation: u64,
+    payload: serde_json::Value,
+) -> Result<(), String> {
+    let payload: RemoteCommandPayload = serde_json::from_value(payload)
+        .map_err(|error| format!("connect: remote command decode failed: {error}"))?;
+
+    match execute_remote_playback_command(app, &payload.command).await {
+        Ok(()) => runtime.send_remote_ack(generation, payload.command_id)?,
+        Err(error) => runtime.send_remote_error(generation, payload.command_id, error)?,
+    }
+    Ok(())
+}
+
+async fn current_playback_status(app: tauri::AppHandle) -> Result<PlaybackStatus, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let sessions = app.state::<ActiveSessionState>();
+        let cover_art_cache = app.state::<CoverArtCacheState>();
+        let playback = app.state::<PlaybackControllerState>();
+        let context_parts = active_runtime_parts(&app, &sessions);
+        let mut controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+
+        match context_parts {
+            Ok((ref client, ref capability_matrix, ref profile_id)) => {
+                let runtime_context = PlaybackRuntimeContext {
+                    client,
+                    capability_matrix,
+                    cover_art_cache: Some(&cover_art_cache.0),
+                    profile_id: Some(profile_id.as_str()),
+                };
+                controller.synced_state_with_context(Some(&runtime_context))
+            }
+            Err(_) => controller.synced_state(),
+        }
+    })
+    .await
+    .map_err(|error| format!("connect: playback status task failed: {error}"))?
+}
+
+async fn apply_takeover_snapshot(
+    app: tauri::AppHandle,
+    snapshot: ConnectPlaybackDeviceState,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let sessions = app.state::<ActiveSessionState>();
+        let cover_art_cache = app.state::<CoverArtCacheState>();
+        let playback = app.state::<PlaybackControllerState>();
+        let (active_client, active_capability_matrix, active_profile_id) =
+            active_runtime_parts(&app, &sessions)?;
+
+        let mut state = snapshot.state;
+        let current_index = takeover_current_index(&state)
+            .ok_or_else(|| "connect: source playback queue is empty".to_string())?;
+        let queue = std::mem::take(&mut state.queue);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &active_client,
+            capability_matrix: &active_capability_matrix,
+            cover_art_cache: Some(&cover_art_cache.0),
+            profile_id: Some(&active_profile_id),
+        };
+
+        let mut controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+        controller.set_queue(queue, Some(current_index))?;
+        controller.set_position(snapshot.position_ms)?;
+        controller.play(&runtime_context).map(|_| ())
+    })
+    .await
+    .map_err(|error| format!("connect: takeover task failed: {error}"))?
+}
+
+async fn execute_remote_playback_command(
+    app: tauri::AppHandle,
+    command: &str,
+) -> Result<(), String> {
+    let command = command.to_string();
+    tauri::async_runtime::spawn_blocking(move || {
+        let sessions = app.state::<ActiveSessionState>();
+        let cover_art_cache = app.state::<CoverArtCacheState>();
+        let playback = app.state::<PlaybackControllerState>();
+        let runtime_context = active_runtime_parts(&app, &sessions).ok().map(
+            |(active_client, active_capability_matrix, active_profile_id)| {
+                (
+                    active_client,
+                    active_capability_matrix,
+                    active_profile_id,
+                    cover_art_cache.0.clone(),
+                )
+            },
+        );
+
+        let mut controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+
+        match (command.as_str(), runtime_context.as_ref()) {
+            ("pause", Some((client, capability_matrix, profile_id, cover_art_cache))) => {
+                let runtime_context = PlaybackRuntimeContext {
+                    client,
+                    capability_matrix,
+                    cover_art_cache: Some(cover_art_cache),
+                    profile_id: Some(profile_id),
+                };
+                controller
+                    .pause_with_context(Some(&runtime_context))
+                    .map(|_| ())
+            }
+            ("pause", None) => controller.pause().map(|_| ()),
+            ("stop", Some((client, capability_matrix, profile_id, cover_art_cache))) => {
+                let runtime_context = PlaybackRuntimeContext {
+                    client,
+                    capability_matrix,
+                    cover_art_cache: Some(cover_art_cache),
+                    profile_id: Some(profile_id),
+                };
+                controller
+                    .stop_with_context(Some(&runtime_context))
+                    .map(|_| ())
+            }
+            ("stop", None) => controller.stop().map(|_| ()),
+            _ => Err(format!("connect: unsupported remote command {command:?}")),
+        }
+    })
+    .await
+    .map_err(|error| format!("connect: remote command task failed: {error}"))?
+}
+
+fn takeover_current_index(state: &PlaybackStatus) -> Option<u32> {
+    if state.queue.is_empty() {
+        return None;
+    }
+    if let Some(index) = state.current_index {
+        if (index as usize) < state.queue.len() {
+            return Some(index);
+        }
+    }
+    if let Some(current_song_id) = state.current_song_id.as_deref() {
+        if let Some(index) = state
+            .queue
+            .iter()
+            .position(|song| song.id == current_song_id)
+            .and_then(|index| u32::try_from(index).ok())
+        {
+            return Some(index);
+        }
+    }
+    Some(0)
+}
+
+fn decode_handoff_snapshot(value: serde_json::Value) -> Result<ConnectPlaybackDeviceState, String> {
+    match serde_json::from_value::<ConnectPlaybackDeviceState>(value.clone()) {
+        Ok(snapshot) => Ok(snapshot),
+        Err(_) => {
+            let snapshot: StoredPlaybackSnapshotPayload = serde_json::from_value(value)
+                .map_err(|error| format!("connect: handoff snapshot decode failed: {error}"))?;
+            Ok(ConnectPlaybackDeviceState {
+                seq: snapshot.seq,
+                source_device_id: snapshot.source_device_id,
+                position_ms: snapshot.current_position_ms,
+                updated_at: snapshot.updated_at,
+                state: snapshot.state,
+            })
+        }
+    }
 }
 
 fn playback_snapshots_from_payload(
@@ -573,6 +1006,58 @@ struct PlaybackSnapshotsPayload {
 #[derive(Debug, Deserialize)]
 struct PlaybackSnapshotWrapper {
     snapshot: Option<ConnectPlaybackDeviceState>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffRequestPayload {
+    handoff_id: String,
+    target_device_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffAcceptPayload {
+    handoff_id: String,
+    source_device_id: String,
+    snapshot: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffRejectPayload {
+    handoff_id: String,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct HandoffCompletePayload {
+    snapshot: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct StoredPlaybackSnapshotPayload {
+    seq: u32,
+    source_device_id: String,
+    state: PlaybackStatus,
+    current_position_ms: u32,
+    updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteCommandPayload {
+    command_id: String,
+    command: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteErrorPayload {
+    command_id: String,
+    message: Option<String>,
 }
 
 async fn login_connect_server(
@@ -725,4 +1210,19 @@ fn current_connect_server_url(app: &tauri::AppHandle) -> Option<String> {
     resolve_connect_server_url(&settings, subsonic_server_url.as_deref())
         .ok()
         .flatten()
+}
+
+fn connect_message_id(message_type: &str) -> String {
+    format!(
+        "{}-{}",
+        message_type.replace('.', "-"),
+        uuid::Uuid::new_v4()
+    )
+}
+
+fn connect_timestamp() -> String {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis().to_string())
+        .unwrap_or_else(|_| "0".to_string())
 }

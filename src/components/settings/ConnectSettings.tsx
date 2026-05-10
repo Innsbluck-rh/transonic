@@ -192,7 +192,7 @@ function ConnectSettings() {
 
         <div class='flex min-w-0 flex-col gap-2'>
           <span>Connect Server URL / Port</span>
-          <div class='grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_7rem]'>
+          <div class='grid min-w-0 grid-cols-[minmax(0,1fr)_7rem] gap-2'>
             <input
               value={displayedConnectServerHost()}
               disabled={useSubsonicServerHost()}

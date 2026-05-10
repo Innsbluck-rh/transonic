@@ -8,8 +8,8 @@ use crate::{
     commands::common::{client, format_api_error},
     models::{
         CapabilityMatrix, PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest,
-        PlaybackPlayQueueIndexRequest, PlaybackSeekRequest, PlaybackSetQueueRequest,
-        PlaybackStatus, QueueSource, SongResponse,
+        PlaybackPlayQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
+        PlaybackSetQueueRequest, PlaybackStatus, QueueSource, SongResponse,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
@@ -279,6 +279,29 @@ pub fn playback_play_queue_index(
 
         if let Err(error) = result {
             log::error!("playback_play_queue_index: failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn playback_set_position(
+    app: AppHandle,
+    payload: PlaybackSetPositionRequest,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = (|| -> Result<(), String> {
+            let playback = app.state::<PlaybackControllerState>();
+            let mut controller = playback
+                .0
+                .lock()
+                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+            controller.set_position(payload.position_ms).map(|_| ())
+        })();
+
+        if let Err(error) = result {
+            log::error!("playback_set_position: failed: {error}");
         }
     });
     Ok(())

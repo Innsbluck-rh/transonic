@@ -27,6 +27,22 @@ async connectGetDevicesWithPlayback() : Promise<ConnectDeviceWithPlayback[]> {
 async connectGetRuntimeStatus() : Promise<ConnectRuntimeStatus> {
     return await TAURI_INVOKE("connect_get_runtime_status");
 },
+async connectTakeoverPlayback(payload: ConnectPlaybackTakeoverRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("connect_takeover_playback", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async connectPauseDevicePlayback(payload: ConnectRemotePlaybackRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("connect_pause_device_playback", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async deleteServerProfile(payload: ProfileIdRequest) : Promise<Result<AppBootstrap, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("delete_server_profile", { payload }) };
@@ -259,6 +275,14 @@ async playbackSeek(payload: PlaybackSeekRequest) : Promise<Result<null, string>>
     else return { status: "error", error: e  as any };
 }
 },
+async playbackSetPosition(payload: PlaybackSetPositionRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_set_position", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async playbackNext() : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_next") };
@@ -337,7 +361,9 @@ export type ConnectDevicePresence = { deviceId: string; displayName: string; pla
 export type ConnectDeviceWithPlayback = { device: ConnectDevicePresence; playback: ConnectPlaybackDeviceState | null }
 export type ConnectDevicesUpdated = { devices: ConnectDeviceWithPlayback[] }
 export type ConnectPlaybackDeviceState = { seq: number; sourceDeviceId: string; state: PlaybackStatus; positionMs: number; updatedAt: string }
-export type ConnectRuntimeStatus = { enabled: boolean; connected: boolean; message: string | null; serverUrl: string | null; seq: number }
+export type ConnectPlaybackTakeoverRequest = { sourceDeviceId: string }
+export type ConnectRemotePlaybackRequest = { targetDeviceId: string }
+export type ConnectRuntimeStatus = { enabled: boolean; connected: boolean; message: string | null; serverUrl: string | null; deviceId: string | null; seq: number }
 export type ConnectServerProfileRequest = { profileId: string | null; displayName: string | null; serverUrl: string; auth: AuthInput }
 export type ConnectServerProfileResult = { status: "connected"; activeSession: ActiveSession; profiles: SavedProfileSummary[] } | { status: "auth_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "network_error"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "server_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "unsupported_auth"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] }
 export type ConnectSettings = { enabled?: boolean; useSubsonicServerHost?: boolean; connectServerHost?: string | null; connectServerPort?: number; deviceId?: string; deviceName?: string | null; allowInsecureConnectServer?: boolean }
@@ -369,6 +395,7 @@ export type PlaybackCapabilities = { gaplessPlayback: boolean }
 export type PlaybackInsertAfterCurrentRequest = { items: QueueSource[] }
 export type PlaybackPlayQueueIndexRequest = { index: number }
 export type PlaybackSeekRequest = { positionMs: number }
+export type PlaybackSetPositionRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { items: QueueSource[]; currentIndex: number | null; autoPlay: boolean }
 export type PlaybackSettings = { gaplessPlaybackEnabled: boolean }
 export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; currentPositionMs: number; currentSongId: string | null; error: string | null }

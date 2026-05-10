@@ -18,6 +18,7 @@ interface ConnectStore {
     enabled: boolean;
     connected: boolean;
     message: string | null;
+    deviceId: string | null;
     seq: number;
   };
   devices: ConnectDeviceWithPlayback[];
@@ -33,6 +34,7 @@ export const [connectStore, setConnectStore] = createStore<ConnectStore>({
     enabled: false,
     connected: false,
     message: null,
+    deviceId: null,
     seq: 0,
   },
   devices: [],

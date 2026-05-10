@@ -10,6 +10,7 @@ pub struct ConnectRuntimeStatus {
     pub connected: bool,
     pub message: Option<String>,
     pub server_url: Option<String>,
+    pub device_id: Option<String>,
     pub seq: u32,
 }
 
@@ -39,6 +40,18 @@ pub struct ConnectPlaybackDeviceState {
 pub struct ConnectDeviceWithPlayback {
     pub device: ConnectDevicePresence,
     pub playback: Option<ConnectPlaybackDeviceState>,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectPlaybackTakeoverRequest {
+    pub source_device_id: String,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectRemotePlaybackRequest {
+    pub target_device_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type, Event)]

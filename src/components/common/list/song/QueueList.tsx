@@ -52,7 +52,7 @@ const QueueList: Component<QueueListProps> = (props) => {
               onClick={onClickEntry}
               {...contextMenuProps}
             >
-              <div class='group-hover:text-primary-text flex w-8 flex-row items-start'>
+              <div class='group-hover:text-primary-text flex w-7 flex-row items-start'>
                 <Show
                   when={!isPlaying()}
                   fallback={

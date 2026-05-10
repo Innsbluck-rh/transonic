@@ -1,4 +1,5 @@
-import { createMemo, Show } from 'solid-js';
+import { createMemo, createSignal, Show } from 'solid-js';
+import { commands } from '~/bindings';
 import { connectStore } from '~/stores/ConnectStore';
 import { formatCompactDuration } from '~/utils/duration';
 
@@ -28,8 +29,27 @@ export function currentSong(playback: NonNullable<ConnectDeviceEntry['playback']
 }
 
 function ConnectDeviceCard(props: ConnectDeviceCardProps) {
+  const [busyAction, setBusyAction] = createSignal<'take' | 'pause' | null>(null);
+  const [actionError, setActionError] = createSignal<string | null>(null);
   const song = createMemo(() => (props.entry.playback ? currentSong(props.entry.playback) : null));
   const coverArt = () => props.coverArtSrc(song()?.coverArtId);
+  const isSelf = () => props.entry.device.deviceId === connectStore.runtime.deviceId;
+  const canControl = () => connectStore.runtime.connected && props.entry.device.online && !isSelf();
+  const canTake = () => canControl() && !!props.entry.playback && props.entry.playback.state.queue.length > 0;
+  const canPause = () => canControl() && !!props.entry.playback && props.entry.playback.state.playingState !== 'idle';
+
+  const runAction = async (action: 'take' | 'pause') => {
+    setBusyAction(action);
+    setActionError(null);
+    const result =
+      action === 'take'
+        ? await commands.connectTakeoverPlayback({ sourceDeviceId: props.entry.device.deviceId })
+        : await commands.connectPauseDevicePlayback({ targetDeviceId: props.entry.device.deviceId });
+    if (result.status === 'error') {
+      setActionError(result.error);
+    }
+    setBusyAction(null);
+  };
 
   return (
     <div class='border-primary-border bg-primary-surface flex min-w-0 flex-col gap-2 overflow-hidden rounded border px-3 py-2.5'>
@@ -79,6 +99,18 @@ function ConnectDeviceCard(props: ConnectDeviceCardProps) {
           )}
         </Show>
       </div>
+
+      <Show when={!isSelf()}>
+        <div class='flex min-w-0 flex-wrap items-center gap-2'>
+          <button type='button' disabled={!canTake() || busyAction() !== null} class='px-2 py-1 text-xs' onClick={() => void runAction('take')}>
+            {busyAction() === 'take' ? 'Taking' : 'Take'}
+          </button>
+          <button type='button' disabled={!canPause() || busyAction() !== null} class='px-2 py-1 text-xs' onClick={() => void runAction('pause')}>
+            {busyAction() === 'pause' ? 'Pausing' : 'Pause'}
+          </button>
+          <Show when={actionError()}>{(message) => <p class='text-secondary-text min-w-0 text-xs break-words'>{message()}</p>}</Show>
+        </div>
+      </Show>
     </div>
   );
 }
