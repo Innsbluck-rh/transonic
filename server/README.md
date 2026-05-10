@@ -11,9 +11,16 @@ short-lived transonic session token hash.
 
 ```powershell
 go test ./...
+go run ./cmd/transonic-server help
 go run ./cmd/transonic-server config print-default
+go run ./cmd/transonic-server config generate-secret
 go run ./cmd/transonic-server serve --config ./config.json
 ```
+
+Set `sessionSigningSecret` in `config.json` to the value printed by
+`config generate-secret`. If it is empty or still starts with `change-me-`, the
+server will use a temporary signing secret and existing sessions will stop
+working after restart.
 
 ## API
 
@@ -42,6 +49,7 @@ Run on Pi:
 
 ```sh
 chmod +x ./transonic-server-linux-arm64
+./transonic-server-linux-arm64 config generate-secret
 ./transonic-server-linux-arm64 serve --config ./config.pi.example.json
 ```
 

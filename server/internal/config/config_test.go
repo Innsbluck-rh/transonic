@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"testing"
@@ -55,5 +56,19 @@ func TestInvalidDurationFails(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("expected invalid duration error")
+	}
+}
+
+func TestGenerateSessionSigningSecretReturnsRandomBase64URLSecret(t *testing.T) {
+	secret, err := GenerateSessionSigningSecret()
+	if err != nil {
+		t.Fatalf("GenerateSessionSigningSecret returned error: %v", err)
+	}
+	decoded, err := base64.RawURLEncoding.DecodeString(secret)
+	if err != nil {
+		t.Fatalf("secret should be raw URL-safe base64: %v", err)
+	}
+	if len(decoded) != 32 {
+		t.Fatalf("expected 32 random bytes, got %d", len(decoded))
 	}
 }

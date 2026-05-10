@@ -135,6 +135,9 @@ impl PlaybackController {
         enabled: bool,
         context: Option<&PlaybackRuntimeContext<'_>>,
     ) -> Result<(), String> {
+        if self.gapless_playback_enabled == enabled {
+            return Ok(());
+        }
         self.gapless_playback_enabled = enabled;
         let result = self.sync_gapless_for_current_track(context);
         self.report_status();

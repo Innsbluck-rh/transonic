@@ -1,0 +1,5 @@
+
+> transonic@0.1.0 vite:dev C:\Users\innsb\Documents\transonic
+> vite "--" "--host" "127.0.0.1"
+
+ ELIFECYCLE  Command failed with exit code 1.

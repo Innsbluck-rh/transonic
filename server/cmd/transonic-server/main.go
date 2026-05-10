@@ -6,6 +6,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -26,19 +27,23 @@ import (
 const serviceName = "transonic-server"
 
 func main() {
-	if err := run(os.Args[1:]); err != nil {
+	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run(args []string) error {
+func run(args []string, out io.Writer) error {
 	if len(args) == 0 {
 		args = []string{"serve"}
 	}
 	switch args[0] {
+	case "help", "-h", "--help":
+		printUsage(out)
+		return nil
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ExitOnError)
+		fs.SetOutput(out)
 		configPath := fs.String("config", config.DefaultPath(), "path to config JSON")
 		if err := fs.Parse(args[1:]); err != nil {
 			return err
@@ -47,28 +52,102 @@ func run(args []string) error {
 			return serve(ctx, *configPath)
 		})
 	case "config":
-		if len(args) >= 2 && args[1] == "print-default" {
+		if len(args) < 2 || args[1] == "help" || args[1] == "-h" || args[1] == "--help" {
+			printConfigUsage(out)
+			return nil
+		}
+		switch args[1] {
+		case "print-default":
 			contents, err := config.PrintableDefault().MarshalPretty()
 			if err != nil {
 				return err
 			}
-			fmt.Println(string(contents))
+			fmt.Fprintln(out, string(contents))
+			return nil
+		case "generate-secret":
+			secret, err := config.GenerateSessionSigningSecret()
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(out, secret)
 			return nil
 		}
-		return errors.New("usage: transonic-server config print-default")
+		return fmt.Errorf("unknown config command %q\n\n%s", args[1], configUsage())
 	case "migrate":
-		if len(args) >= 2 && args[1] == "status" {
+		if len(args) < 2 || args[1] == "help" || args[1] == "-h" || args[1] == "--help" {
+			printMigrateUsage(out)
+			return nil
+		}
+		if args[1] == "status" {
 			fs := flag.NewFlagSet("migrate status", flag.ExitOnError)
+			fs.SetOutput(out)
 			configPath := fs.String("config", config.DefaultPath(), "path to config JSON")
 			if err := fs.Parse(args[2:]); err != nil {
 				return err
 			}
 			return migrateStatus(*configPath)
 		}
-		return errors.New("usage: transonic-server migrate status [--config path]")
+		return fmt.Errorf("unknown migrate command %q\n\n%s", args[1], migrateUsage())
 	default:
-		return fmt.Errorf("unknown command %q", args[0])
+		return fmt.Errorf("unknown command %q\n\n%s", args[0], usage())
 	}
+}
+
+func printUsage(out io.Writer) {
+	fmt.Fprint(out, usage())
+}
+
+func usage() string {
+	return `transonic-server is the optional broker for transonic Connect.
+
+Usage:
+  transonic-server help
+  transonic-server serve [--config path]
+  transonic-server config <command>
+  transonic-server migrate <command>
+
+Commands:
+  serve                  Start the HTTP/WebSocket server.
+  config print-default   Print a default JSON config.
+  config generate-secret Print a random session signing secret.
+  migrate status         Print the database schema version.
+
+Common first setup:
+  transonic-server config print-default > transonic.config.json
+  transonic-server config generate-secret
+  transonic-server serve --config transonic.config.json
+
+If serve logs "using ephemeral session signing secret", set
+"sessionSigningSecret" in the config to a non-placeholder secret.
+`
+}
+
+func printConfigUsage(out io.Writer) {
+	fmt.Fprint(out, configUsage())
+}
+
+func configUsage() string {
+	return `Usage:
+  transonic-server config print-default
+  transonic-server config generate-secret
+
+Commands:
+  print-default     Print a default JSON config.
+  generate-secret   Print a random value for "sessionSigningSecret".
+`
+}
+
+func printMigrateUsage(out io.Writer) {
+	fmt.Fprint(out, migrateUsage())
+}
+
+func migrateUsage() string {
+	return `Usage:
+  transonic-server migrate status [--config path]
+
+Commands:
+  status   Print the database schema version for the configured dataDir.
+`
 }
 
 func serve(ctx context.Context, configPath string) error {
@@ -102,6 +181,9 @@ func serve(ctx context.Context, configPath string) error {
 	presenceTimeout, err := cfg.DevicePresenceTimeout()
 	if err != nil {
 		return err
+	}
+	if err := st.ClearPresence(ctx); err != nil {
+		return fmt.Errorf("clear stale presence cache: %w", err)
 	}
 	api := httpapi.New(
 		cfg,

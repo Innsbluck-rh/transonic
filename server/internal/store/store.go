@@ -271,6 +271,51 @@ func (s *Store) UpsertDevice(ctx context.Context, device Device) error {
 	return err
 }
 
+func (s *Store) ClearPresence(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM devices`); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM playback_snapshots`); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) DeleteStaleDevices(ctx context.Context, userKey string, cutoff time.Time, keepDeviceIDs []string) error {
+	query := `DELETE FROM devices WHERE user_key = ? AND last_seen_at < ?`
+	args := []any{userKey, formatTime(cutoff)}
+	for _, deviceID := range keepDeviceIDs {
+		query += ` AND device_id <> ?`
+		args = append(args, deviceID)
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM playback_snapshots
+		WHERE user_key = ?
+		AND NOT EXISTS (
+			SELECT 1 FROM devices
+			WHERE devices.user_key = playback_snapshots.user_key
+			AND devices.device_id = playback_snapshots.source_device_id
+		)`, userKey); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
 func (s *Store) ListDevices(ctx context.Context, userKey string) ([]Device, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT device_id, user_key, upstream_server_url, username, display_name, platform, app_version, last_seen_at
 		FROM devices WHERE user_key = ? ORDER BY display_name, device_id`, userKey)

@@ -183,11 +183,19 @@ func (c Config) SessionSecret() ([]byte, bool, error) {
 		return []byte(c.SessionSigningSecret), false, nil
 	}
 
+	secret, err := GenerateSessionSigningSecret()
+	if err != nil {
+		return nil, false, err
+	}
+	return []byte(secret), true, nil
+}
+
+func GenerateSessionSigningSecret() (string, error) {
 	var randomBytes [32]byte
 	if _, err := rand.Read(randomBytes[:]); err != nil {
-		return nil, false, fmt.Errorf("generate ephemeral session secret: %w", err)
+		return "", fmt.Errorf("generate session signing secret: %w", err)
 	}
-	return []byte(base64.RawURLEncoding.EncodeToString(randomBytes[:])), true, nil
+	return base64.RawURLEncoding.EncodeToString(randomBytes[:]), nil
 }
 
 func (c Config) UpstreamAllowed(normalized string) bool {

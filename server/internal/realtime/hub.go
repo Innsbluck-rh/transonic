@@ -375,20 +375,32 @@ func (h *Hub) handleRemoteResult(client *Client, inbound Envelope) {
 }
 
 func (h *Hub) broadcastPresence(ctx context.Context, userKey string) {
+	online := h.onlineDeviceIDs(userKey)
+	if h.presenceTimeout > 0 {
+		_ = h.store.DeleteStaleDevices(ctx, userKey, time.Now().UTC().Add(-h.presenceTimeout), online)
+	}
 	devices, err := h.store.ListDevices(ctx, userKey)
 	if err != nil {
 		return
 	}
-	h.mu.Lock()
-	online := make(map[string]bool)
-	for deviceID := range h.clients[userKey] {
-		online[deviceID] = true
+	onlineSet := make(map[string]bool, len(online))
+	for _, deviceID := range online {
+		onlineSet[deviceID] = true
 	}
-	h.mu.Unlock()
 	for i := range devices {
-		devices[i].Online = online[devices[i].DeviceID]
+		devices[i].Online = onlineSet[devices[i].DeviceID]
 	}
 	h.broadcast(userKey, TypePresenceUpdated, "", mustJSON(map[string]any{"devices": devices}))
+}
+
+func (h *Hub) onlineDeviceIDs(userKey string) []string {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	ids := make([]string, 0, len(h.clients[userKey]))
+	for deviceID := range h.clients[userKey] {
+		ids = append(ids, deviceID)
+	}
+	return ids
 }
 
 func (h *Hub) broadcast(userKey, typ, replyTo string, payload json.RawMessage) {
