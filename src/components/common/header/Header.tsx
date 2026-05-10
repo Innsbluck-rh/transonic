@@ -2,9 +2,7 @@ import { Icon } from '@iconify-icon/solid';
 import { Component, Show } from 'solid-js';
 import { resolveSettingsRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
-import { sessionStore } from '~/stores/SessionStore';
 import Title from '../Title';
-import ServerProfile from './ServerProfile';
 import ThemeToggle from './ThemeToggle';
 
 interface HeaderProps {
@@ -25,6 +23,7 @@ const Header: Component<HeaderProps> = (props) => {
       </Show>
       <div class='flex-1' />
       <div class='flex flex-row gap-1'>
+        <ThemeToggle />
         <div class='relative overflow-visible'>
           <div
             class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2'
@@ -33,11 +32,10 @@ const Header: Component<HeaderProps> = (props) => {
             <Icon class='text-primary-text text-[16px]' icon='pixelarticons:settings-2-sharp' />
           </div>
         </div>
-        <ThemeToggle />
         {/* <input class='text-xs mr-2' placeholder='search...' /> */}
-        <Show when={props.shouldShowProfiles}>
+        {/*<Show when={props.shouldShowProfiles}>
           <ServerProfile profiles={sessionStore.profiles} />
-        </Show>
+        </Show>*/}
       </div>
     </div>
   );
