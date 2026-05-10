@@ -20,7 +20,7 @@ pub use browse::folder_structure::get_folder_structure_albums;
 pub use browse::folder_structure_album_songs::get_folder_structure_album_songs;
 pub use browse::song::get_song;
 pub use connect::{connect_get_devices_with_playback, connect_get_runtime_status};
-pub use cover_art::get_cover_art;
+pub use cover_art::{clear_cover_art_cache, get_cover_art, get_cover_art_cache_status};
 pub use index::artist::get_artist_indexes;
 pub use index::folder_structure::{get_folder_structure_roots, get_music_folders};
 pub use playback::{
@@ -67,7 +67,11 @@ pub use connect::{
     __specta__fn__connect_get_devices_with_playback, __specta__fn__connect_get_runtime_status,
 };
 #[doc(hidden)]
-pub use cover_art::{__cmd__get_cover_art, __specta__fn__get_cover_art};
+pub use cover_art::{
+    __cmd__clear_cover_art_cache, __cmd__get_cover_art, __cmd__get_cover_art_cache_status,
+    __specta__fn__clear_cover_art_cache, __specta__fn__get_cover_art,
+    __specta__fn__get_cover_art_cache_status,
+};
 #[doc(hidden)]
 pub use index::artist::{__cmd__get_artist_indexes, __specta__fn__get_artist_indexes};
 #[doc(hidden)]

@@ -33,7 +33,7 @@ pub use connect::{
     ConnectPlaybackDeviceState, ConnectRuntimeStatus,
 };
 #[allow(unused_imports)]
-pub use cover_art::{CoverArtRequest, CoverArtResponse};
+pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
 #[allow(unused_imports)]
 pub use playback::{
     GaplessState, GaplessStatus, InterruptReason, MediaNotificationTap,

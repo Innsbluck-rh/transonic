@@ -1,5 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
-import { commands } from '~/bindings';
+import { commands, type CoverArtCacheStatus } from '~/bindings';
 import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
 import {
@@ -47,6 +47,14 @@ function normalizePort(value: string) {
   return port;
 }
 
+function formatBytes(bytes: number) {
+  if (bytes < 1024 * 1024) {
+    return `${(bytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 function SettingsRoute() {
   const activeSession = () => sessionStore.activeSession;
   const isGaplessEnabled = () => settingsStore.playback.gaplessPlaybackEnabled;
@@ -61,6 +69,9 @@ function SettingsRoute() {
   const [connectActionBusy, setConnectActionBusy] = createSignal(false);
   const [backupMessage, setBackupMessage] = createSignal<string | null>(null);
   const [backupBusy, setBackupBusy] = createSignal(false);
+  const [coverArtCacheStatus, setCoverArtCacheStatus] = createSignal<CoverArtCacheStatus | null>(null);
+  const [coverArtCacheMessage, setCoverArtCacheMessage] = createSignal<string | null>(null);
+  const [coverArtCacheBusy, setCoverArtCacheBusy] = createSignal(false);
   const syncConnectForm = () => {
     setConnectEnabled(settingsStore.connect.enabled === true);
     setUseSubsonicServerHost(settingsStore.connect.useSubsonicServerHost !== false);
@@ -91,6 +102,28 @@ function SettingsRoute() {
   });
   const connectRuntimeRestarting = createMemo(() => connectStore.runtime.message === 'connect: restarting');
   const connectButtonLabel = createMemo(() => (connectStore.runtime.connected || connectRuntimeRestarting() ? 'Update' : 'Connect'));
+  const coverArtCacheSummary = createMemo(() => {
+    const status = coverArtCacheStatus();
+    const entryCount = status?.entryCount ?? 0;
+    const totalBytes = status?.totalBytes ?? 0;
+
+    return `${entryCount.toLocaleString()} Arts, ${formatBytes(totalBytes)}`;
+  });
+
+  const refreshCoverArtCacheStatus = async () => {
+    setCoverArtCacheMessage(null);
+    try {
+      const result = await commands.getCoverArtCacheStatus();
+      if (result.status === 'error') {
+        setCoverArtCacheMessage(result.error);
+        return;
+      }
+
+      setCoverArtCacheStatus(result.data);
+    } catch (error) {
+      setCoverArtCacheMessage(error instanceof Error ? error.message : String(error));
+    }
+  };
 
   onMount(() => {
     if (connectDeviceName().trim().length > 0) {
@@ -103,6 +136,24 @@ function SettingsRoute() {
       }
     });
   });
+
+  const clearCoverArtCache = async () => {
+    setCoverArtCacheBusy(true);
+    setCoverArtCacheMessage(null);
+    try {
+      const result = await commands.clearCoverArtCache();
+      if (result.status === 'error') {
+        setCoverArtCacheMessage(result.error);
+        return;
+      }
+
+      setCoverArtCacheStatus(result.data);
+    } catch (error) {
+      setCoverArtCacheMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setCoverArtCacheBusy(false);
+    }
+  };
 
   const applyConnectSettings = async () => {
     setConnectActionBusy(true);
@@ -180,6 +231,12 @@ function SettingsRoute() {
     settingsStore.connect.allowInsecureConnectServer;
     sessionStore.activeSession?.normalizedServerUrl;
     void refreshConnectServerStatus();
+  });
+
+  createEffect(() => {
+    sessionStore.activeSession?.profileId;
+    setCoverArtCacheMessage(null);
+    void refreshCoverArtCacheStatus();
   });
 
   createEffect(() => {
@@ -271,6 +328,17 @@ function SettingsRoute() {
         </div>
         <p class='text-secondary-text text-xs leading-5'>Backup includes server credentials. Keep the exported JSON private.</p>
         <Show when={backupMessage()}>{(message) => <p class='text-secondary-text text-xs leading-5'>{message()}</p>}</Show>
+      </section>
+
+      <section class='bg-primary-plane border-primary-border flex flex-col gap-3 rounded-lg border p-4'>
+        <Heading2>Album Art Cache</Heading2>
+        <p class='text-secondary-text text-xs leading-5'>{coverArtCacheSummary()}</p>
+        <div class='flex w-full justify-end'>
+          <button type='button' disabled={coverArtCacheBusy() || !activeSession()} onClick={() => void clearCoverArtCache()}>
+            Clear Cache
+          </button>
+        </div>
+        <Show when={coverArtCacheMessage()}>{(message) => <p class='text-secondary-text text-xs leading-5'>{message()}</p>}</Show>
       </section>
 
       <section class='bg-primary-plane border-primary-border flex flex-col gap-4 rounded-lg border p-4'>

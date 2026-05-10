@@ -1,8 +1,8 @@
 use tauri::{AppHandle, State};
 
 use crate::{
-    commands::common::client,
-    models::{CoverArtRequest, CoverArtResponse},
+    commands::common::service,
+    models::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse},
     ActiveSessionState, CoverArtCacheState,
 };
 
@@ -14,21 +14,33 @@ pub async fn get_cover_art(
     cover_art_cache: State<'_, CoverArtCacheState>,
     payload: CoverArtRequest,
 ) -> Result<CoverArtResponse, String> {
+    let profile_id = payload.profile_id.trim();
+    if profile_id.is_empty() {
+        return Err("profileId is required.".to_string());
+    }
     let cover_art_id = payload.cover_art_id.trim();
     if cover_art_id.is_empty() {
         return Err("coverArtId is required.".to_string());
     }
 
-    let profile_id = {
-        let guard = state.0.lock().unwrap();
+    let session = {
+        let guard = state
+            .0
+            .lock()
+            .map_err(|_| "The active session state is unavailable.".to_string())?;
         let session = guard
             .as_ref()
             .ok_or_else(|| "No active session is available.".to_string())?;
-        session.profile_id.clone()
+        session.clone()
     };
-    let client = client(&app, &state.0)?;
+    if session.profile_id != profile_id {
+        return Err("The requested profile is no longer active.".to_string());
+    }
+
+    let client = service(&app)?.build_client_from_session(&session)?;
     let cache = cover_art_cache.0.clone();
     let cover_art_id = cover_art_id.to_string();
+    let profile_id = session.profile_id;
     let size = payload.size;
     let local_path = tauri::async_runtime::spawn_blocking(move || {
         cache.resolve_cover_art(&client, &profile_id, &cover_art_id, size)
@@ -39,4 +51,34 @@ pub async fn get_cover_art(
     Ok(CoverArtResponse {
         local_path: local_path.to_string_lossy().to_string(),
     })
+}
+
+fn active_profile_id(state: &ActiveSessionState) -> Result<Option<String>, String> {
+    let guard = state
+        .0
+        .lock()
+        .map_err(|_| "The active session state is unavailable.".to_string())?;
+    Ok(guard.as_ref().map(|session| session.profile_id.clone()))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn get_cover_art_cache_status(
+    state: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
+) -> Result<CoverArtCacheStatus, String> {
+    let profile_id = active_profile_id(&state)?;
+    cover_art_cache.0.status(profile_id.as_deref())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn clear_cover_art_cache(
+    state: State<'_, ActiveSessionState>,
+    cover_art_cache: State<'_, CoverArtCacheState>,
+) -> Result<CoverArtCacheStatus, String> {
+    let profile_id =
+        active_profile_id(&state)?.ok_or_else(|| "No active session is available.".to_string())?;
+    cover_art_cache.0.remove_profile(&profile_id)?;
+    cover_art_cache.0.status(Some(&profile_id))
 }

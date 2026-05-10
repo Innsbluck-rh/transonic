@@ -262,6 +262,13 @@ where
             return Err("No active session is available.".to_string());
         };
 
+        self.build_client_from_session(&session)
+    }
+
+    pub fn build_client_from_session(
+        &self,
+        session: &ActiveSession,
+    ) -> Result<OpenSubsonicClient, String> {
         let Some(secret) = self
             .secret_store
             .load_secret(&self.secret_service_name, &session.profile_id)?
@@ -272,7 +279,7 @@ where
             );
         };
 
-        self.api.build_client_from_active_session(&session, &secret)
+        self.api.build_client_from_active_session(session, &secret)
     }
 
     pub fn active_auth_input(

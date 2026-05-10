@@ -12,7 +12,7 @@ use opensubsonic_client::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::commands::common::format_api_error;
+use crate::{commands::common::format_api_error, models::CoverArtCacheStatus};
 
 const DEFAULT_COVER_ART_TTL_SECONDS: u64 = 60 * 60 * 24 * 7;
 const METADATA_FILE_NAME: &str = "metadata.json";
@@ -25,6 +25,7 @@ pub struct CoverArtCache {
 struct CoverArtCacheInner {
     root_dir: PathBuf,
     ttl: Duration,
+    http_client: reqwest::blocking::Client,
     in_flight: Mutex<HashMap<CacheKey, Arc<InFlight>>>,
 }
 
@@ -101,6 +102,7 @@ impl CoverArtCache {
             inner: Arc::new(CoverArtCacheInner {
                 root_dir,
                 ttl,
+                http_client: reqwest::blocking::Client::new(),
                 in_flight: Mutex::new(HashMap::new()),
             }),
         }
@@ -149,6 +151,23 @@ impl CoverArtCache {
                 "Failed to delete the cover art cache for profile {profile_id}: {error}"
             )),
         }
+    }
+
+    pub fn status(&self, profile_id: Option<&str>) -> Result<CoverArtCacheStatus, String> {
+        let cache_dir = profile_id
+            .map(|value| self.inner.root_dir.join(value))
+            .unwrap_or_else(|| self.inner.root_dir.clone());
+        let mut stats = CacheStats::default();
+        collect_cache_stats(&cache_dir, &mut stats)?;
+
+        Ok(CoverArtCacheStatus {
+            profile_id: profile_id.map(str::to_string),
+            cache_dir: cache_dir.to_string_lossy().to_string(),
+            entry_count: u64_to_u32_saturating(stats.entry_count),
+            file_count: u64_to_u32_saturating(stats.file_count),
+            total_bytes: stats.total_bytes as f64,
+            ttl_seconds: u64_to_u32_saturating(self.inner.ttl.as_secs()),
+        })
     }
 
     fn acquire_flight(&self, cache_key: CacheKey) -> FlightRole {
@@ -245,7 +264,7 @@ impl CoverArtCache {
                 size: cache_key.size,
             })
             .map_err(format_api_error)?;
-        match fetch_binary_response(request) {
+        match fetch_binary_response(&self.inner.http_client, request) {
             Ok((content_type, bytes)) => self.store_entry(cache_key, &content_type, &bytes),
             Err(error) => {
                 if let Some(path) = stale_path.filter(|path| path.exists()) {
@@ -278,7 +297,8 @@ impl CoverArtCache {
         })?;
 
         let extension = extension_from_content_type(content_type)?;
-        let file_name = format!("art.{extension}");
+        let version = current_time_ns();
+        let file_name = format!("art.{version}.{extension}");
         let final_path = entry_dir.join(&file_name);
         let temp_file_name = format!("art.{extension}.tmp-{}", std::process::id());
         let temp_path = entry_dir.join(temp_file_name);
@@ -329,8 +349,64 @@ impl CoverArtCache {
     }
 }
 
-fn fetch_binary_response(request: PreparedBinaryRequest) -> Result<(String, Vec<u8>), String> {
-    let response = reqwest::blocking::Client::new()
+#[derive(Default)]
+struct CacheStats {
+    entry_count: u64,
+    file_count: u64,
+    total_bytes: u64,
+}
+
+fn collect_cache_stats(path: &Path, stats: &mut CacheStats) -> Result<(), String> {
+    let entries = match fs::read_dir(path) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "Failed to inspect the cover art cache directory {}: {error}",
+                path.display()
+            ));
+        }
+    };
+
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "Failed to iterate the cover art cache directory {}: {error}",
+                path.display()
+            )
+        })?;
+        let file_type = entry.file_type().map_err(|error| {
+            format!(
+                "Failed to inspect the cover art cache artifact {}: {error}",
+                entry.path().display()
+            )
+        })?;
+
+        if file_type.is_dir() {
+            collect_cache_stats(&entry.path(), stats)?;
+            continue;
+        }
+        if !file_type.is_file() {
+            continue;
+        }
+
+        let file_name = entry.file_name();
+        let file_name = file_name.to_string_lossy();
+        stats.file_count += 1;
+        if file_name.starts_with("art.") && !file_name.contains(".tmp") {
+            stats.entry_count += 1;
+            stats.total_bytes += entry.metadata().map(|metadata| metadata.len()).unwrap_or(0);
+        }
+    }
+
+    Ok(())
+}
+
+fn fetch_binary_response(
+    client: &reqwest::blocking::Client,
+    request: PreparedBinaryRequest,
+) -> Result<(String, Vec<u8>), String> {
+    let response = client
         .get(request.url)
         .headers(request.headers)
         .send()
@@ -475,6 +551,17 @@ fn current_time_ms() -> u64 {
         .as_millis() as u64
 }
 
+fn current_time_ns() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos()
+}
+
+fn u64_to_u32_saturating(value: u64) -> u32 {
+    value.min(u64::from(u32::MAX)) as u32
+}
+
 fn ttl_to_ms(ttl: Duration) -> u64 {
     ttl.as_millis().min(u128::from(u64::MAX)) as u64
 }
@@ -586,6 +673,38 @@ mod tests {
 
         assert_eq!(first_path, second_path);
         assert!(first_path.exists());
+        mock.assert();
+    }
+
+    #[test]
+    fn status_counts_profile_cache_entries() {
+        let temp_dir = tempdir().unwrap();
+        let cache = CoverArtCache::with_ttl(temp_dir.path().to_path_buf(), Duration::from_secs(60));
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/rest/getCoverArt.view")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("id".into(), "cover-1".into()),
+                Matcher::UrlEncoded("size".into(), "64".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "image/png")
+            .with_body("png-data")
+            .expect(1)
+            .create();
+        let client = create_client(&server);
+
+        cache
+            .resolve_cover_art(&client, "profile-a", "cover-1", Some(64))
+            .unwrap();
+
+        let status = cache.status(Some("profile-a")).unwrap();
+
+        assert_eq!(status.profile_id.as_deref(), Some("profile-a"));
+        assert_eq!(status.entry_count, 1);
+        assert_eq!(status.file_count, 2);
+        assert!(status.total_bytes >= "png-data".len() as f64);
+        assert_eq!(status.ttl_seconds, 60);
         mock.assert();
     }
 

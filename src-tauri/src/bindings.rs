@@ -37,6 +37,8 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::get_song,
             commands::get_album_list,
             commands::get_cover_art,
+            commands::get_cover_art_cache_status,
+            commands::clear_cover_art_cache,
             commands::get_artist_image,
             commands::playback_get_state,
             commands::playback_set_queue,
