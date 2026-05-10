@@ -7,6 +7,7 @@ storybook-static
 keystore.properties
 .agents
 .codex-plugins
+.codex*
 .serena
 ./skills-lock.json
 server/*.sqlite3
