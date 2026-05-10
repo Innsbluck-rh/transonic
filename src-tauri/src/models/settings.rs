@@ -10,7 +10,7 @@ pub struct PlaybackSettings {
 impl Default for PlaybackSettings {
     fn default() -> Self {
         Self {
-            gapless_playback_enabled: false,
+            gapless_playback_enabled: true,
         }
     }
 }
