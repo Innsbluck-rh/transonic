@@ -128,9 +128,13 @@ impl PlaybackBackend for AndroidPlaybackBackend {
     fn plan_load(
         &self,
         requested_position_ms: u32,
-        supports_stream_offset: bool,
+        _supports_stream_offset: bool,
     ) -> PlaybackLoadStrategy {
-        PlaybackLoadStrategy::split_by_stream_offset(requested_position_ms, supports_stream_offset)
+        // Keep Android takeover/reload starts local. Some servers expose the
+        // transcodeOffset extension but still serve the stream from the
+        // beginning, and ExoPlayer cannot tell us whether the URL-side offset
+        // was honoured.
+        PlaybackLoadStrategy::exact_local(requested_position_ms)
     }
 
     fn load(&mut self, request: PlaybackBackendLoadRequest) -> Result<(), String> {
@@ -195,7 +199,7 @@ mod tests {
     use super::*;
     use opensubsonic_client::PreparedBinaryRequest;
     use reqwest::header::{HeaderMap, HeaderValue};
-    use url::Url;
+    use reqwest::Url;
 
     #[derive(Default)]
     struct MockAndroidPlaybackControl {
@@ -339,5 +343,20 @@ mod tests {
         let state = bridge.lock().unwrap();
         assert_eq!(state.loaded_media_ids.len(), 2);
         assert_ne!(state.loaded_media_ids[0], state.loaded_media_ids[1]);
+    }
+
+    #[test]
+    fn plan_load_uses_exact_local_start_position() {
+        let bridge =
+            std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
+        let backend = AndroidPlaybackBackend::new(Box::new(bridge));
+
+        assert_eq!(
+            backend.plan_load(7_500, true),
+            PlaybackLoadStrategy {
+                stream_offset_seconds: None,
+                local_start_position_ms: 7_500,
+            }
+        );
     }
 }
