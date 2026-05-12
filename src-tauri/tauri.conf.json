@@ -14,7 +14,11 @@
       {
         "title": "transonic",
         "width": 1200,
-        "height": 800
+        "height": 800,
+        "decorations": false,
+        "minimizable": true,
+        "maximizable": true,
+        "closable": true
       }
     ],
     "security": {

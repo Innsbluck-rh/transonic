@@ -32,7 +32,7 @@ const HomeLayout: ParentComponent = (props) => {
   });
 
   return (
-    <div class='bg-primary-plane border-secondary-border h-dvh w-dvw border-t'>
+    <div class='bg-primary-plane border-secondary-border h-dvh w-dvw'>
       <Show
         when={sessionStore.activeSession}
         fallback={
