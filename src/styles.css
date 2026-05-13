@@ -161,6 +161,45 @@
     @apply hover:text-accent active:text-accent overflow-hidden rounded-md border-none bg-transparent;
   }
 
+  .song-item {
+    --song-item-leading-color: var(--color-primary-text);
+    --song-item-title-color: var(--color-primary-text);
+    --song-item-meta-color: var(--color-secondary-text);
+  }
+
+  .song-item:hover {
+    @apply bg-primary-hover;
+  }
+
+  .song-item[data-selected='true'],
+  .song-item[data-selected='true']:hover {
+    @apply bg-primary-selected;
+  }
+
+  .song-item[data-current='true'],
+  .song-item[data-current='true']:hover {
+    @apply bg-primary-playing;
+    --song-item-leading-color: var(--color-primary-on-playing);
+    --song-item-title-color: var(--color-primary-on-playing);
+    --song-item-meta-color: var(--color-primary-on-playing);
+  }
+
+  .song-item-leading {
+    color: var(--song-item-leading-color);
+  }
+
+  .song-item-title {
+    color: var(--song-item-title-color);
+  }
+
+  .song-item-meta {
+    color: var(--song-item-meta-color);
+  }
+
+  .song-item[data-current='true'] .song-item-title {
+    @apply font-bold;
+  }
+
   .home-surface-root {
     @apply bg-primary-surface flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
   }

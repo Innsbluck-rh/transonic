@@ -1,6 +1,7 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, For, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
+import { resolveSongItemConditions, songItemConditionAttrs } from '~/features/items/SongItemConditions';
 import { buildSongMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { usePlayback } from '~/features/playback/usePlayback';
@@ -38,51 +39,33 @@ const SongList: Component<SongListProps> = (props) => {
               autoPlay: true,
             });
           };
-
-          const isPlaying = () => playbackStore.status?.currentSongId === song.id;
+          const conditions = () =>
+            resolveSongItemConditions({
+              playbackStatus: playbackStore.status,
+              songId: song.id,
+            });
 
           return (
             <div
-              class='group ripple hover:bg-primary-hover flex w-full cursor-pointer flex-row items-center overflow-x-hidden px-4 py-3'
-              classList={{
-                'bg-primary-playing': isPlaying(),
-              }}
+              class='song-item ripple flex w-full cursor-pointer flex-row items-center overflow-x-hidden px-4 py-3'
               onClick={onClickEntry}
+              {...songItemConditionAttrs(conditions())}
               {...contextMenuProps}
             >
-              <div class='group-hover:text-primary-text flex w-10 flex-row items-start'>
+              <div class='flex w-10 flex-row items-start'>
                 <Show
-                  when={!isPlaying()}
-                  fallback={
-                    <Icon
-                      class='group-hover:text-primary-text text-primary-on-playing -ml-0.5 w-fit scale-125 text-xs'
-                      icon='material-symbols:play-arrow'
-                    />
-                  }
+                  when={!conditions().current}
+                  fallback={<Icon class='song-item-leading -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />}
                 >
-                  <p class='group-hover:text-primary-text archivo text-xs font-bold'>{song.track || '?'}</p>
+                  <p class='song-item-leading archivo text-xs font-bold'>{song.track || '?'}</p>
                 </Show>
               </div>
 
-              <p
-                class='group-hover:text-primary-text min-w-0 flex-1 truncate text-sm'
-                classList={{
-                  'text-primary-on-playing font-bold': isPlaying(),
-                }}
-                title={song.title}
-              >
+              <p class='song-item-title min-w-0 flex-1 truncate text-sm' title={song.title}>
                 {song.title}
               </p>
 
-              <p
-                class='archivo group-hover:text-secondary-text text-xs'
-                classList={{
-                  'text-secondary-text': !isPlaying(),
-                  'text-primary-on-playing': isPlaying(),
-                }}
-              >
-                {formatCompactDuration(song.duration ?? 0)}
-              </p>
+              <p class='song-item-meta archivo text-xs'>{formatCompactDuration(song.duration ?? 0)}</p>
             </div>
           );
         }}
