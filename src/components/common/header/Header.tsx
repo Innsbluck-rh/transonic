@@ -51,7 +51,7 @@ const Header: Component<HeaderProps> = (props) => {
   });
 
   return (
-    <div class='bg-primary-plane border-primary-border flex h-12 flex-row items-center border-b px-1.5' data-tauri-drag-region>
+    <div class='bg-primary-plane border-primary-border flex h-10 flex-row items-center border-b px-1.5 lg:h-12' data-tauri-drag-region>
       <Show when={props.titleHref} fallback={<Title>{props.title ?? 'Transonic'}</Title>}>
         <Title class='cursor-pointer' onClick={() => navigate(props.titleHref!)}>
           {props.title ?? 'Transonic'}
