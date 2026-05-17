@@ -4,8 +4,11 @@ import { commands, type ConnectServerProfileRequest, type ConnectServerProfileRe
 import AuthForm, { AuthFormData } from '~/components/auth/AuthForm';
 import ErrorMsg from '~/components/common/ErrorMsg';
 import Header from '~/components/common/header/Header';
+import RouteHeader from '~/components/common/RouteHeader';
+import SPHeader from '~/components/sp/SPHeader';
 import { resolveHomeRoute } from '~/features/navigation/routes';
 import { setSessionStore } from '~/stores/SessionStore';
+import { isSP } from '~/utils/isSP';
 
 function formatFailureMsg(result: ConnectServerProfileResult) {
   switch (result.status) {
@@ -88,8 +91,11 @@ function InitLogin() {
 
   return (
     <div class='flex min-h-0 w-full flex-1 flex-col'>
-      <Header title='Login to server' shouldShowProfiles={false} />
-      <div class='bg-primary-surface flex h-full w-full flex-col items-center justify-center gap-3 p-8'>
+      <Show when={!isSP()} fallback={<SPHeader />}>
+        <Header title='Login to server' shouldShowProfiles={false} />
+      </Show>
+      <RouteHeader title={'Login'} />
+      <div class='bg-primary-surface flex h-full w-full flex-col gap-3 p-4'>
         <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
 
         <Show when={submitError()}>

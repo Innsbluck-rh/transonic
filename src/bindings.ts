@@ -179,6 +179,14 @@ async getCoverArt(payload: CoverArtRequest) : Promise<Result<CoverArtResponse, s
     else return { status: "error", error: e  as any };
 }
 },
+async getCoverArtCached(payload: CoverArtRequest) : Promise<Result<CoverArtResponse | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_cover_art_cached", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getCoverArtCacheStatus() : Promise<Result<CoverArtCacheStatus, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_cover_art_cache_status") };
@@ -368,7 +376,7 @@ export type ConnectServerProfileRequest = { profileId: string | null; displayNam
 export type ConnectServerProfileResult = { status: "connected"; activeSession: ActiveSession; profiles: SavedProfileSummary[] } | { status: "auth_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "network_error"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "server_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "unsupported_auth"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] }
 export type ConnectSettings = { enabled?: boolean; useSubsonicServerHost?: boolean; connectServerHost?: string | null; connectServerPort?: number; deviceId?: string; deviceName?: string | null; allowInsecureConnectServer?: boolean }
 export type CoverArtCacheStatus = { profileId: string | null; cacheDir: string; entryCount: number; fileCount: number; totalBytes: number; ttlSeconds: number }
-export type CoverArtRequest = { profileId: string; coverArtId: string; size: number | null }
+export type CoverArtRequest = { profileId: string; coverArtId: string; size: number | null; cachedFallbackSizes?: number[] }
 export type CoverArtResponse = { localPath: string }
 export type FolderStructureAlbumItem = { id: string; name: string; artist: string | null; coverArtId: string | null; year: number | null }
 export type FolderStructureAlbumSongsRequest = { libraryId: string; nodeId: string; albumId: string }

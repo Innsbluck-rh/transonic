@@ -74,7 +74,9 @@ const QueueList: Component<QueueListProps> = (props) => {
 
   onCleanup(() => coverArtObserver?.disconnect());
 
-  const coverArtMap = useCoverArtMap(requestedCoverArtIds, CoverArtSizes.sm);
+  const coverArtMap = useCoverArtMap(requestedCoverArtIds, CoverArtSizes.sm, {
+    cachedFallbackSizes: [CoverArtSizes.lg, CoverArtSizes.md],
+  });
 
   return (
     <div class='flex w-full flex-col'>
@@ -155,10 +157,10 @@ const QueueList: Component<QueueListProps> = (props) => {
               </Show>
 
               <div class='flex min-w-0 flex-1 flex-col gap-0'>
-                <p class='song-item-title text-md truncate font-bold' title={entry.title}>
+                <p class='song-item-title archivo text-md truncate font-bold' title={entry.title}>
                   {entry.title}
                 </p>
-                <p class='song-item-meta truncate text-[10px]' title={entry.artist ?? '[unknown artist]'}>
+                <p class='song-item-meta archivo truncate text-[11px]' title={entry.artist ?? '[unknown artist]'}>
                   {entry.artist}
                 </p>
               </div>

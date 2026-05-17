@@ -1,7 +1,7 @@
-import { type Accessor, createMemo, createResource } from 'solid-js';
+import { createMemo, createResource, type Accessor } from 'solid-js';
 import { sessionStore } from '~/stores/SessionStore';
 import { CoverArtSizes } from './CoverArtSizes';
-import { fetchCoverArtAssetUrl } from './service';
+import { fetchCoverArtAssetUrl, type CoverArtResourceRequest } from './service';
 
 export interface CoverArtState {
   /** The resolved asset URL. `undefined` while loading or when no coverArtId is provided; `null` when the fetch failed. */
@@ -10,13 +10,21 @@ export interface CoverArtState {
   loading: Accessor<boolean>;
 }
 
-export function useCoverArt(coverArtId: Accessor<string | null | undefined>, size: number = CoverArtSizes.md): CoverArtState {
+export interface CoverArtOptions {
+  cachedFallbackSizes?: CoverArtResourceRequest['cachedFallbackSizes'];
+}
+
+export function useCoverArt(
+  coverArtId: Accessor<string | null | undefined>,
+  size: number = CoverArtSizes.md,
+  options: CoverArtOptions = {}
+): CoverArtState {
   const request = createMemo(() => {
     const id = coverArtId();
     if (!id) return null;
     const profileId = sessionStore.activeSession?.profileId;
     if (!profileId) return null;
-    return { profileId, coverArtId: id, size };
+    return { profileId, coverArtId: id, size, cachedFallbackSizes: options.cachedFallbackSizes };
   });
 
   const [coverArt] = createResource(request, fetchCoverArtAssetUrl);

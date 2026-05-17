@@ -142,6 +142,36 @@ impl CoverArtCache {
         }
     }
 
+    pub fn resolve_cached_cover_art(
+        &self,
+        profile_id: &str,
+        cover_art_id: &str,
+        size: Option<u32>,
+        cached_fallback_sizes: &[u32],
+    ) -> Result<Option<PathBuf>, String> {
+        let exact_key = CacheKey {
+            profile_id: profile_id.to_string(),
+            cover_art_id: cover_art_id.to_string(),
+            size,
+        };
+        if let Some(entry) = self.read_fresh_entry(&exact_key)? {
+            return Ok(Some(entry.path));
+        }
+
+        for fallback_size in larger_fallback_sizes(cached_fallback_sizes, size) {
+            let fallback_key = CacheKey {
+                profile_id: profile_id.to_string(),
+                cover_art_id: cover_art_id.to_string(),
+                size: Some(fallback_size),
+            };
+            if let Some(entry) = self.read_fresh_entry(&fallback_key)? {
+                return Ok(Some(entry.path));
+            }
+        }
+
+        Ok(None)
+    }
+
     pub fn remove_profile(&self, profile_id: &str) -> Result<(), String> {
         let profile_dir = self.inner.root_dir.join(profile_id);
         match fs::remove_dir_all(&profile_dir) {
@@ -212,6 +242,10 @@ impl CoverArtCache {
             path: art_path,
             is_fresh,
         }))
+    }
+
+    fn read_fresh_entry(&self, cache_key: &CacheKey) -> Result<Option<CacheEntry>, String> {
+        Ok(self.read_entry(cache_key)?.filter(|entry| entry.is_fresh))
     }
 
     fn fallback_entry_without_metadata(
@@ -544,6 +578,21 @@ fn size_segment(size: Option<u32>) -> String {
         .unwrap_or_else(|| "full".to_string())
 }
 
+fn larger_fallback_sizes(fallback_sizes: &[u32], requested_size: Option<u32>) -> Vec<u32> {
+    let Some(requested_size) = requested_size else {
+        return Vec::new();
+    };
+
+    let mut sizes = Vec::new();
+    for &fallback_size in fallback_sizes {
+        if fallback_size <= requested_size || sizes.contains(&fallback_size) {
+            continue;
+        }
+        sizes.push(fallback_size);
+    }
+    sizes
+}
+
 fn current_time_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -747,6 +796,152 @@ mod tests {
         assert_ne!(small_path, large_path);
         small_mock.assert();
         large_mock.assert();
+    }
+
+    #[test]
+    fn cached_lookup_returns_exact_fresh_entry_without_fetching() {
+        let temp_dir = tempdir().unwrap();
+        let cache = CoverArtCache::with_ttl(temp_dir.path().to_path_buf(), Duration::from_secs(60));
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/rest/getCoverArt.view")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("id".into(), "cover-1".into()),
+                Matcher::UrlEncoded("size".into(), "64".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "image/png")
+            .with_body("png-data")
+            .expect(1)
+            .create();
+        let client = create_client(&server);
+        let cached_path = cache
+            .resolve_cover_art(&client, "profile-a", "cover-1", Some(64))
+            .unwrap();
+
+        let exact_path = cache
+            .resolve_cached_cover_art("profile-a", "cover-1", Some(64), &[512])
+            .unwrap();
+
+        assert_eq!(exact_path.as_ref(), Some(&cached_path));
+        mock.assert();
+    }
+
+    #[test]
+    fn cached_lookup_can_return_allowed_larger_variant() {
+        let temp_dir = tempdir().unwrap();
+        let cache = CoverArtCache::with_ttl(temp_dir.path().to_path_buf(), Duration::from_secs(60));
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/rest/getCoverArt.view")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("id".into(), "cover-1".into()),
+                Matcher::UrlEncoded("size".into(), "512".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "image/png")
+            .with_body("large")
+            .expect(1)
+            .create();
+        let client = create_client(&server);
+        let large_path = cache
+            .resolve_cover_art(&client, "profile-a", "cover-1", Some(512))
+            .unwrap();
+
+        let small_path = cache
+            .resolve_cached_cover_art("profile-a", "cover-1", Some(48), &[512, 224])
+            .unwrap();
+
+        assert_eq!(small_path.as_ref(), Some(&large_path));
+        mock.assert();
+    }
+
+    #[test]
+    fn cached_lookup_does_not_fallback_when_sizes_are_not_allowed() {
+        let temp_dir = tempdir().unwrap();
+        let cache = CoverArtCache::with_ttl(temp_dir.path().to_path_buf(), Duration::from_secs(60));
+        let mut server = Server::new();
+        let mock = server
+            .mock("GET", "/rest/getCoverArt.view")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("id".into(), "cover-1".into()),
+                Matcher::UrlEncoded("size".into(), "512".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "image/png")
+            .with_body("large")
+            .expect(1)
+            .create();
+        let client = create_client(&server);
+        cache
+            .resolve_cover_art(&client, "profile-a", "cover-1", Some(512))
+            .unwrap();
+
+        let small_path = cache
+            .resolve_cached_cover_art("profile-a", "cover-1", Some(48), &[])
+            .unwrap();
+
+        assert_eq!(small_path, None);
+        mock.assert();
+    }
+
+    #[test]
+    fn cached_lookup_skips_stale_fallback_and_requested_size_can_refresh() {
+        let temp_dir = tempdir().unwrap();
+        let cache = CoverArtCache::with_ttl(temp_dir.path().to_path_buf(), Duration::from_secs(60));
+        let mut server = Server::new();
+        let large_mock = server
+            .mock("GET", "/rest/getCoverArt.view")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("id".into(), "cover-1".into()),
+                Matcher::UrlEncoded("size".into(), "512".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "image/png")
+            .with_body("large")
+            .expect(1)
+            .create();
+        let client = create_client(&server);
+        let large_path = cache
+            .resolve_cover_art(&client, "profile-a", "cover-1", Some(512))
+            .unwrap();
+        let metadata_path = large_path.parent().unwrap().join(METADATA_FILE_NAME);
+        let stale_metadata = CacheMetadata {
+            file_name: large_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string(),
+            content_type: "image/png".to_string(),
+            updated_at_ms: 0,
+        };
+        fs::write(metadata_path, serde_json::to_vec(&stale_metadata).unwrap()).unwrap();
+        large_mock.assert();
+
+        let cached_path = cache
+            .resolve_cached_cover_art("profile-a", "cover-1", Some(48), &[512])
+            .unwrap();
+
+        assert_eq!(cached_path, None);
+
+        let small_mock = server
+            .mock("GET", "/rest/getCoverArt.view")
+            .match_query(Matcher::AllOf(vec![
+                Matcher::UrlEncoded("id".into(), "cover-1".into()),
+                Matcher::UrlEncoded("size".into(), "48".into()),
+            ]))
+            .with_status(200)
+            .with_header("content-type", "image/png")
+            .with_body("small")
+            .expect(1)
+            .create();
+
+        let small_path = cache
+            .resolve_cover_art(&client, "profile-a", "cover-1", Some(48))
+            .unwrap();
+
+        assert_ne!(small_path, large_path);
+        small_mock.assert();
     }
 
     #[test]

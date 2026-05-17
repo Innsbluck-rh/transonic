@@ -47,7 +47,7 @@ const SongList: Component<SongListProps> = (props) => {
 
           return (
             <div
-              class='song-item ripple flex w-full cursor-pointer flex-row items-center overflow-x-hidden px-4 py-3'
+              class='song-item ripple flex w-full cursor-pointer flex-row items-center overflow-x-hidden px-4 py-3.5'
               onClick={onClickEntry}
               {...songItemConditionAttrs(conditions())}
               {...contextMenuProps}

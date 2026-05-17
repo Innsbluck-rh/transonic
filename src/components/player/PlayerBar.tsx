@@ -1,6 +1,7 @@
 import { Component, createMemo, JSX, Match, Show, Switch } from 'solid-js';
 import { type SongResponse } from '~/bindings';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
+import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
@@ -49,7 +50,9 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
     return isInterrupted() ? `${artist} ${playbackInterruptLabel()}` : artist;
   });
 
-  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId);
+  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.md, {
+    cachedFallbackSizes: [CoverArtSizes.lg],
+  });
   const restAreaClass = createMemo(() => props.restAreaProps?.class);
 
   const onClickRestArea: JSX.EventHandlerUnion<HTMLDivElement, MouseEvent> = (event) => {

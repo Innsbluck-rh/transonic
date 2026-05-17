@@ -1,6 +1,6 @@
-import { type Accessor, createEffect, createMemo, createSignal } from 'solid-js';
+import { createEffect, createMemo, createSignal, type Accessor } from 'solid-js';
 import { sessionStore } from '~/stores/SessionStore';
-import { fetchCoverArtAssetUrl } from './service';
+import { fetchCoverArtAssetUrl, type CoverArtResourceRequest } from './service';
 
 export type CoverArtAssetMap = Record<string, string | null | undefined>;
 
@@ -25,11 +25,28 @@ function normalizeCoverArtIds(ids: readonly (string | null | undefined)[]): stri
   return [...uniqueIds];
 }
 
-function coverArtRequestKey(profileId: string, coverArtId: string, size: number): string {
-  return `${profileId}\0${coverArtId}\0${size}`;
+export interface CoverArtMapOptions {
+  cachedFallbackSizes?: CoverArtResourceRequest['cachedFallbackSizes'];
 }
 
-export function useCoverArtMap(coverArtIds: Accessor<readonly (string | null | undefined)[]>, size: number): CoverArtMapState {
+function cachedFallbackKey(cachedFallbackSizes: CoverArtResourceRequest['cachedFallbackSizes']): string {
+  return [...(cachedFallbackSizes ?? [])].join(',');
+}
+
+function coverArtRequestKey(
+  profileId: string,
+  coverArtId: string,
+  size: number,
+  cachedFallbackSizes: CoverArtResourceRequest['cachedFallbackSizes']
+): string {
+  return `${profileId}\0${coverArtId}\0${size}\0${cachedFallbackKey(cachedFallbackSizes)}`;
+}
+
+export function useCoverArtMap(
+  coverArtIds: Accessor<readonly (string | null | undefined)[]>,
+  size: number,
+  options: CoverArtMapOptions = {}
+): CoverArtMapState {
   const [assets, setAssets] = createSignal<CoverArtAssetMap>({});
   const [loadingIds, setLoadingIds] = createSignal<Set<string>>(new Set());
   const resolvedAssets = new Map<string, string | null>();
@@ -46,7 +63,7 @@ export function useCoverArtMap(coverArtIds: Accessor<readonly (string | null | u
 
     return {
       profileId,
-      scopeKey: `${profileId}\0${size}`,
+      scopeKey: `${profileId}\0${size}\0${cachedFallbackKey(options.cachedFallbackSizes)}`,
       coverArtIds: normalizeCoverArtIds(coverArtIds()),
     };
   });
@@ -79,7 +96,7 @@ export function useCoverArtMap(coverArtIds: Accessor<readonly (string | null | u
     setAssets((prev) => {
       const nextAssets: CoverArtAssetMap = {};
       for (const id of ids) {
-        const key = coverArtRequestKey(profileId, id, size);
+        const key = coverArtRequestKey(profileId, id, size, options.cachedFallbackSizes);
         nextAssets[id] = resolvedAssets.has(key) ? resolvedAssets.get(key) : prev[id];
       }
       return nextAssets;
@@ -87,7 +104,7 @@ export function useCoverArtMap(coverArtIds: Accessor<readonly (string | null | u
     setLoadingIds((prev) => new Set([...prev].filter((id) => activeIds.has(id))));
 
     for (const id of ids) {
-      const key = coverArtRequestKey(profileId, id, size);
+      const key = coverArtRequestKey(profileId, id, size, options.cachedFallbackSizes);
       if (resolvedAssets.has(key)) {
         continue;
       }
@@ -97,7 +114,7 @@ export function useCoverArtMap(coverArtIds: Accessor<readonly (string | null | u
 
       inFlightKeys.add(key);
       setLoadingIds((prev) => new Set(prev).add(id));
-      fetchCoverArtAssetUrl({ profileId, coverArtId: id, size })
+      fetchCoverArtAssetUrl({ profileId, coverArtId: id, size, cachedFallbackSizes: options.cachedFallbackSizes })
         .then((assetUrl) => {
           requestedKeys.add(key);
           resolvedAssets.set(key, assetUrl);

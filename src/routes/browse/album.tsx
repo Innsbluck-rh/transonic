@@ -93,7 +93,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
     <div class='home-surface-root w-full gap-0 p-0'>
       <div class='bg-primary-inner-surface relative z-10 flex w-full flex-col items-center px-3.5 pt-5 pb-0 lg:flex-row lg:pt-4 lg:pb-4'>
         <div
-          class='group border-secondary-border pointer-events-auto relative z-10 h-auto w-52 max-w-1/2 border shadow-xl lg:w-42'
+          class='group border-secondary-border pointer-events-auto relative z-10 h-auto border shadow-xl'
           onClick={() => {
             const albumId = album()?.id;
             if (albumId) playAlbum(albumId);
@@ -116,7 +116,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           />
         </div>
 
-        <div class='mt-4 flex w-full flex-col items-start lg:mt-4 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
+        <div class='mt-8 flex w-full flex-col items-start lg:mt-4 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
           <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo text-2xl font-black tracking-tighter lg:mb-1 lg:text-3xl' />
           <MarqueeParagraph
             onClick={() => {

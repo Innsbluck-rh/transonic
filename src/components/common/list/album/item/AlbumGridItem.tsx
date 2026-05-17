@@ -1,9 +1,10 @@
 import { Component, Show } from 'solid-js';
 import type { AlbumListItem, ArtistAlbum, FolderStructureAlbumItem } from '~/bindings';
+import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
+import { useCoverArt } from '~/features/albums/useCoverArt';
 import { buildAlbumMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { usePlayback } from '~/features/playback/usePlayback';
-import AlbumCover from './AlbumCover';
 
 export type AlbumItem = AlbumListItem | ArtistAlbum | FolderStructureAlbumItem;
 
@@ -11,6 +12,7 @@ interface AlbumGridItemProps {
   class?: string;
   album: AlbumItem;
   noArtistName?: boolean;
+  inline?: boolean;
   onClick?: (e: MouseEvent) => void;
   onDblClick?: (e: MouseEvent) => void;
   onArtClick?: (e: MouseEvent) => void;
@@ -30,6 +32,10 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
   );
   const isClickable = !!(props.onClick || props.onDblClick || props.onArtClick || props.onArtDblClick);
 
+  const { src, loading } = useCoverArt(() => props.album.coverArtId ?? null, CoverArtSizes.md, {
+    cachedFallbackSizes: [CoverArtSizes.lg],
+  });
+
   return (
     <div
       class={`group flex shrink-0 flex-col ${props.class}`}
@@ -41,32 +47,41 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
       }}
     >
       <div
-        class='ripple relative'
+        class='ripple border-secondary-border relative aspect-square h-full w-full border'
         classList={{
           'cursor-pointer': isClickable,
         }}
         onClick={(e) => props.onClick?.(e)}
         onDblClick={(e) => props.onDblClick?.(e)}
       >
-        <AlbumCover albumName={props.album.name ?? '[unknown]'} coverArtId={props.album.coverArtId} year={props.album.year} />
-        {/* <div
-          class='absolute top-0 right-0 bottom-0 left-0 hidden bg-[#00000000]'
-          classList={{
-            'group-hover:flex': isClickable,
-          }}
-        >
-        </div> */}
-      </div>
-      <div class='mt-1 flex flex-col gap-0'>
-        <p class='text-md truncate font-bold' title={props.album.name ?? '[unknown]'}>
-          {props.album.name}
-        </p>
-        <Show when={!props.noArtistName}>
-          <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>
-            {props.album.artist ?? 'unknown artist'}
-          </p>
+        <Show when={src()} fallback={<div class='border-secondary-border h-full w-full border' />}>
+          {(assetUrl) => <img src={assetUrl()} class='h-full w-full object-cover' loading='lazy' decoding='async' />}
+        </Show>
+        <Show when={props.inline}>
+          <div class='absolute right-1 bottom-1 left-1 flex flex-col gap-0.5 overflow-hidden'>
+            <p class='bg-primary-surface/75 inline w-fit rounded p-1 text-xs font-bold' title={props.album.name ?? '[unknown]'}>
+              {props.album.name}
+            </p>
+            <Show when={!props.noArtistName}>
+              <span class='bg-primary-surface/75 inline w-fit truncate rounded p-1 text-[10px] leading-3' title={props.album.artist ?? undefined}>
+                {props.album.artist ?? 'unknown artist'}
+              </span>
+            </Show>
+          </div>
         </Show>
       </div>
+      <Show when={!props.inline}>
+        <div class='mt-1 flex flex-col'>
+          <p class='text-md truncate font-bold' title={props.album.name ?? '[unknown]'}>
+            {props.album.name}
+          </p>
+          <Show when={!props.noArtistName}>
+            <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>
+              {props.album.artist ?? 'unknown artist'}
+            </p>
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 };

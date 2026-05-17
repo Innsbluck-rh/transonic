@@ -4,7 +4,7 @@ import { MetaProvider } from '@solidjs/meta';
 import { Navigate, Route, Router } from '@solidjs/router';
 import PCContextMenu from './components/menu/PCContextMenu';
 import SPBottomContextMenu from './components/menu/SPBottomContextMenu';
-import { MOBILE_HOME_ROUTE, resolveHomeRoute } from './features/navigation/routes';
+import { resolveHomeRoute } from './features/navigation/routes';
 import BrowseAlbum from './routes/browse/album';
 import BrowseArtist from './routes/browse/artist';
 import BrowseFolderStructure from './routes/browse/folder_structure';
@@ -48,7 +48,7 @@ export default function App() {
             <Route path='/browse/album/:id' component={BrowseAlbum} />
           </Route>
           <Route component={HomeLayoutSP}>
-            <Route path='/sp' component={() => <Navigate href={MOBILE_HOME_ROUTE} />} />
+            <Route path='/sp' component={Home} />
             <Route path='/sp/index' component={SPBrowseIndex} />
             <Route path='/sp/setting' component={SettingsRoute} />
             <Route path='/sp/artists/:id' component={SPBrowseArtist} />

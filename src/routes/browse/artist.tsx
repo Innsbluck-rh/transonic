@@ -1,25 +1,27 @@
+import { Icon } from '@iconify-icon/solid';
 import { useParams, type RouteSectionProps } from '@solidjs/router';
-import { createEffect, createMemo, createResource, createSignal, Show } from 'solid-js';
+import { createEffect, createMemo, createResource, createSignal, Match, Show, Switch } from 'solid-js';
 import { commands, type ArtistInfo2Response, type ArtistResponse } from '~/bindings';
 import Heading3 from '~/components/common/Heading3';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
+import AlbumList from '~/components/common/list/album/AlbumList';
 import { AlbumItem } from '~/components/common/list/album/item/AlbumGridItem';
 import { type BrowseListItem } from '~/components/common/list/index/BrowseList';
 import LoadCircle from '~/components/common/LoadCircle';
+import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { fetchArtistImageAssetUrl } from '~/features/artist/service';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
-import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
+import { setTempStore, tempStore } from '~/stores/TempStore';
 
 const SIMILAR_ARTIST_COUNT = 8;
 
 function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
   const params = useParams();
   const navigate = useSPNavigate();
-  const { insertAfterCurrent, appendToQueue } = usePlayback();
 
   const [artist, setArtist] = createSignal<ArtistResponse | null>(null);
   const [artistInfo, setArtistInfo] = createSignal<ArtistInfo2Response | null>(null);
@@ -54,7 +56,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
     const profileId = sessionStore.activeSession?.profileId;
     if (!coverArtId || !profileId) return null;
 
-    return { type: 'coverArt' as const, profileId, coverArtId, size: ARTIST_COVER_ART_SIZE };
+    return { type: 'coverArt' as const, profileId, coverArtId, size: CoverArtSizes.lg };
   });
 
   const [artistImage] = createResource(artistImageRequest, (req) => {
@@ -185,17 +187,40 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
               <div class='z-20 flex flex-col'>
                 <div class='border-secondary-border bg-primary-surface sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
                   <Heading3 class='text-secondary-text'>albums</Heading3>
-                </div>
-                <div class='p-3'>
-                  <AlbumGrid
-                    albums={albums()}
-                    noArtistName={true}
-                    emptyMessage='No ID3 albums returned for this artist.'
-                    onItemClick={(album) => {
-                      navigate(resolveAlbumRoute(album.id));
+                  <div class='flex-1' />
+                  <Icon
+                    icon={tempStore.albumMode === 'grid' ? 'pixelarticons:grid-2x2-2' : 'pixelarticons:bulletlist-sharp'}
+                    class='cursor-pointer p-0.5 text-[15px]'
+                    onClick={() => {
+                      setTempStore('albumMode', tempStore.albumMode === 'grid' ? 'list' : 'grid');
                     }}
                   />
                 </div>
+                <Switch>
+                  <Match when={tempStore.albumMode === 'grid'}>
+                    <div class='p-2'>
+                      <AlbumGrid
+                        albums={albums()}
+                        inline={true}
+                        noArtistName={true}
+                        emptyMessage='No ID3 albums returned for this artist.'
+                        onItemClick={(album) => {
+                          navigate(resolveAlbumRoute(album.id));
+                        }}
+                      />
+                    </div>
+                  </Match>
+                  <Match when={tempStore.albumMode === 'list'}>
+                    <AlbumList
+                      albums={albums()}
+                      noArtistName={true}
+                      emptyMessage='No ID3 albums returned for this artist.'
+                      onItemClick={(album) => {
+                        navigate(resolveAlbumRoute(album.id));
+                      }}
+                    />
+                  </Match>
+                </Switch>
               </div>
             </div>
           )}

@@ -1,9 +1,9 @@
 import { useNavigate } from '@solidjs/router';
 import { createSignal, For, onMount, Show } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
-import Heading1 from '~/components/common/Heading1';
 import Heading2 from '~/components/common/Heading2';
 import AlbumHorizontalList from '~/components/common/list/album/AlbumHorizontalList';
+import RouteHeader from '~/components/common/RouteHeader';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
@@ -90,8 +90,9 @@ function Home() {
         </div>
       }
     >
-      <div class='home-surface-root'>
-        <Heading1 class='p-3'>Hello.</Heading1>
+      <div class='home-surface-root p-0'>
+        <RouteHeader title='Home' />
+        <div class='mt-2' />
 
         <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 

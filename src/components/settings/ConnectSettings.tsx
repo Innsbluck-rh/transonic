@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { commands } from '~/bindings';
+import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArtMap } from '~/features/albums/useCoverArtMap';
 import {
   connectServerHostFromSubsonic,
@@ -75,7 +76,8 @@ function ConnectSettings() {
       connectStore.devices
         .map((entry) => (entry.playback ? currentSong(entry.playback)?.coverArtId : null))
         .filter((coverArtId): coverArtId is string => typeof coverArtId === 'string' && coverArtId.length > 0),
-    80
+    CoverArtSizes.sm,
+    { cachedFallbackSizes: [CoverArtSizes.lg, CoverArtSizes.md] }
   );
 
   onMount(() => {

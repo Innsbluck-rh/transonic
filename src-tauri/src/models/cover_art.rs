@@ -6,6 +6,8 @@ pub struct CoverArtRequest {
     pub profile_id: String,
     pub cover_art_id: String,
     pub size: Option<u32>,
+    #[serde(default)]
+    pub cached_fallback_sizes: Vec<u32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]

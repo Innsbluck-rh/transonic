@@ -23,7 +23,9 @@ pub use connect::{
     connect_get_devices_with_playback, connect_get_runtime_status, connect_pause_device_playback,
     connect_takeover_playback,
 };
-pub use cover_art::{clear_cover_art_cache, get_cover_art, get_cover_art_cache_status};
+pub use cover_art::{
+    clear_cover_art_cache, get_cover_art, get_cover_art_cache_status, get_cover_art_cached,
+};
 pub use index::artist::get_artist_indexes;
 pub use index::folder_structure::{get_folder_structure_roots, get_music_folders};
 pub use playback::{
@@ -75,8 +77,8 @@ pub use connect::{
 #[doc(hidden)]
 pub use cover_art::{
     __cmd__clear_cover_art_cache, __cmd__get_cover_art, __cmd__get_cover_art_cache_status,
-    __specta__fn__clear_cover_art_cache, __specta__fn__get_cover_art,
-    __specta__fn__get_cover_art_cache_status,
+    __cmd__get_cover_art_cached, __specta__fn__clear_cover_art_cache, __specta__fn__get_cover_art,
+    __specta__fn__get_cover_art_cache_status, __specta__fn__get_cover_art_cached,
 };
 #[doc(hidden)]
 pub use index::artist::{__cmd__get_artist_indexes, __specta__fn__get_artist_indexes};

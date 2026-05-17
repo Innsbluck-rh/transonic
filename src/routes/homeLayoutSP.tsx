@@ -1,5 +1,6 @@
 import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import { commands, events } from '~/bindings';
+import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
 import SPExpandablePlayerBar, { openPlayerBar } from '~/components/sp/SPExpandablePlayerBar';
 import SPHeader from '~/components/sp/SPHeader';
 import { startPlaybackStateSync } from '~/features/playback/service';
@@ -63,7 +64,7 @@ const HomeLayoutSP: ParentComponent = (props) => {
       <div class='flex min-h-0 flex-1 flex-col'>
         <SPHeader />
 
-        <div class='relative flex min-h-0 flex-1 flex-col overflow-hidden'>
+        <div class='bg-primary-surface relative flex min-h-0 flex-1 flex-col overflow-hidden'>
           <div
             class='absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden'
             style={{
@@ -75,6 +76,8 @@ const HomeLayoutSP: ParentComponent = (props) => {
           </div>
           <SPExpandablePlayerBar />
         </div>
+
+        <SPBottomNavigation />
       </div>
     </Show>
   );

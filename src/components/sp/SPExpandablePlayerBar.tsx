@@ -303,7 +303,7 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
 
       <div
         ref={collapsedBarContainerRef}
-        class='absolute right-0 bottom-0 left-0 z-30 p-2 pb-5'
+        class='absolute right-0 bottom-0 left-0 z-30 p-2 pb-4'
         style={{
           'view-transition-name': 'sp-player-bar',
           opacity: `${clamp(1 - progress() * 1.1, 0, 1)}`,

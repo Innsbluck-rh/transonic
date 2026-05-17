@@ -106,7 +106,7 @@ const AuthForm: Component<AuthFormProps> = (props) => {
 
   return (
     <form
-      class='flex w-full flex-col gap-3'
+      class='flex w-full flex-col gap-1'
       onSubmit={(e) => {
         e.preventDefault();
         props.onSubmit({
@@ -118,95 +118,103 @@ const AuthForm: Component<AuthFormProps> = (props) => {
         });
       }}
     >
-      <div class='grid grid-cols-[auto_1fr] gap-x-3 gap-y-3'>
-        <label class='contents items-center'>
-          <span>Display name</span>
+      <label class='flex flex-col'>
+        <span>Display name</span>
+        <input
+          type='text'
+          class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
+          value={formData.displayName}
+          onInput={(event) => setFormData('displayName', event.currentTarget.value)}
+          placeholder='Navidrome'
+          autocomplete='off'
+        />
+      </label>
+
+      <label class='flex flex-col'>
+        <span>Server URL</span>
+        <div class='grid grid-cols-[minmax(0,1fr)_7rem] gap-2'>
           <input
             type='text'
-            value={formData.displayName}
-            onInput={(event) => setFormData('displayName', event.currentTarget.value)}
-            placeholder='Office Navidrome'
+            class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
+            value={formData.serverBaseUrl}
+            onInput={(event) => setFormData('serverBaseUrl', event.currentTarget.value)}
+            onBlur={(event) => {
+              const split = splitServerBaseUrl(event.currentTarget.value);
+              setFormData('serverBaseUrl', split.serverBaseUrl);
+              if (split.serverPort.length > 0) {
+                setFormData('serverPort', split.serverPort);
+              }
+            }}
+            placeholder='https://your-server.example'
+            autocomplete='url'
+            required
+          />
+          <input
+            class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
+            type='number'
+            min='1'
+            max='65535'
+            value={formData.serverPort}
+            onInput={(event) => setFormData('serverPort', event.currentTarget.value)}
+            placeholder='4533'
             autocomplete='off'
           />
-        </label>
+        </div>
+      </label>
 
-        <label class='contents items-center'>
-          <span>Server URL</span>
-          <div class='grid grid-cols-[minmax(0,1fr)_7rem] gap-2'>
-            <input
-              type='text'
-              value={formData.serverBaseUrl}
-              onInput={(event) => setFormData('serverBaseUrl', event.currentTarget.value)}
-              onBlur={(event) => {
-                const split = splitServerBaseUrl(event.currentTarget.value);
-                setFormData('serverBaseUrl', split.serverBaseUrl);
-                if (split.serverPort.length > 0) {
-                  setFormData('serverPort', split.serverPort);
-                }
-              }}
-              placeholder='https://your-server.example'
-              autocomplete='url'
-              required
-            />
-            <input
-              type='number'
-              min='1'
-              max='65535'
-              value={formData.serverPort}
-              onInput={(event) => setFormData('serverPort', event.currentTarget.value)}
-              placeholder='443'
-              autocomplete='off'
-            />
-          </div>
-        </label>
+      {/*<label class='contents items-center'>
+        <span>Base path</span>
+        <input
+          type='text'
+          class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
+          value={formData.serverPath}
+          onInput={(event) => setFormData('serverPath', event.currentTarget.value)}
+          placeholder='rest'
+          autocomplete='off'
+        />
+      </label>*/}
 
+      <label class='contents items-center'>
+        <span>Auth method</span>
+        <select
+          class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
+          value={formData.authKind}
+          onInput={(event) => setFormData('authKind', event.currentTarget.value as AuthKind)}
+        >
+          <option value='password'>Password token</option>
+          <option value='api_key'>API key</option>
+        </select>
+      </label>
+
+      <Show when={formData.authKind === 'password'}>
         <label class='contents items-center'>
-          <span>Base path</span>
+          <span>Username</span>
           <input
+            class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
             type='text'
-            value={formData.serverPath}
-            onInput={(event) => setFormData('serverPath', event.currentTarget.value)}
-            placeholder='rest'
-            autocomplete='off'
-          />
-        </label>
-
-        <label class='contents items-center'>
-          <span>Auth method</span>
-          <select value={formData.authKind} onInput={(event) => setFormData('authKind', event.currentTarget.value as AuthKind)}>
-            <option value='password'>Password token</option>
-            <option value='api_key'>API key</option>
-          </select>
-        </label>
-
-        <Show when={formData.authKind === 'password'}>
-          <label class='contents items-center'>
-            <span>Username</span>
-            <input
-              type='text'
-              value={formData.username}
-              onInput={(event) => setFormData('username', event.currentTarget.value)}
-              placeholder='demo'
-              autocomplete='username'
-              required
-            />
-          </label>
-        </Show>
-
-        <label class='contents items-center'>
-          <span>{formData.authKind === 'password' ? 'Password' : 'API key'}</span>
-          <input
-            type={formData.authKind === 'password' ? 'password' : 'text'}
-            value={formData.secret}
-            onInput={(event) => setFormData('secret', event.currentTarget.value)}
-            placeholder={formData.authKind === 'password' ? 'Your account password' : 'Paste an OpenSubsonic API key'}
-            autocomplete={formData.authKind === 'password' ? 'current-password' : 'off'}
+            value={formData.username}
+            onInput={(event) => setFormData('username', event.currentTarget.value)}
+            placeholder='demo'
+            autocomplete='username'
             required
           />
         </label>
-      </div>
+      </Show>
 
-      <div class='flex flex-row gap-1'>
+      <label class='contents items-center'>
+        <span>{formData.authKind === 'password' ? 'Password' : 'API key'}</span>
+        <input
+          class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
+          type={formData.authKind === 'password' ? 'password' : 'text'}
+          value={formData.secret}
+          onInput={(event) => setFormData('secret', event.currentTarget.value)}
+          placeholder={formData.authKind === 'password' ? 'Your password' : 'Paste an OpenSubsonic API key'}
+          autocomplete={formData.authKind === 'password' ? 'current-password' : 'off'}
+          required
+        />
+      </label>
+
+      <div class='mt-3 flex flex-row gap-1'>
         <button class='disabled:text-zinc-400' type='submit' disabled={props.busy}>
           {props.busy ? 'Connecting...' : 'Connect'}
         </button>

@@ -132,10 +132,10 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
         </div>
       </div>
 
-      <div class='bg-primary-plane border-secondary-border secondar flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
+      <div class='bg-primary-surface border-secondary-border secondar flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
-      <div ref={setScrollContainerRef} class='flex-1 overflow-y-auto'>
+      <div ref={setScrollContainerRef} class='bg-primary-surface flex-1 overflow-y-auto pb-3'>
         <QueueList queue={queue()} itemRef={setItemRef} />
       </div>
     </div>

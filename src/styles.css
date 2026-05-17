@@ -49,9 +49,9 @@
   --theme-color-primary-on-playing: var(--color-zinc-200);
   --theme-color-primary-hover: var(--color-zinc-200);
   --theme-color-primary-border: rgb(0 0 0 / 0.35);
-  --theme-color-secondary-border: rgb(0 0 0 / 0.15);
-  --theme-color-primary-text: var(--color-zinc-700);
-  --theme-color-secondary-text: var(--color-zinc-500);
+  --theme-color-secondary-border: rgb(0 0 0 / 0.1);
+  --theme-color-primary-text: var(--color-gray-800);
+  --theme-color-secondary-text: var(--color-gray-600);
   --theme-color-sp-nav-space: var(--color-zinc-400);
   --theme-color-accent: var(--color-sky-600);
   --player-bar-height: 0.15rem;
@@ -171,21 +171,29 @@
     --song-item-meta-color: var(--color-secondary-text);
   }
 
-  .song-item:hover {
-    @apply bg-primary-hover;
-  }
-
-  .song-item[data-selected='true'],
-  .song-item[data-selected='true']:hover {
+  .song-item[data-selected='true'] {
     @apply bg-primary-selected;
   }
 
-  .song-item[data-current='true'],
-  .song-item[data-current='true']:hover {
+  .song-item[data-current='true'] {
     @apply bg-primary-playing;
     --song-item-leading-color: var(--color-primary-on-playing);
     --song-item-title-color: var(--color-primary-on-playing);
     --song-item-meta-color: var(--color-primary-on-playing);
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    .song-item:hover {
+      @apply bg-primary-hover;
+    }
+
+    .song-item[data-selected='true']:hover {
+      @apply bg-primary-selected;
+    }
+
+    .song-item[data-current='true']:hover {
+      @apply bg-primary-playing;
+    }
   }
 
   .song-item-leading {
@@ -232,6 +240,22 @@
 }
 
 ::view-transition-new(sp-screen) {
+  animation: none;
+}
+
+::view-transition-group(sp-header),
+::view-transition-group(sp-bottom-navigation) {
+  z-index: 2;
+}
+
+::view-transition-old(sp-header),
+::view-transition-old(sp-bottom-navigation) {
+  opacity: 0;
+  animation: none;
+}
+
+::view-transition-new(sp-header),
+::view-transition-new(sp-bottom-navigation) {
   animation: none;
 }
 
