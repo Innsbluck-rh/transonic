@@ -48,7 +48,7 @@ const ArtistList: Component = () => {
     <Show
       when={!loading()}
       fallback={
-        <div class='my-8 flex justify-self-center'>
+        <div class='my-8 flex self-center justify-self-center'>
           <LoadCircle />
         </div>
       }

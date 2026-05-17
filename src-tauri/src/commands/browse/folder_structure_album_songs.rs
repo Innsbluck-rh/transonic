@@ -105,6 +105,7 @@ impl RawChild {
     }
 
     fn into_song(self) -> SongResponse {
+        let cover_art_id = self.cover_art;
         SongResponse {
             id: self.id.clone(),
             parent_id: self.parent,
@@ -114,7 +115,8 @@ impl RawChild {
             album_id: self.album_id,
             artist: self.artist,
             artist_id: self.artist_id,
-            cover_art_id: self.cover_art,
+            display_cover_art_id: cover_art_id.clone(),
+            cover_art_id,
             track: self.track,
             disc_number: self.disc_number,
             year: self.year,
@@ -223,6 +225,18 @@ where
 
         for directory_id in directories.into_iter().rev() {
             stack.push(directory_id);
+        }
+    }
+
+    let display_cover_art_id = songs.iter().find_map(|song| {
+        song.cover_art_id
+            .as_ref()
+            .filter(|cover_art_id| !cover_art_id.trim().is_empty())
+            .cloned()
+    });
+    if let Some(display_cover_art_id) = display_cover_art_id {
+        for song in &mut songs {
+            song.display_cover_art_id = Some(display_cover_art_id.clone());
         }
     }
 
@@ -362,6 +376,29 @@ mod tests {
         })
     }
 
+    fn folder_song_with_cover(
+        id: &str,
+        album: Option<&str>,
+        album_id: Option<&str>,
+        artist: Option<&str>,
+        year: Option<u32>,
+        track: Option<u32>,
+        cover_art: Option<&str>,
+    ) -> serde_json::Value {
+        json!({
+            "id": id,
+            "title": id,
+            "isDir": false,
+            "album": album,
+            "albumId": album_id,
+            "artist": artist,
+            "year": year,
+            "track": track,
+            "coverArt": cover_art,
+            "mediaType": "song"
+        })
+    }
+
     #[tokio::test]
     async fn load_album_songs_filters_by_album_id() {
         let api = MockAlbumSongsApi::default()
@@ -406,6 +443,36 @@ mod tests {
         assert_eq!(response.songs.len(), 2);
         assert_eq!(response.songs[0].id, "song-1");
         assert_eq!(response.songs[1].id, "song-2");
+    }
+
+    #[tokio::test]
+    async fn load_album_songs_sets_shared_display_cover_art_id() {
+        let api = MockAlbumSongsApi::default().with_directory_response(
+            "root",
+            MockResponse::Ok(json!({
+                "id": "root",
+                "child": [
+                    folder_song_with_cover("song-2", Some("Album A"), Some("album-a"), Some("Artist A"), Some(2024), Some(2), Some("cover-2")),
+                    folder_song_with_cover("song-1", Some("Album A"), Some("album-a"), Some("Artist A"), Some(2024), Some(1), Some("cover-1"))
+                ]
+            })),
+        );
+
+        let response = load_album_songs_from_client(&api, "library-1", "root", "album-a")
+            .await
+            .unwrap();
+
+        assert_eq!(response.songs.len(), 2);
+        assert_eq!(response.songs[0].id, "song-1");
+        assert_eq!(response.songs[0].cover_art_id.as_deref(), Some("cover-1"));
+        assert_eq!(
+            response.songs[0].display_cover_art_id.as_deref(),
+            Some("cover-2")
+        );
+        assert_eq!(
+            response.songs[1].display_cover_art_id.as_deref(),
+            Some("cover-2")
+        );
     }
 
     #[tokio::test]

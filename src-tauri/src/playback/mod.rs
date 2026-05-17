@@ -26,6 +26,8 @@ pub(crate) use android_mobile_plugin::init as init_android_mobile_plugin;
 pub(crate) use android_runtime::consume_pending_notification_tap;
 #[cfg(target_os = "android")]
 pub(crate) use android_runtime::install_android_app_handle;
+#[cfg(target_os = "android")]
+pub(crate) use android_runtime::spawn_android_artwork_update;
 pub use controller::{PlaybackController, PlaybackRuntimeContext};
 pub use reporting::PlaybackEventAppHandle;
 pub(crate) use reporting::PlaybackReporter;

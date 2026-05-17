@@ -99,7 +99,7 @@ const SPBottomContextMenu: Component = () => {
               style={{
                 transform: entered() ? `translateY(${dragOffset()}px)` : 'translateY(100%)',
                 transition: isDragging() ? 'none' : `transform ${TRANSITION_DURATION}ms ease-out`,
-                'padding-bottom': 'env(safe-area-inset-bottom, 0px)',
+                'padding-bottom': 'var(--safe-area-inset-bottom)',
               }}
             >
               {/* ハンドル: ここをドラッグで閉じられる */}

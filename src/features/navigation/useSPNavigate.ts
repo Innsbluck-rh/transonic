@@ -1,15 +1,14 @@
 import { useNavigate, type NavigateOptions } from '@solidjs/router';
-import { closePlayerBar } from '~/components/sp/SPExpandablePlayerBar';
-import { setSPNavStore, type NavDirection } from '~/stores/SPNavigationStore';
+import { closePlayerBar } from '~/components/sp/SPPlayerBarController';
 import { isSP } from '~/utils/isSP';
 
+type NavDirection = 'forward' | 'backward';
+
 function setNavDirection(direction: NavDirection) {
-  setSPNavStore('direction', direction);
   document.documentElement.dataset.navDirection = direction;
 }
 
 function clearNavDirection() {
-  setSPNavStore('direction', null);
   delete document.documentElement.dataset.navDirection;
 }
 
@@ -35,7 +34,7 @@ export function useSPNavigate() {
     }
 
     // SPPlayerバーが展開中なら閉じてからナビゲーションを行う
-    closePlayerBar();
+    closePlayerBar(true);
 
     const direction: NavDirection = typeof to === 'number' && to < 0 ? 'backward' : 'forward';
     setNavDirection(direction);

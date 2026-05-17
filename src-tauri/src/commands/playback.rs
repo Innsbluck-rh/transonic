@@ -54,6 +54,14 @@ pub(crate) fn active_runtime_parts(
     Ok((active_client, active_capability_matrix, active_profile_id))
 }
 
+#[cfg(target_os = "android")]
+fn spawn_current_artwork_update(app: &AppHandle) {
+    crate::playback::spawn_android_artwork_update(app.clone());
+}
+
+#[cfg(not(target_os = "android"))]
+fn spawn_current_artwork_update(_app: &AppHandle) {}
+
 async fn flatten_queue_sources(
     app: &AppHandle,
     items: Vec<QueueSource>,
@@ -163,12 +171,14 @@ pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> R
                 .current_index
                 .or_else(|| (!songs.is_empty()).then_some(0));
 
-            let playback = app.state::<PlaybackControllerState>();
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.set_queue(songs, current_index)?;
+            {
+                let playback = app.state::<PlaybackControllerState>();
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                controller.set_queue(songs, current_index)?;
+            }
 
             if payload.auto_play {
                 let sessions = app.state::<ActiveSessionState>();
@@ -181,7 +191,16 @@ pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> R
                     cover_art_cache: Some(&cover_art_cache.0),
                     profile_id: Some(&active_profile_id),
                 };
-                controller.play(&runtime_context)?;
+
+                {
+                    let playback = app.state::<PlaybackControllerState>();
+                    let mut controller = playback
+                        .0
+                        .lock()
+                        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                    controller.play(&runtime_context)?;
+                }
+                spawn_current_artwork_update(&app);
             }
 
             Ok(())
@@ -268,13 +287,15 @@ pub fn playback_play_queue_index(
                 profile_id: Some(&active_profile_id),
             };
 
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller
-                .play_queue_index(&runtime_context, payload.index)
-                .map(|_| ())
+            {
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                controller.play_queue_index(&runtime_context, payload.index)?;
+            }
+            spawn_current_artwork_update(&app);
+            Ok(())
         })();
 
         if let Err(error) = result {
@@ -325,11 +346,15 @@ pub fn playback_play(app: AppHandle) -> Result<(), String> {
                 profile_id: Some(&active_profile_id),
             };
 
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.play(&runtime_context).map(|_| ())
+            {
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                controller.play(&runtime_context)?;
+            }
+            spawn_current_artwork_update(&app);
+            Ok(())
         })();
 
         if let Err(error) = result {
@@ -461,13 +486,15 @@ pub fn playback_seek(app: AppHandle, payload: PlaybackSeekRequest) -> Result<(),
                 profile_id: Some(&active_profile_id),
             };
 
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller
-                .seek(&runtime_context, payload.position_ms)
-                .map(|_| ())
+            {
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                controller.seek(&runtime_context, payload.position_ms)?;
+            }
+            spawn_current_artwork_update(&app);
+            Ok(())
         })();
 
         if let Err(error) = result {
@@ -495,11 +522,15 @@ pub fn playback_next(app: AppHandle) -> Result<(), String> {
                 profile_id: Some(&active_profile_id),
             };
 
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.next(&runtime_context).map(|_| ())
+            {
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                controller.next(&runtime_context)?;
+            }
+            spawn_current_artwork_update(&app);
+            Ok(())
         })();
 
         if let Err(error) = result {
@@ -527,11 +558,15 @@ pub fn playback_prev(app: AppHandle) -> Result<(), String> {
                 profile_id: Some(&active_profile_id),
             };
 
-            let mut controller = playback
-                .0
-                .lock()
-                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.prev(&runtime_context).map(|_| ())
+            {
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                controller.prev(&runtime_context)?;
+            }
+            spawn_current_artwork_update(&app);
+            Ok(())
         })();
 
         if let Err(error) = result {

@@ -1,7 +1,7 @@
 use crate::models::PlaybackCapabilities;
 use crate::playback::android_mobile_plugin::{
     AndroidActivatePreparedMediaRequest, AndroidPlaybackBridge, AndroidPlaybackHeader,
-    AndroidPreparedMediaRequest,
+    AndroidPreparedMediaRequest, AndroidUpdateMediaArtworkRequest,
 };
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
@@ -16,6 +16,10 @@ trait AndroidPlaybackControl: Send {
         payload: &AndroidActivatePreparedMediaRequest,
     ) -> Result<(), String>;
     fn clear_prepared_media(&self) -> Result<(), String>;
+    fn update_media_artwork(
+        &self,
+        payload: &AndroidUpdateMediaArtworkRequest,
+    ) -> Result<(), String>;
     fn pause(&self) -> Result<(), String>;
     fn stop(&self) -> Result<(), String>;
     fn seek_to(&self, position_ms: u32) -> Result<(), String>;
@@ -44,6 +48,13 @@ impl AndroidPlaybackControl for AndroidPlaybackBridge {
 
     fn clear_prepared_media(&self) -> Result<(), String> {
         Self::clear_prepared_media(self)
+    }
+
+    fn update_media_artwork(
+        &self,
+        payload: &AndroidUpdateMediaArtworkRequest,
+    ) -> Result<(), String> {
+        Self::update_media_artwork(self, payload)
     }
 
     fn pause(&self) -> Result<(), String> {
@@ -167,6 +178,21 @@ impl PlaybackBackend for AndroidPlaybackBackend {
         }
     }
 
+    fn update_artwork(
+        &mut self,
+        media_id: &str,
+        artwork_path: Option<String>,
+    ) -> Result<(), String> {
+        let Some(artwork_path) = artwork_path else {
+            return Ok(());
+        };
+        self.bridge
+            .update_media_artwork(&AndroidUpdateMediaArtworkRequest {
+                media_id: media_id.to_string(),
+                artwork_path,
+            })
+    }
+
     fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String> {
         self.bridge.seek_to(position_ms)?;
         Ok(PlaybackSeekAction::Applied)
@@ -206,6 +232,7 @@ mod tests {
         loaded_media_ids: Vec<String>,
         prepared_media_ids: Vec<String>,
         activated_autoplay: Vec<bool>,
+        updated_artwork: Vec<AndroidUpdateMediaArtworkRequest>,
         clear_prepared_calls: usize,
         stop_calls: usize,
     }
@@ -244,6 +271,14 @@ mod tests {
 
         fn clear_prepared_media(&self) -> Result<(), String> {
             self.lock().unwrap().clear_prepared_calls += 1;
+            Ok(())
+        }
+
+        fn update_media_artwork(
+            &self,
+            payload: &AndroidUpdateMediaArtworkRequest,
+        ) -> Result<(), String> {
+            self.lock().unwrap().updated_artwork.push(payload.clone());
             Ok(())
         }
 
@@ -343,6 +378,22 @@ mod tests {
         let state = bridge.lock().unwrap();
         assert_eq!(state.loaded_media_ids.len(), 2);
         assert_ne!(state.loaded_media_ids[0], state.loaded_media_ids[1]);
+    }
+
+    #[test]
+    fn update_artwork_forwards_song_id_and_path() {
+        let bridge =
+            std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
+        let mut backend = AndroidPlaybackBackend::new(Box::new(bridge.clone()));
+
+        backend
+            .update_artwork("song-a", Some("cache/cover.png".to_string()))
+            .unwrap();
+
+        let state = bridge.lock().unwrap();
+        assert_eq!(state.updated_artwork.len(), 1);
+        assert_eq!(state.updated_artwork[0].media_id, "song-a");
+        assert_eq!(state.updated_artwork[0].artwork_path, "cache/cover.png");
     }
 
     #[test]

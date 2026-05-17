@@ -53,6 +53,7 @@ pub(super) struct RawSong {
 
 impl From<RawSong> for SongResponse {
     fn from(value: RawSong) -> Self {
+        let cover_art_id = value.cover_art;
         Self {
             id: value.id,
             parent_id: value.parent,
@@ -62,7 +63,8 @@ impl From<RawSong> for SongResponse {
             album_id: value.album_id,
             artist: value.artist,
             artist_id: value.artist_id,
-            cover_art_id: value.cover_art,
+            display_cover_art_id: cover_art_id.clone(),
+            cover_art_id,
             track: value.track,
             disc_number: value.disc_number,
             year: value.year,

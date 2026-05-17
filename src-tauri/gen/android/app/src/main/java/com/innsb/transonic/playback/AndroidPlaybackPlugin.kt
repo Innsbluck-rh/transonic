@@ -24,6 +24,7 @@ internal const val COMMAND_LOAD_PREPARED_MEDIA = "com.innsb.transonic.playback.L
 internal const val COMMAND_PREPARE_NEXT_MEDIA = "com.innsb.transonic.playback.PREPARE_NEXT_MEDIA"
 internal const val COMMAND_ACTIVATE_PREPARED_MEDIA = "com.innsb.transonic.playback.ACTIVATE_PREPARED_MEDIA"
 internal const val COMMAND_CLEAR_PREPARED_MEDIA = "com.innsb.transonic.playback.CLEAR_PREPARED_MEDIA"
+internal const val COMMAND_UPDATE_MEDIA_ARTWORK = "com.innsb.transonic.playback.UPDATE_MEDIA_ARTWORK"
 
 private const val KEY_MEDIA_ID = "mediaId"
 private const val KEY_STREAM_URL = "streamUrl"
@@ -63,6 +64,13 @@ class LoadPreparedMediaArgs {
 @Keep
 class ActivatePreparedMediaArgs {
   var autoplay: Boolean = false
+}
+
+@InvokeArg
+@Keep
+class UpdateMediaArtworkArgs {
+  lateinit var mediaId: String
+  lateinit var artworkPath: String
 }
 
 @InvokeArg
@@ -111,6 +119,13 @@ private fun ActivatePreparedMediaArgs.toBundle(): Bundle {
   }
 }
 
+private fun UpdateMediaArtworkArgs.toBundle(): Bundle {
+  return Bundle().apply {
+    putString(KEY_MEDIA_ID, mediaId)
+    putString(KEY_ARTWORK_PATH, artworkPath)
+  }
+}
+
 internal fun Bundle.toLoadPreparedMediaArgs(): LoadPreparedMediaArgs? {
   val mediaId = getString(KEY_MEDIA_ID) ?: return null
   val streamUrl = getString(KEY_STREAM_URL) ?: return null
@@ -146,6 +161,15 @@ internal fun Bundle.toLoadPreparedMediaArgs(): LoadPreparedMediaArgs? {
 internal fun Bundle.toActivatePreparedMediaArgs(): ActivatePreparedMediaArgs {
   return ActivatePreparedMediaArgs().apply {
     autoplay = getBoolean(KEY_AUTOPLAY)
+  }
+}
+
+internal fun Bundle.toUpdateMediaArtworkArgs(): UpdateMediaArtworkArgs? {
+  val mediaId = getString(KEY_MEDIA_ID) ?: return null
+  val artworkPath = getString(KEY_ARTWORK_PATH) ?: return null
+  return UpdateMediaArtworkArgs().apply {
+    this.mediaId = mediaId
+    this.artworkPath = artworkPath
   }
 }
 
@@ -518,6 +542,42 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
       )
     }) {
       PlaybackControllerHost.clearPreparedMedia()
+      invoke.resolve()
+    }
+  }
+
+  @Command
+  @Keep
+  fun updateMediaArtwork(invoke: Invoke) {
+    val args = invoke.parseArgs(UpdateMediaArtworkArgs::class.java)
+    val applicationContext = activity.applicationContext
+    if (!PlaybackControllerHost.withExistingController { controller ->
+      val future =
+        controller.sendCustomCommand(
+          SessionCommand(COMMAND_UPDATE_MEDIA_ARTWORK, Bundle.EMPTY),
+          args.toBundle(),
+        )
+      future.addListener(
+        {
+          try {
+            val result = future.get()
+            if (result.resultCode == SessionResult.RESULT_SUCCESS) {
+              invoke.resolve()
+            } else {
+              invoke.reject(
+                "Failed to update Android media artwork. resultCode=${result.resultCode}",
+              )
+            }
+          } catch (error: Throwable) {
+            if (error is InterruptedException) {
+              Thread.currentThread().interrupt()
+            }
+            invoke.reject(error.userMessage("Failed to update Android media artwork."))
+          }
+        },
+        ContextCompat.getMainExecutor(applicationContext),
+      )
+    }) {
       invoke.resolve()
     }
   }

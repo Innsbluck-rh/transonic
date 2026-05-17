@@ -12,8 +12,8 @@ import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/rou
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
+import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 
-const ARTIST_COVER_ART_SIZE = 320;
 const SIMILAR_ARTIST_COUNT = 8;
 
 function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
@@ -146,7 +146,13 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
   });
 
   return (
-    <div class='home-surface-root p-0'>
+    <div
+      class='home-surface-root p-0'
+      style={{
+        'padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
+        'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
+      }}
+    >
       <Show when={error()}>{(message) => <p class='px-1 text-sm text-red-500'>{message()}</p>}</Show>
 
       <Show when={!isLoading()} fallback={<LoadCircle class='m-3 self-center justify-self-center' />}>
@@ -183,6 +189,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
                 <div class='p-3'>
                   <AlbumGrid
                     albums={albums()}
+                    noArtistName={true}
                     emptyMessage='No ID3 albums returned for this artist.'
                     onItemClick={(album) => {
                       navigate(resolveAlbumRoute(album.id));

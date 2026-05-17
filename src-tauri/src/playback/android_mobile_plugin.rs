@@ -36,6 +36,13 @@ pub struct AndroidActivatePreparedMediaRequest {
     pub autoplay: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidUpdateMediaArtworkRequest {
+    pub media_id: String,
+    pub artwork_path: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AndroidPositionResponse {
@@ -89,6 +96,15 @@ impl AndroidPlaybackBridge {
         self.handle
             .run_mobile_plugin::<()>("clearPreparedMedia", ())
             .map_err(|error| format!("Failed to clear the Android prepared media: {error}"))
+    }
+
+    pub fn update_media_artwork(
+        &self,
+        payload: &AndroidUpdateMediaArtworkRequest,
+    ) -> Result<(), String> {
+        self.handle
+            .run_mobile_plugin::<()>("updateMediaArtwork", payload)
+            .map_err(|error| format!("Failed to update the Android media artwork: {error}"))
     }
 
     pub fn pause(&self) -> Result<(), String> {

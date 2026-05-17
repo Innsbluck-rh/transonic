@@ -26,8 +26,17 @@ use super::{
 pub struct PlaybackRuntimeContext<'a> {
     pub client: &'a OpenSubsonicClient,
     pub capability_matrix: &'a CapabilityMatrix,
+    #[allow(dead_code)]
     pub cover_art_cache: Option<&'a CoverArtCache>,
     pub profile_id: Option<&'a str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+pub struct PlaybackArtworkUpdateTarget {
+    pub queue_index: u32,
+    pub song_id: String,
+    pub cover_art_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -211,6 +220,40 @@ impl PlaybackController {
             log::warn!("controller.synced_state_with_context: gapless refresh failed: {error}");
         }
         Ok(self.state())
+    }
+
+    #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+    pub fn current_artwork_update_target(&self) -> Option<PlaybackArtworkUpdateTarget> {
+        let queue_index = self.status.current_index?;
+        let entry = current_queue_entry(&self.status.queue, Some(queue_index))?;
+        let song_id = self.status.current_song_id.as_ref()?;
+        if entry.id != *song_id {
+            return None;
+        }
+
+        Some(PlaybackArtworkUpdateTarget {
+            queue_index,
+            song_id: song_id.clone(),
+            cover_art_id: display_cover_art_id(entry)?.to_string(),
+        })
+    }
+
+    #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+    pub fn update_artwork_if_current(
+        &mut self,
+        target: &PlaybackArtworkUpdateTarget,
+        artwork_path: String,
+    ) -> Result<bool, String> {
+        let Some(current_target) = self.current_artwork_update_target() else {
+            return Ok(false);
+        };
+        if &current_target != target {
+            return Ok(false);
+        }
+
+        self.backend
+            .update_artwork(&target.song_id, Some(artwork_path))?;
+        Ok(true)
     }
 
     #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
@@ -943,20 +986,13 @@ impl PlaybackController {
             autoplay
         );
 
-        let artwork_path = build_cover_art_path(
-            context.cover_art_cache,
-            context.client,
-            context.profile_id,
-            entry.cover_art_id.as_deref(),
-        )?;
-
         if requested_position_ms == 0 {
             let raw_stream =
                 build_stream_request(context.client, song_id, stream_offset_seconds, true)?;
             let raw_request = self.build_backend_load_request(
                 entry,
                 raw_stream,
-                artwork_path.clone(),
+                None,
                 requested_position_ms,
                 local_start_position_ms,
                 autoplay,
@@ -985,7 +1021,7 @@ impl PlaybackController {
                     let fallback_request = self.build_backend_load_request(
                         entry,
                         fallback_stream,
-                        artwork_path,
+                        None,
                         requested_position_ms,
                         local_start_position_ms,
                         autoplay,
@@ -1021,7 +1057,7 @@ impl PlaybackController {
         let standard_request = self.build_backend_load_request(
             entry,
             standard_stream,
-            artwork_path,
+            None,
             requested_position_ms,
             local_start_position_ms,
             autoplay,
@@ -1598,35 +1634,6 @@ fn build_stream_request(
         .map_err(format_api_error)
 }
 
-fn build_cover_art_path(
-    cover_art_cache: Option<&CoverArtCache>,
-    client: &OpenSubsonicClient,
-    profile_id: Option<&str>,
-    cover_art_id: Option<&str>,
-) -> Result<Option<String>, String> {
-    let (Some(cover_art_cache), Some(profile_id), Some(cover_art_id)) =
-        (cover_art_cache, profile_id, cover_art_id)
-    else {
-        return Ok(None);
-    };
-
-    let cover_art_cache = cover_art_cache.clone();
-    let client = client.clone();
-    let profile_id = profile_id.to_string();
-    let cover_art_id = cover_art_id.to_string();
-    let handle = std::thread::Builder::new()
-        .name("cover-art-playback-resolve".to_string())
-        .spawn(move || {
-            cover_art_cache.resolve_cover_art(&client, &profile_id, &cover_art_id, Some(512))
-        })
-        .map_err(|error| format!("Failed to start the cover art resolver thread: {error}"))?;
-
-    handle
-        .join()
-        .map_err(|_| "The cover art resolver thread panicked.".to_string())?
-        .map(|path| Some(path.to_string_lossy().to_string()))
-}
-
 fn is_missing_prepared_stream_error(error: &str) -> bool {
     error.to_ascii_lowercase().contains("no prepared stream")
 }
@@ -1666,6 +1673,23 @@ fn current_queue_entry(
 ) -> Option<&SongResponse> {
     let index = usize::try_from(current_index?).ok()?;
     entries.get(index)
+}
+
+fn display_cover_art_id(entry: &SongResponse) -> Option<&str> {
+    entry
+        .display_cover_art_id
+        .as_deref()
+        .and_then(trimmed_text)
+        .or_else(|| entry.cover_art_id.as_deref().and_then(trimmed_text))
+}
+
+fn trimmed_text(value: &str) -> Option<&str> {
+    let value = value.trim();
+    if value.is_empty() {
+        None
+    } else {
+        Some(value)
+    }
 }
 
 fn format_api_error(error: ApiError) -> String {
@@ -1730,7 +1754,10 @@ mod tests {
         load_calls: Vec<String>,
         load_absolute_start_positions_ms: Vec<u32>,
         load_local_start_positions_ms: Vec<u32>,
+        load_artwork_paths: Vec<Option<String>>,
         prepare_calls: Vec<String>,
+        prepare_artwork_paths: Vec<Option<String>>,
+        artwork_update_calls: Vec<(String, Option<String>)>,
         next_prepare_generation: u64,
         seek_calls_ms: Vec<u32>,
         current_position_ms: u32,
@@ -1817,6 +1844,7 @@ mod tests {
             state
                 .load_local_start_positions_ms
                 .push(request.local_start_position_ms);
+            state.load_artwork_paths.push(request.artwork_path.clone());
             if state.always_fail_load {
                 return Err("stream rejected".to_string());
             }
@@ -1837,6 +1865,9 @@ mod tests {
             let mut state = self.state.lock().unwrap();
             let url = request.request.url.to_string();
             state.prepare_calls.push(url.clone());
+            state
+                .prepare_artwork_paths
+                .push(request.artwork_path.clone());
             if state.always_fail_load {
                 return Err("stream rejected".to_string());
             }
@@ -1901,6 +1932,19 @@ mod tests {
             let mut state = self.state.lock().unwrap();
             state.current_position_calls += 1;
             Ok(state.current_position_ms)
+        }
+
+        fn update_artwork(
+            &mut self,
+            media_id: &str,
+            artwork_path: Option<String>,
+        ) -> Result<(), String> {
+            self.state
+                .lock()
+                .unwrap()
+                .artwork_update_calls
+                .push((media_id.to_string(), artwork_path));
+            Ok(())
         }
 
         fn pause(&mut self) -> Result<(), String> {
@@ -2197,6 +2241,7 @@ mod tests {
                 artist: None,
                 artist_id: None,
                 cover_art_id: None,
+                display_cover_art_id: None,
                 track: None,
                 disc_number: None,
                 year: None,
@@ -2212,6 +2257,101 @@ mod tests {
                 media_type: None,
             })
             .collect()
+    }
+
+    #[test]
+    fn playback_load_does_not_resolve_cover_art_on_critical_path() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let mut queue = queue_entries(&["song-a"]);
+        queue[0].cover_art_id = Some("cover-1".to_string());
+        controller.set_queue(queue, Some(0)).unwrap();
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let cover_art_cache =
+            crate::cover_art_cache::CoverArtCache::new(temp_dir.path().to_path_buf());
+        let mut server = mockito::Server::new();
+        let no_cover_art_fetch = server
+            .mock("GET", "/rest/getCoverArt.view")
+            .expect(0)
+            .create();
+        let client = opensubsonic_client::OpenSubsonicClient::new(ClientConfig::new(
+            normalize_base_url(&server.url()).unwrap(),
+            Auth::Token {
+                username: "demo".to_string(),
+                password: "secret".to_string(),
+            },
+            "transonic",
+        ))
+        .unwrap();
+        let capability_matrix = CapabilityMatrix::empty();
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: Some(&cover_art_cache),
+            profile_id: Some("profile-1"),
+        };
+
+        let status = controller.play(&runtime_context).unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(backend_state.lock().unwrap().load_artwork_paths, vec![None]);
+        no_cover_art_fetch.assert();
+    }
+
+    #[test]
+    fn current_artwork_update_target_prefers_display_cover_art_id() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let mut queue = queue_entries(&["song-a"]);
+        queue[0].cover_art_id = Some("song-cover".to_string());
+        queue[0].display_cover_art_id = Some(" album-cover ".to_string());
+        controller.set_queue(queue, Some(0)).unwrap();
+
+        let target = controller.current_artwork_update_target().unwrap();
+
+        assert_eq!(target.queue_index, 0);
+        assert_eq!(target.song_id, "song-a");
+        assert_eq!(target.cover_art_id, "album-cover");
+    }
+
+    #[test]
+    fn update_artwork_if_current_updates_backend_for_current_target() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let mut queue = queue_entries(&["song-a"]);
+        queue[0].cover_art_id = Some("cover-1".to_string());
+        controller.set_queue(queue, Some(0)).unwrap();
+        let target = controller.current_artwork_update_target().unwrap();
+
+        let updated = controller
+            .update_artwork_if_current(&target, "cache/cover.png".to_string())
+            .unwrap();
+
+        assert!(updated);
+        assert_eq!(
+            backend_state.lock().unwrap().artwork_update_calls,
+            vec![("song-a".to_string(), Some("cache/cover.png".to_string()))]
+        );
+    }
+
+    #[test]
+    fn update_artwork_if_current_ignores_stale_target() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let mut queue = queue_entries(&["song-a", "song-b"]);
+        queue[0].cover_art_id = Some("cover-a".to_string());
+        queue[1].cover_art_id = Some("cover-b".to_string());
+        controller.set_queue(queue.clone(), Some(0)).unwrap();
+        let stale_target = controller.current_artwork_update_target().unwrap();
+        controller.set_queue(queue, Some(1)).unwrap();
+
+        let updated = controller
+            .update_artwork_if_current(&stale_target, "cache/cover-a.png".to_string())
+            .unwrap();
+
+        assert!(!updated);
+        assert!(backend_state
+            .lock()
+            .unwrap()
+            .artwork_update_calls
+            .is_empty());
     }
 
     #[test]

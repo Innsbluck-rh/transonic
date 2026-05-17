@@ -50,8 +50,8 @@ function AppError() {
 
     return {
       message: `This Page (${decodePath(location.pathname)}) is not available.`,
-      actionLabel: 'Back',
-      action: () => navigate(-1),
+      actionLabel: 'Back to Home',
+      action: () => navigate('/sp'),
     };
   });
 

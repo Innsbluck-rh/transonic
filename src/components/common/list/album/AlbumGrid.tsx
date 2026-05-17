@@ -3,6 +3,7 @@ import AlbumGridItem, { AlbumItem } from './item/AlbumGridItem';
 
 interface AlbumGridProps {
   albums: AlbumItem[];
+  noArtistName?: boolean;
   emptyMessage?: string;
   onItemClick?: (album: AlbumItem, e: MouseEvent) => void;
   onItemDblClick?: (album: AlbumItem, e: MouseEvent) => void;
@@ -18,6 +19,7 @@ const AlbumGrid: Component<AlbumGridProps> = (props) => {
           {(album) => (
             <AlbumGridItem
               album={album}
+              noArtistName={props.noArtistName}
               onClick={(e) => props.onItemClick?.(album, e)}
               onDblClick={(e) => props.onItemDblClick?.(album, e)}
               onArtClick={(e) => props.onItemArtClick?.(album, e)}

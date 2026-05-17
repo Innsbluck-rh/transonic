@@ -18,9 +18,8 @@ import Layout from './routes/layout';
 import SettingsRoute from './routes/settings';
 import SPAlbum from './routes/sp/album';
 import SPBrowseArtist from './routes/sp/artist';
+import SPBrowseIndex from './routes/sp/browse';
 import SPBrowseFolderStructure from './routes/sp/folder';
-import SPIndexArtists from './routes/sp/index_artists';
-import SPIndexFolders from './routes/sp/index_folders';
 
 export default function App() {
   const homeRoute = resolveHomeRoute();
@@ -50,8 +49,7 @@ export default function App() {
           </Route>
           <Route component={HomeLayoutSP}>
             <Route path='/sp' component={() => <Navigate href={MOBILE_HOME_ROUTE} />} />
-            <Route path='/sp/index/artists' component={SPIndexArtists} />
-            <Route path='/sp/index/folders' component={SPIndexFolders} />
+            <Route path='/sp/index' component={SPBrowseIndex} />
             <Route path='/sp/setting' component={SettingsRoute} />
             <Route path='/sp/artists/:id' component={SPBrowseArtist} />
             <Route path='/sp/folders/:libraryId' component={SPBrowseFolderStructure} />

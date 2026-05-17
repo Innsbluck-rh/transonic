@@ -410,7 +410,7 @@ export type ServerBackupImportResult = { path: string; profileCount: number }
 export type SettingsOrigin = "default" | "stored"
 export type SettingsUpdateRequest = { settings: AppSettings }
 export type SongRequest = { id: string }
-export type SongResponse = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; duration: number | null; size: number | null; contentType: string | null; suffix: string | null; bitRate: number | null; genre: string | null; created: string | null; starred: string | null; isDirectory: boolean; mediaType: string | null }
+export type SongResponse = { id: string; parentId: string | null; path: string | null; title: string; album: string | null; albumId: string | null; artist: string | null; artistId: string | null; coverArtId: string | null; displayCoverArtId: string | null; track: number | null; discNumber: number | null; year: number | null; duration: number | null; size: number | null; contentType: string | null; suffix: string | null; bitRate: number | null; genre: string | null; created: string | null; starred: string | null; isDirectory: boolean; mediaType: string | null }
 
 /** tauri-specta globals **/
 

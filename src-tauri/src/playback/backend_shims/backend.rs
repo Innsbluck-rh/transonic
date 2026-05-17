@@ -70,6 +70,13 @@ pub trait PlaybackBackend: Send {
         Err("Gapless playback is unavailable on this backend.".to_string())
     }
     fn clear_prepared(&mut self) {}
+    fn update_artwork(
+        &mut self,
+        _media_id: &str,
+        _artwork_path: Option<String>,
+    ) -> Result<(), String> {
+        Ok(())
+    }
     fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String>;
     fn current_position_ms(&self) -> Result<u32, String>;
     fn pause(&mut self) -> Result<(), String>;

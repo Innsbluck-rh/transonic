@@ -1,19 +1,12 @@
-import { useLocation } from '@solidjs/router';
-import { createEffect, createMemo, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
+import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import { commands, events } from '~/bindings';
-import Header from '~/components/common/header/Header';
-import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
 import SPExpandablePlayerBar, { openPlayerBar } from '~/components/sp/SPExpandablePlayerBar';
-import { MOBILE_SETTINGS_ROUTE } from '~/features/navigation/routes';
-import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import SPHeader from '~/components/sp/SPHeader';
 import { startPlaybackStateSync } from '~/features/playback/service';
-import { setSPNavStore } from '~/stores/SPNavigationStore';
+import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import { sessionStore } from '~/stores/SessionStore';
 
 const HomeLayoutSP: ParentComponent = (props) => {
-  const location = useLocation();
-  const spNavigate = useSPNavigate();
-
   let disposed = false;
   let unlisten: (() => void) | undefined;
 
@@ -58,13 +51,6 @@ const HomeLayoutSP: ParentComponent = (props) => {
     unlisten?.();
   });
 
-  createEffect(() => {
-    const path = location.pathname;
-    setSPNavStore('state', path === MOBILE_SETTINGS_ROUTE ? 'setting' : 'index');
-  });
-
-  const canBack = createMemo<boolean>(() => !(location.pathname === '/sp' || location.pathname.startsWith('/sp/index')));
-
   return (
     <Show
       when={sessionStore.activeSession}
@@ -75,44 +61,20 @@ const HomeLayoutSP: ParentComponent = (props) => {
       }
     >
       <div class='flex min-h-0 flex-1 flex-col'>
-        <Header shouldShowProfiles={true} titleHref={'/sp'} />
-        <SPExpandablePlayerBar>
-          <div class='flex min-h-0 flex-1 flex-col'>
-            {/* <div class='border-primary-border flex h-12 w-full flex-row items-center gap-3 border-b px-3'>
-              <Show when={canBack()}>
-                <Icon
-                  class='scale-200'
-                  icon='material-symbols:arrow-back'
-                  onClick={() => {
-                    if (canBack()) spNavigate(-1);
-                  }}
-                />
-              </Show>
-              <Heading3>{location.pathname}</Heading3>
-            </div> */}
-            <div class='flex min-h-0 flex-1 flex-col'>{props.children}</div>
+        <SPHeader />
+
+        <div class='relative flex min-h-0 flex-1 flex-col overflow-hidden'>
+          <div
+            class='absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden'
+            style={{
+              'view-transition-name': 'sp-screen',
+              'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
+            }}
+          >
+            {props.children}
           </div>
-        </SPExpandablePlayerBar>
-        <SPBottomNavigation
-          onClickNav={(nav, prevNav) => {
-            switch (nav) {
-              case 'index':
-                if (location.pathname !== '/sp' && prevNav !== 'player')
-                  spNavigate('/sp', {
-                    replace: true,
-                  });
-                break;
-              case 'player':
-                openPlayerBar();
-                break;
-              case 'setting':
-                if (location.pathname !== MOBILE_SETTINGS_ROUTE) {
-                  spNavigate(MOBILE_SETTINGS_ROUTE);
-                }
-                break;
-            }
-          }}
-        />
+          <SPExpandablePlayerBar />
+        </div>
       </div>
     </Show>
   );

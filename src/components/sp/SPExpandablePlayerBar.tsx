@@ -1,23 +1,14 @@
-import { createEffect, createMemo, createSignal, JSX, on, onCleanup, onMount, ParentComponent, Show } from 'solid-js';
-import PlayerBar from '~/components/player/PlayerBar';
+import { onBackButtonPress } from '@tauri-apps/api/app';
+import { platform } from '@tauri-apps/plugin-os';
+import { Component, createEffect, createMemo, createSignal, JSX, on, onCleanup, onMount, Show } from 'solid-js';
+import SPPlayerBar from '~/components/sp/SPPlayerBar';
+import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
+import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { setSPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import SPPlayer from './SPPlayer';
+import { playerBarRequest } from './SPPlayerBarController';
 
-// ── 外部制御用のリアクティブブリッジ ──────────────────────────────
-
-interface PlayerBarRequest {
-  expanded: boolean;
-  immediate: boolean;
-}
-
-const [playerBarRequest, setPlayerBarRequest] = createSignal<PlayerBarRequest | null>(null);
-
-export function openPlayerBar(immediate = false) {
-  setPlayerBarRequest({ expanded: true, immediate });
-}
-
-export function closePlayerBar(immediate = false) {
-  setPlayerBarRequest({ expanded: false, immediate });
-}
+export { closePlayerBar, openPlayerBar } from './SPPlayerBarController';
 
 // ── コンポーネント本体 ──────────────────────────────────────────
 
@@ -38,9 +29,11 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (props) => {
+const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => {
   let containerRef: HTMLDivElement | undefined;
+  let collapsedBarContainerRef: HTMLDivElement | undefined;
   let collapsedBarHostRef: HTMLDivElement | undefined;
+  const isAndroid = platform() === 'android';
 
   const [phase, setPhase] = createSignal<SheetPhase>('collapsed');
   const [containerHeight, setContainerHeight] = createSignal(0);
@@ -53,6 +46,7 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
   const [lastTimestamp, setLastTimestamp] = createSignal(0);
   const [velocityY, setVelocityY] = createSignal(0);
   const [suppressBarClick, setSuppressBarClick] = createSignal(false);
+  const navigate = useSPNavigate();
 
   const topOffsetPx = createMemo(() => Math.max(0, props.topOffsetPx ?? 0));
   const bottomOffsetPx = createMemo(() => Math.max(0, props.bottomOffsetPx ?? 0));
@@ -86,11 +80,6 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
     setPhase('collapsed');
     setTranslateY(closedTranslateY());
     requestAnimationFrame(() => setSkipAnimation(false));
-  };
-
-  const syncContainerHeight = () => {
-    const nextHeight = containerRef?.getBoundingClientRect().height ?? 0;
-    setContainerHeight(Math.round(nextHeight));
   };
 
   const beginDrag =
@@ -237,15 +226,55 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
     })
   );
 
+  createEffect(() => {
+    if (!isAndroid || phase() === 'collapsed') {
+      return;
+    }
+
+    let disposed = false;
+    let unregister: (() => Promise<void>) | undefined;
+
+    void onBackButtonPress(() => {
+      closeSheet();
+    }).then((listener) => {
+      if (disposed) {
+        void listener.unregister();
+        return;
+      }
+
+      unregister = () => listener.unregister();
+    });
+
+    onCleanup(() => {
+      disposed = true;
+      void unregister?.();
+    });
+  });
+
+  const syncContainerHeight = () => {
+    const nextHeight = containerRef?.getBoundingClientRect().height ?? 0;
+    setContainerHeight(Math.round(nextHeight));
+  };
+  const syncCollapsedBarHeight = () => {
+    if (collapsedBarContainerRef) setSPScrollPaddingStore('collapsedPlayerHeight', collapsedBarContainerRef.offsetHeight);
+  };
+
   onMount(() => {
     syncContainerHeight();
+    syncCollapsedBarHeight();
 
-    const observer = new ResizeObserver(() => {
+    const rootObserver = new ResizeObserver(() => {
       syncContainerHeight();
+    });
+    const collapseObserver = new ResizeObserver(() => {
+      syncCollapsedBarHeight();
     });
 
     if (containerRef) {
-      observer.observe(containerRef);
+      rootObserver.observe(containerRef);
+    }
+    if (collapsedBarContainerRef) {
+      collapseObserver.observe(collapsedBarContainerRef);
     }
 
     if (collapsedBarHostRef) {
@@ -255,28 +284,28 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
     window.addEventListener('resize', syncContainerHeight);
 
     onCleanup(() => {
-      observer.disconnect();
+      rootObserver.disconnect();
+      collapseObserver.disconnect();
       collapsedBarHostRef?.removeEventListener('click', handleCollapsedBarClickCapture, true);
       window.removeEventListener('resize', syncContainerHeight);
     });
   });
 
   return (
-    <div ref={containerRef} class='relative flex min-h-0 w-full flex-1 flex-col overflow-hidden'>
-      <div class='flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden' style='view-transition-name: sp-screen'>
-        {props.children}
-        <div
-          class='pointer-events-none absolute inset-0 z-20 bg-black'
-          style={{
-            opacity: `${progress() * 0.75}`,
-            transition: shouldAnimate() ? `opacity ${DEFAULT_SETTLE_DURATION_MS}ms ease-out` : 'none',
-          }}
-        />
-      </div>
+    <div ref={containerRef} class='pointer-events-none absolute inset-0 flex touch-none flex-col overflow-hidden'>
+      <div
+        class='pointer-events-none absolute inset-0 touch-none bg-black'
+        style={{
+          opacity: `${progress() * 0.75}`,
+          transition: shouldAnimate() ? `opacity ${DEFAULT_SETTLE_DURATION_MS}ms ease-out` : 'none',
+        }}
+      />
 
       <div
-        class='relative z-30 shrink-0'
+        ref={collapsedBarContainerRef}
+        class='absolute right-0 bottom-0 left-0 z-30 p-2 pb-5'
         style={{
+          'view-transition-name': 'sp-player-bar',
           opacity: `${clamp(1 - progress() * 1.1, 0, 1)}`,
           transform: `translateY(${progress() * 12}px)`,
           transition: shouldAnimate()
@@ -285,11 +314,29 @@ const SPExpandablePlayerBar: ParentComponent<SPExpandablePlayerBarProps> = (prop
         }}
       >
         <div ref={collapsedBarHostRef} class='pointer-events-auto'>
-          <PlayerBar
+          <SPPlayerBar
             iconsVisibility={{
               prev: false,
               playpause: true,
               next: false,
+            }}
+            onClickTitle={(entry) => {
+              const albumId = entry?.albumId;
+              if (!albumId) {
+                openSheet();
+                return;
+              }
+
+              navigate(resolveAlbumRoute(albumId));
+            }}
+            onClickArtist={(entry) => {
+              const artistId = entry?.artistId;
+              if (!artistId) {
+                openSheet();
+                return;
+              }
+
+              navigate(resolveArtistRoute(artistId));
             }}
             onClickRestArea={openSheet}
             restAreaProps={{

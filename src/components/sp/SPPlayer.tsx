@@ -2,6 +2,7 @@ import { Component, JSX, Show } from 'solid-js';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
 import PlayerIcon from '~/components/player/PlayerIcon';
 import PlayerSlider from '~/components/player/PlayerSlider';
+import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
@@ -9,7 +10,7 @@ import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 import Heading3 from '../common/Heading3';
 import QueueList from '../common/list/song/QueueList';
-import { closePlayerBar } from './SPExpandablePlayerBar';
+import LoadCircle from '../common/LoadCircle';
 
 interface SPPlayerProps {
   topSectionProps?: JSX.HTMLAttributes<HTMLDivElement>;
@@ -35,7 +36,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
     currentIndex,
   } = usePlayback();
 
-  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, 1024);
+  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.lg);
 
   const navigate = useSPNavigate();
   const { setScrollContainerRef, setItemRef } = useQueueAutoScroll({
@@ -50,12 +51,19 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
       <div {...props.topSectionProps} class={`relative flex h-auto w-full shrink-0 flex-col items-center ${props.topSectionProps?.class ?? ''}`}>
-        <div class='z-10 mt-6 flex h-full w-full flex-col items-center'>
+        <div class='z-10 mt-8 flex h-full w-full flex-col items-center'>
           <div class='flex h-full w-full flex-col items-center px-8'>
-            <Show when={coverArt()}>
+            <Show
+              when={coverArt()}
+              fallback={
+                <div class='border-secondary-border flex aspect-square h-auto w-56 max-w-1/2 min-w-1/3 items-center justify-center border'>
+                  <LoadCircle />
+                </div>
+              }
+            >
               {(assetUrl) => (
                 <img
-                  class='aspect-square h-auto w-56 max-w-[70vw] min-w-1/3 object-cover object-center shadow-xl'
+                  class='aspect-square h-auto w-56 max-w-1/2 min-w-1/3 object-cover object-center shadow-xl'
                   src={assetUrl()}
                   loading='lazy'
                   decoding='async'
@@ -65,11 +73,14 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
 
             <MarqueeParagraph
               text={currentEntry()?.title || ''}
-              class='archivo mt-4 w-full text-center text-2xl font-black tracking-tighter'
-              onClick={() => {
+              class='archivo mt-5 w-full text-center text-2xl font-black tracking-tighter'
+              onPointerDown={(event) => {
+                event.stopPropagation();
+              }}
+              onClick={(event) => {
+                event.stopPropagation();
                 const albumId = currentEntry()?.albumId;
                 if (!albumId) return;
-                closePlayerBar(false);
                 navigate(resolveAlbumRoute(albumId));
               }}
             />
@@ -79,23 +90,23 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
-              onClick={() => {
+              onClick={(event) => {
+                event.stopPropagation();
                 const artistId = currentEntry()?.artistId;
                 if (!artistId) return;
-                closePlayerBar(false);
                 navigate(resolveArtistRoute(artistId));
               }}
             />
 
             <div
-              class='border-secondary-border mt-2 flex w-full flex-row items-center justify-evenly'
+              class='border-secondary-border mt-3 flex w-full flex-row items-center justify-evenly'
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
             >
               <PlayerIcon iconClass='scale-200 p-6' type='prev' disabled={isControlDisabled()} onClick={prev} />
               <PlayerIcon
-                iconClass='scale-350 p-6'
+                iconClass='scale-350 p-5'
                 type={playingState() === 'playing' ? 'pause' : 'play'}
                 disabled={isControlDisabled()}
                 loading={isInterrupted()}

@@ -97,13 +97,25 @@ where
 pub(crate) fn parse_album(payload: Value) -> Result<AlbumSongsResponse, String> {
     let payload: RawAlbum =
         value_as(payload).map_err(|error| format!("Failed to parse the album payload: {error}"))?;
+    let album_cover_art_id = payload.cover_art;
+    let songs = payload
+        .song
+        .into_iter()
+        .map(SongResponse::from)
+        .map(|mut song| {
+            song.display_cover_art_id = album_cover_art_id
+                .clone()
+                .or_else(|| song.cover_art_id.clone());
+            song
+        })
+        .collect();
 
     Ok(AlbumSongsResponse {
         id: payload.id,
         name: payload.name,
         artist: payload.artist,
         artist_id: payload.artist_id,
-        cover_art_id: payload.cover_art,
+        cover_art_id: album_cover_art_id,
         song_count: payload.song_count,
         duration: payload.duration,
         play_count: payload.play_count,
@@ -111,7 +123,7 @@ pub(crate) fn parse_album(payload: Value) -> Result<AlbumSongsResponse, String> 
         genre: payload.genre,
         created: payload.created,
         starred: payload.starred,
-        songs: payload.song.into_iter().map(SongResponse::from).collect(),
+        songs,
     })
 }
 
@@ -172,6 +184,10 @@ mod tests {
         assert_eq!(response.songs[0].disc_number, Some(1));
         assert_eq!(response.songs[0].duration, Some(178));
         assert_eq!(response.songs[0].media_type.as_deref(), Some("song"));
+        assert_eq!(
+            response.songs[0].display_cover_art_id.as_deref(),
+            Some("cover-1")
+        );
     }
 
     #[test]

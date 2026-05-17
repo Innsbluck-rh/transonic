@@ -21,6 +21,7 @@ use super::{
 
 static ANDROID_APP_HANDLE: OnceLock<Mutex<Option<AppHandle<Wry>>>> = OnceLock::new();
 static PENDING_NOTIFICATION_TAP: AtomicBool = AtomicBool::new(false);
+const ANDROID_NOTIFICATION_COVER_ART_SIZE: u32 = 512;
 
 pub fn consume_pending_notification_tap() -> bool {
     PENDING_NOTIFICATION_TAP.swap(false, Ordering::SeqCst)
@@ -107,38 +108,81 @@ fn spawn_controller_action(action: AndroidControllerAction) {
     });
 }
 
-fn execute_controller_action(
-    app: &AppHandle<Wry>,
-    action: AndroidControllerAction,
-) -> Result<(), String> {
+pub(crate) fn spawn_android_artwork_update(app: AppHandle<Wry>) {
+    std::thread::spawn(move || {
+        if let Err(error) = update_current_artwork(&app) {
+            log::warn!("android_runtime: failed to update media artwork: {error}");
+        }
+    });
+}
+
+fn update_current_artwork(app: &AppHandle<Wry>) -> Result<(), String> {
     let playback = app.state::<PlaybackControllerState>();
+    let target = {
+        let controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+        controller.current_artwork_update_target()
+    };
+    let Some(target) = target else {
+        return Ok(());
+    };
+
+    let Some(runtime_context) = playback_runtime_context(app) else {
+        return Ok(());
+    };
+    let local_path = runtime_context.cover_art_cache.resolve_cover_art(
+        &runtime_context.client,
+        &runtime_context.profile_id,
+        &target.cover_art_id,
+        Some(ANDROID_NOTIFICATION_COVER_ART_SIZE),
+    )?;
+
     let mut controller = playback
         .0
         .lock()
         .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-    let runtime_context = playback_runtime_context(app);
-    let runtime_context_ref = runtime_context
-        .as_ref()
-        .map(OwnedPlaybackRuntimeContext::as_context);
+    let _ =
+        controller.update_artwork_if_current(&target, local_path.to_string_lossy().to_string())?;
+    Ok(())
+}
 
-    controller.process_native_events(runtime_context_ref.as_ref())?;
+fn execute_controller_action(
+    app: &AppHandle<Wry>,
+    action: AndroidControllerAction,
+) -> Result<(), String> {
+    {
+        let playback = app.state::<PlaybackControllerState>();
+        let mut controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+        let runtime_context = playback_runtime_context(app);
+        let runtime_context_ref = runtime_context
+            .as_ref()
+            .map(OwnedPlaybackRuntimeContext::as_context);
 
-    match action {
-        AndroidControllerAction::Next => {
-            let Some(runtime_context) = runtime_context_ref.as_ref() else {
-                return Err("No active playback session is available.".to_string());
-            };
-            controller.next(runtime_context)?;
+        controller.process_native_events(runtime_context_ref.as_ref())?;
+
+        match action {
+            AndroidControllerAction::Next => {
+                let Some(runtime_context) = runtime_context_ref.as_ref() else {
+                    return Err("No active playback session is available.".to_string());
+                };
+                controller.next(runtime_context)?;
+            }
+            AndroidControllerAction::Prev => {
+                let Some(runtime_context) = runtime_context_ref.as_ref() else {
+                    return Err("No active playback session is available.".to_string());
+                };
+                controller.prev(runtime_context)?;
+            }
+            AndroidControllerAction::ProcessNativeEvents => {}
         }
-        AndroidControllerAction::Prev => {
-            let Some(runtime_context) = runtime_context_ref.as_ref() else {
-                return Err("No active playback session is available.".to_string());
-            };
-            controller.prev(runtime_context)?;
-        }
-        AndroidControllerAction::ProcessNativeEvents => {}
     }
 
+    spawn_android_artwork_update(app.clone());
     Ok(())
 }
 

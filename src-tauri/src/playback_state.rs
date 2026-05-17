@@ -110,6 +110,7 @@ mod tests {
             artist: Some("Test Artist".to_string()),
             artist_id: Some("artist-1".to_string()),
             cover_art_id: None,
+            display_cover_art_id: None,
             track: Some(1),
             disc_number: None,
             year: Some(2024),

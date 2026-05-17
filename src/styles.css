@@ -43,13 +43,13 @@
   /* light theme default */
   --theme-color-primary-plane: var(--color-zinc-50);
   --theme-color-primary-surface: var(--color-zinc-100);
-  --theme-color-primary-inner-surface: var(--color-zinc-200);
+  --theme-color-primary-inner-surface: var(--color-zinc-300);
   --theme-color-primary-selected: var(--color-zinc-200);
   --theme-color-primary-playing: var(--color-sky-600);
   --theme-color-primary-on-playing: var(--color-zinc-200);
   --theme-color-primary-hover: var(--color-zinc-200);
-  --theme-color-primary-border: var(--color-zinc-400);
-  --theme-color-secondary-border: var(--color-zinc-300);
+  --theme-color-primary-border: rgb(0 0 0 / 0.35);
+  --theme-color-secondary-border: rgb(0 0 0 / 0.15);
   --theme-color-primary-text: var(--color-zinc-700);
   --theme-color-secondary-text: var(--color-zinc-500);
   --theme-color-sp-nav-space: var(--color-zinc-400);
@@ -57,16 +57,20 @@
   --player-bar-height: 0.15rem;
   --player-bar-detect-height: 1rem;
   --player-bar-handle-size: 0.75rem;
+  --safe-area-inset-top: env(safe-area-inset-top, 0px);
+  --safe-area-inset-right: env(safe-area-inset-right, 0px);
+  --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-area-inset-left: env(safe-area-inset-left, 0px);
   color-scheme: light;
 }
 
 .sp-top-space {
   @apply bg-sp-nav-space;
-  height: env(safe-area-inset-top);
+  height: var(--safe-area-inset-top);
 }
 .sp-bottom-space {
   @apply bg-sp-nav-space;
-  height: env(safe-area-inset-bottom);
+  height: var(--safe-area-inset-bottom);
 }
 
 @layer base {
@@ -214,11 +218,19 @@
 }
 
 /* SP screen page transitions via View Transitions API */
+::view-transition-group(sp-screen) {
+  z-index: 0;
+}
+
 ::view-transition-image-pair(sp-screen) {
   overflow: clip;
 }
 
-::view-transition-old(sp-screen),
+::view-transition-old(sp-screen) {
+  opacity: 0;
+  animation: none;
+}
+
 ::view-transition-new(sp-screen) {
   animation: none;
 }
@@ -228,6 +240,19 @@
 }
 :root[data-nav-direction]::view-transition-new(sp-screen) {
   animation: sp-fade-in 180ms ease-out both;
+}
+
+::view-transition-group(sp-player-bar) {
+  z-index: 1;
+}
+
+::view-transition-old(sp-player-bar) {
+  opacity: 0;
+  animation: none;
+}
+
+::view-transition-new(sp-player-bar) {
+  animation: none;
 }
 
 @keyframes sp-fade-in {

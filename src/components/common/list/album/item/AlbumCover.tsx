@@ -1,8 +1,7 @@
 import { Component, Match, Switch } from 'solid-js';
+import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import PseudoAlbumCover from './PseudoAlbumCover';
-
-const DEFAULT_COVER_ART_SIZE = 224;
 
 interface AlbumCoverProps {
   albumName: string;
@@ -11,7 +10,7 @@ interface AlbumCoverProps {
 }
 
 const AlbumCover: Component<AlbumCoverProps> = (props) => {
-  const { src, loading } = useCoverArt(() => props.coverArtId ?? null, DEFAULT_COVER_ART_SIZE);
+  const { src, loading } = useCoverArt(() => props.coverArtId ?? null, CoverArtSizes.lg);
 
   return (
     <div class='border-secondary-border aspect-square border object-cover'>

@@ -1,7 +1,7 @@
 import { isSP } from '~/utils/isSP';
 
 export const HOME_ROUTE = '/home';
-export const MOBILE_HOME_ROUTE = '/sp/index/artists';
+export const MOBILE_HOME_ROUTE = '/sp/index';
 export const INIT_LOGIN_ROUTE = '/init_login';
 export const HOME_ERROR_ROUTE = '/home/error';
 export const SETTINGS_ROUTE = '/settings';
@@ -37,7 +37,7 @@ export function resolveAlbumRoute(albumId: string) {
 
 export function resolveBrowseIndexRoute(mode: 'Artists' | 'Folder Structures') {
   if (isSP()) {
-    return mode === 'Artists' ? '/sp/index/artists' : '/sp/index/folders';
+    return MOBILE_HOME_ROUTE;
   }
 
   return mode === 'Artists' ? '/browse/artists' : '/browse/folders';

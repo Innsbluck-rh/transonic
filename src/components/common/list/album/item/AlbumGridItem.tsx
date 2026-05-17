@@ -1,4 +1,4 @@
-import { Component } from 'solid-js';
+import { Component, Show } from 'solid-js';
 import type { AlbumListItem, ArtistAlbum, FolderStructureAlbumItem } from '~/bindings';
 import { buildAlbumMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
@@ -10,6 +10,7 @@ export type AlbumItem = AlbumListItem | ArtistAlbum | FolderStructureAlbumItem;
 interface AlbumGridItemProps {
   class?: string;
   album: AlbumItem;
+  noArtistName?: boolean;
   onClick?: (e: MouseEvent) => void;
   onDblClick?: (e: MouseEvent) => void;
   onArtClick?: (e: MouseEvent) => void;
@@ -60,9 +61,11 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         <p class='text-md truncate font-bold' title={props.album.name ?? '[unknown]'}>
           {props.album.name}
         </p>
-        <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>
-          {props.album.artist ?? 'unknown artist'}
-        </p>
+        <Show when={!props.noArtistName}>
+          <p class='text-secondary-text truncate text-xs' title={props.album.artist ?? undefined}>
+            {props.album.artist ?? 'unknown artist'}
+          </p>
+        </Show>
       </div>
     </div>
   );

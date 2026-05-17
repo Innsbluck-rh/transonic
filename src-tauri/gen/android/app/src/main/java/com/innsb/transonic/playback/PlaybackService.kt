@@ -15,6 +15,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import androidx.media3.session.DefaultMediaNotificationProvider
@@ -51,6 +52,7 @@ private class QueueCommandForwardingPlayer(
       Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM,
       Player.COMMAND_SEEK_TO_PREVIOUS,
       Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> true
+
       else -> super.isCommandAvailable(command)
     }
   }
@@ -119,6 +121,10 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     super.onCreate()
 
     player = ExoPlayer.Builder(this)
+      .setRenderersFactory(
+        DefaultRenderersFactory(this)
+          .setEnableDecoderFallback(true)
+      )
       .setHandleAudioBecomingNoisy(true)
       .build()
       .apply {
@@ -244,6 +250,36 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     return Result.success(Unit)
   }
 
+  fun updateMediaArtwork(request: UpdateMediaArtworkArgs): Result<Unit> {
+    if (request.mediaId.isBlank() || request.artworkPath.isBlank()) {
+      return Result.success(Unit)
+    }
+
+    val currentIndex = player.currentMediaItemIndex
+    if (currentIndex == C.INDEX_UNSET || currentIndex >= player.mediaItemCount) {
+      return Result.success(Unit)
+    }
+
+    val mediaItem = player.getMediaItemAt(currentIndex)
+    if (!mediaItemMatches(mediaItem.mediaId, request.mediaId)) {
+      return Result.success(Unit)
+    }
+
+    val artworkUri = artworkContentUri(request.artworkPath) ?: return Result.success(Unit)
+    val mediaMetadata = mediaItem.mediaMetadata
+      .buildUpon()
+      .setArtworkUri(artworkUri)
+      .build()
+    player.replaceMediaItem(
+      currentIndex,
+      mediaItem
+        .buildUpon()
+        .setMediaMetadata(mediaMetadata)
+        .build(),
+    )
+    return Result.success(Unit)
+  }
+
   fun currentAbsolutePositionMs(): Long {
     val currentPositionMs = player.currentPosition
     val safeCurrentPositionMs = if (currentPositionMs < 0) 0 else currentPositionMs
@@ -330,7 +366,13 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     val pending = pendingLoad
     pendingLoad = null
     if (pending != null) {
-      pending.callback(Result.failure(IllegalStateException(error.message ?: "Android playback failed.")))
+      pending.callback(
+        Result.failure(
+          IllegalStateException(
+            error.message ?: "Android playback failed."
+          )
+        )
+      )
       return
     }
 
@@ -410,6 +452,11 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     return C.INDEX_UNSET
   }
 
+  private fun mediaItemMatches(actualMediaId: String, requestedMediaId: String): Boolean {
+    return actualMediaId == requestedMediaId ||
+      actualMediaId.substringBefore("#") == requestedMediaId
+  }
+
   private fun artworkContentUri(artworkPath: String): Uri? {
     if (artworkPath.isBlank()) {
       return null
@@ -442,6 +489,7 @@ private class PlaybackSessionCallback(
       sessionCommands.add(SessionCommand(COMMAND_PREPARE_NEXT_MEDIA, Bundle.EMPTY))
       sessionCommands.add(SessionCommand(COMMAND_ACTIVATE_PREPARED_MEDIA, Bundle.EMPTY))
       sessionCommands.add(SessionCommand(COMMAND_CLEAR_PREPARED_MEDIA, Bundle.EMPTY))
+      sessionCommands.add(SessionCommand(COMMAND_UPDATE_MEDIA_ARTWORK, Bundle.EMPTY))
     }
 
     return ConnectionResult.AcceptedResultBuilder(session)
@@ -465,8 +513,18 @@ private class PlaybackSessionCallback(
             )
         handleImmediateResult(service.prepareNextMedia(request))
       }
+
       COMMAND_ACTIVATE_PREPARED_MEDIA -> handleImmediateResult(service.activatePreparedMedia(args.toActivatePreparedMediaArgs()))
       COMMAND_CLEAR_PREPARED_MEDIA -> handleImmediateResult(service.clearPreparedMedia())
+      COMMAND_UPDATE_MEDIA_ARTWORK -> {
+        val request =
+          args.toUpdateMediaArtworkArgs()
+            ?: return Futures.immediateFailedFuture(
+              IllegalArgumentException("Missing Media3 custom command payload for artwork update."),
+            )
+        handleImmediateResult(service.updateMediaArtwork(request))
+      }
+
       else -> Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
     }
   }
