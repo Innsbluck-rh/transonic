@@ -5,6 +5,7 @@ import AlbumGrid from '~/components/common/list/album/AlbumGrid';
 import RouteHeader from '~/components/common/RouteHeader';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 
 type HomeAlbumSection = {
   heading: string;
@@ -81,7 +82,13 @@ function SPHome() {
   });
 
   return (
-    <div class='home-surface-root overflow-y-auto p-0'>
+    <div
+      class='home-surface-root overflow-y-auto p-0'
+      style={{
+        'padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
+        'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
+      }}
+    >
       <RouteHeader title='Home' />
       <div class='mt-2' />
 

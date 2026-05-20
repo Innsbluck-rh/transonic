@@ -61,7 +61,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   return (
-    <div class='relative flex h-24 w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0_/_0.05)]'>
+    <div class='relative flex h-24 w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0/0.05)]'>
       <div class='absolute z-30 w-full translate-y-[-50%]'>
         <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
       </div>
