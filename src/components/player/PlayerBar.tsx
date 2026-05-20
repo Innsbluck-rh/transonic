@@ -61,7 +61,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   return (
-    <div class='relative flex w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0_/_0.05)]'>
+    <div class='relative flex h-24 w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0_/_0.05)]'>
       <div class='absolute z-30 w-full translate-y-[-50%]'>
         <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
       </div>
@@ -73,13 +73,14 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       <div class='bg-primary-plane absolute z-0 h-full w-full opacity-50'></div>
       <div class='from-primary-plane absolute z-0 h-full w-full bg-linear-to-r to-transparent'></div>
 
-      <div class='relative z-10 flex h-full w-full flex-row items-center gap-3 p-3.5 shadow-xl lg:p-5 lg:px-6'>
-        <div class='z-10 flex flex-row items-center gap-3'>
+      <div class='relative z-10 flex h-full w-full flex-row items-center gap-2.5 px-3.5 shadow-xl lg:px-6'>
+        <div class='z-10 flex flex-row items-center gap-2'>
           <Show when={iconsVisibility.prev}>
-            <PlayerIcon type='prev' disabled={isControlDisabled()} onClick={prev} />
+            <PlayerIcon iconClass='p-1' type='prev' disabled={isControlDisabled()} onClick={prev} />
           </Show>
           <Show when={iconsVisibility.playpause}>
             <PlayerIcon
+              iconClass='p-1'
               type={playingState() === 'playing' ? 'pause' : 'play'}
               disabled={isControlDisabled()}
               loading={isInterrupted()}
@@ -87,7 +88,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
             />
           </Show>
           <Show when={iconsVisibility.next}>
-            <PlayerIcon type='next' disabled={isControlDisabled()} onClick={next} />
+            <PlayerIcon iconClass='p-1' type='next' disabled={isControlDisabled()} onClick={next} />
           </Show>
         </div>
 
@@ -95,10 +96,10 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
           <Switch
             fallback={
               <>
-                <div class='mt-1 flex min-w-0 flex-1 flex-col gap-1'>
+                <div class='flex min-w-0 flex-1 flex-col'>
                   <MarqueeParagraph
                     text={currentEntry()?.title || '[unknown]'}
-                    class='archivo w-fit text-base leading-none font-bold'
+                    class='archivo w-fit text-lg font-bold'
                     classList={{
                       'cursor-pointer': !!props.onClickTitle,
                     }}
@@ -108,7 +109,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                   />
                   <MarqueeParagraph
                     text={subtitleText()}
-                    class='archivo text-secondary-text w-fit text-xs leading-none'
+                    class='archivo text-secondary-text w-fit text-xs'
                     classList={{
                       'cursor-pointer': !!props.onClickArtist,
                     }}
@@ -119,7 +120,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                   />
                 </div>
                 <div class='ml-4 flex flex-col gap-1'>
-                  <p class='archivo text-xs'>
+                  <p class='archivo text-sm'>
                     {currentPositionText()} / {durationText()}
                   </p>
                 </div>

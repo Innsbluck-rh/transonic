@@ -25,7 +25,7 @@ const BrowseList: Component<BrowseListProps> = (props) => {
   const location = useLocation();
   const navigate = useSPNavigate();
   return (
-    <div class='flex flex-col pb-6'>
+    <div class='flex flex-col pb-3'>
       <Switch>
         <Match when={props.isLoading}>
           <p class='px-3 py-2 text-xs text-zinc-500'>Loading browse items...</p>

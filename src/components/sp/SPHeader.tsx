@@ -13,7 +13,6 @@ const SPHeader: Component = () => {
       </Title>
       {/*<div class='flex-1' />
       <div class='flex flex-row gap-0'>
-        <ThemeToggle />
         <div class='relative overflow-visible'>
           <div
             class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2'

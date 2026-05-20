@@ -6,7 +6,6 @@ import { resolveSettingsRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { isSP } from '~/utils/isSP';
 import Title from '../Title';
-import ThemeToggle from './ThemeToggle';
 
 interface HeaderProps {
   title?: string;
@@ -66,7 +65,6 @@ const Header: Component<HeaderProps> = (props) => {
       </Show>
       <div class='flex-1' />
       <div class='flex flex-row gap-0'>
-        <ThemeToggle />
         <div class='relative overflow-visible'>
           <div
             class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2'
