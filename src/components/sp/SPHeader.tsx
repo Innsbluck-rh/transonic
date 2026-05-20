@@ -1,4 +1,5 @@
 import { Component } from 'solid-js';
+import { resolveSPBrowseRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import Title from '../common/Title';
 
@@ -7,7 +8,7 @@ const SPHeader: Component = () => {
 
   return (
     <div class='bg-primary-plane z-50 flex h-12 flex-row items-center px-1.5 shadow-md' style={{ 'view-transition-name': 'sp-header' }}>
-      <Title class='cursor-pointer' onClick={() => navigate('/sp/index')}>
+      <Title class='cursor-pointer' onClick={() => navigate(resolveSPBrowseRoute())}>
         Transonic
       </Title>
       {/*<div class='flex-1' />

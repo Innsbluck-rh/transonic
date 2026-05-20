@@ -1,6 +1,6 @@
 import { Component, createMemo, createSignal, For, Show } from 'solid-js';
 
-import { BROWSE_MODE_URLS, BrowseMode } from '../IndexContent';
+import { BROWSE_MODES, type BrowseMode } from '~/features/navigation/routes';
 import selectStates from './select_states.module.css';
 
 interface IndexModeSelectProps {
@@ -11,7 +11,7 @@ interface IndexModeSelectProps {
 const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
   const browseMode = createMemo(() => props.defaultMode);
   const [open, setOpen] = createSignal(false);
-  const otherModes = createMemo<BrowseMode[]>(() => Object.keys(BROWSE_MODE_URLS).filter((mode): mode is BrowseMode => mode !== browseMode()));
+  const otherModes = createMemo<BrowseMode[]>(() => BROWSE_MODES.filter((mode) => mode !== browseMode()));
 
   return (
     <div class='flex flex-col'>

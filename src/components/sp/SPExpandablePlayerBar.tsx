@@ -4,6 +4,7 @@ import { Component, createEffect, createMemo, createSignal, JSX, on, onCleanup, 
 import SPPlayerBar from '~/components/sp/SPPlayerBar';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { setSPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import SPPlayer from './SPPlayer';
 import { playerBarRequest } from './SPPlayerBarController';
@@ -47,9 +48,11 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
   const [velocityY, setVelocityY] = createSignal(0);
   const [suppressBarClick, setSuppressBarClick] = createSignal(false);
   const navigate = useSPNavigate();
+  const { currentEntry, playingState } = usePlayback();
 
   const topOffsetPx = createMemo(() => Math.max(0, props.topOffsetPx ?? 0));
   const bottomOffsetPx = createMemo(() => Math.max(0, props.bottomOffsetPx ?? 0));
+  const shouldShowPlayerBar = createMemo(() => playingState() !== 'idle' && currentEntry() !== null);
 
   const closedTranslateY = createMemo(() => Math.max(containerHeight() - topOffsetPx(), 0));
   const progress = createMemo(() => {
@@ -63,9 +66,13 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
 
   const isDragging = createMemo(() => phase() === 'dragging');
   const shouldAnimate = createMemo(() => !isDragging() && !skipAnimation());
-  const shouldRenderFullPlayer = createMemo(() => phase() !== 'collapsed' || translateY() < closedTranslateY());
+  const shouldRenderFullPlayer = createMemo(() => shouldShowPlayerBar() && (phase() !== 'collapsed' || translateY() < closedTranslateY()));
 
   const openSheet = () => {
+    if (!shouldShowPlayerBar()) {
+      return;
+    }
+
     setPhase('expanded');
     setTranslateY(0);
   };
@@ -82,10 +89,18 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
     requestAnimationFrame(() => setSkipAnimation(false));
   };
 
+  const hideSheet = () => {
+    setPhase('collapsed');
+    setTranslateY(closedTranslateY());
+    setDragPointerId(null);
+    setVelocityY(0);
+    setSuppressBarClick(false);
+  };
+
   const beginDrag =
     (direction: DragDirection): JSX.EventHandlerUnion<HTMLDivElement, PointerEvent> =>
     (event) => {
-      if (dragPointerId() !== null) {
+      if (!shouldShowPlayerBar() || dragPointerId() !== null) {
         return;
       }
 
@@ -214,6 +229,11 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
     on(playerBarRequest, (request) => {
       if (!request) return;
 
+      if (!shouldShowPlayerBar()) {
+        hideSheet();
+        return;
+      }
+
       if (request.expanded && phase() !== 'expanded') {
         openSheet();
       } else if (!request.expanded && phase() !== 'collapsed') {
@@ -256,116 +276,118 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
     setContainerHeight(Math.round(nextHeight));
   };
   const syncCollapsedBarHeight = () => {
-    if (collapsedBarContainerRef) setSPScrollPaddingStore('collapsedPlayerHeight', collapsedBarContainerRef.offsetHeight);
+    const nextHeight = shouldShowPlayerBar() && collapsedBarContainerRef ? collapsedBarContainerRef.offsetHeight : 0;
+    setSPScrollPaddingStore('collapsedPlayerHeight', nextHeight);
   };
 
-  onMount(() => {
-    syncContainerHeight();
+  createEffect(() => {
+    if (shouldShowPlayerBar()) {
+      return;
+    }
+
+    hideSheet();
+    syncCollapsedBarHeight();
+  });
+
+  createEffect(() => {
+    if (!shouldShowPlayerBar()) {
+      return;
+    }
+
     syncCollapsedBarHeight();
 
-    const rootObserver = new ResizeObserver(() => {
-      syncContainerHeight();
-    });
     const collapseObserver = new ResizeObserver(() => {
       syncCollapsedBarHeight();
     });
+    const collapsedBarHost = collapsedBarHostRef;
 
-    if (containerRef) {
-      rootObserver.observe(containerRef);
-    }
     if (collapsedBarContainerRef) {
       collapseObserver.observe(collapsedBarContainerRef);
     }
 
-    if (collapsedBarHostRef) {
-      collapsedBarHostRef.addEventListener('click', handleCollapsedBarClickCapture, true);
+    if (collapsedBarHost) {
+      collapsedBarHost.addEventListener('click', handleCollapsedBarClickCapture, true);
+    }
+
+    onCleanup(() => {
+      collapseObserver.disconnect();
+      collapsedBarHost?.removeEventListener('click', handleCollapsedBarClickCapture, true);
+    });
+  });
+
+  onMount(() => {
+    syncContainerHeight();
+
+    const rootObserver = new ResizeObserver(() => {
+      syncContainerHeight();
+    });
+
+    if (containerRef) {
+      rootObserver.observe(containerRef);
     }
 
     window.addEventListener('resize', syncContainerHeight);
 
     onCleanup(() => {
       rootObserver.disconnect();
-      collapseObserver.disconnect();
-      collapsedBarHostRef?.removeEventListener('click', handleCollapsedBarClickCapture, true);
       window.removeEventListener('resize', syncContainerHeight);
+      setSPScrollPaddingStore('collapsedPlayerHeight', 0);
     });
   });
 
   return (
     <div ref={containerRef} class='pointer-events-none absolute inset-0 flex touch-none flex-col overflow-hidden'>
-      <div
-        class='pointer-events-none absolute inset-0 touch-none bg-black'
-        style={{
-          opacity: `${progress() * 0.75}`,
-          transition: shouldAnimate() ? `opacity ${DEFAULT_SETTLE_DURATION_MS}ms ease-out` : 'none',
-        }}
-      />
-
-      <div
-        ref={collapsedBarContainerRef}
-        class='absolute right-0 bottom-0 left-0 z-30 p-2 pb-4'
-        style={{
-          'view-transition-name': 'sp-player-bar',
-          opacity: `${clamp(1 - progress() * 1.1, 0, 1)}`,
-          transform: `translateY(${progress() * 12}px)`,
-          transition: shouldAnimate()
-            ? `opacity ${DEFAULT_SETTLE_DURATION_MS}ms ease-out, transform ${DEFAULT_SETTLE_DURATION_MS}ms ease-out`
-            : 'none',
-        }}
-      >
-        <div ref={collapsedBarHostRef} class='pointer-events-auto'>
-          <SPPlayerBar
-            iconsVisibility={{
-              prev: false,
-              playpause: true,
-              next: false,
-            }}
-            onClickTitle={(entry) => {
-              const albumId = entry?.albumId;
-              if (!albumId) {
-                openSheet();
-                return;
-              }
-
-              navigate(resolveAlbumRoute(albumId));
-            }}
-            onClickArtist={(entry) => {
-              const artistId = entry?.artistId;
-              if (!artistId) {
-                openSheet();
-                return;
-              }
-
-              navigate(resolveArtistRoute(artistId));
-            }}
-            onClickRestArea={openSheet}
-            restAreaProps={{
-              class: 'touch-none',
-              onPointerDown: beginDrag('expand'),
-              onPointerMove: handleDragMove,
-              onPointerUp: handleDragEnd,
-              onPointerCancel: handleDragCancel,
+      <Show when={shouldShowPlayerBar()}>
+        <>
+          <div
+            class='pointer-events-none absolute inset-0 touch-none bg-black'
+            style={{
+              opacity: `${progress() * 0.75}`,
+              transition: shouldAnimate() ? `opacity ${DEFAULT_SETTLE_DURATION_MS}ms ease-out` : 'none',
             }}
           />
-        </div>
-      </div>
 
-      <Show when={shouldRenderFullPlayer()}>
-        <div
-          class='pointer-events-none absolute inset-x-0 z-40 overflow-hidden'
-          style={{
-            top: `${topOffsetPx()}px`,
-            bottom: `${bottomOffsetPx()}px`,
-            transform: `translateY(${translateY()}px)`,
-            transition: shouldAnimate() ? `transform ${DEFAULT_SETTLE_DURATION_MS}ms ease-out` : 'none',
-          }}
-        >
-          <div class='bg-primary-plane absolute inset-0 overflow-hidden shadow-[0_-12px_48px_rgba(0,0,0,0.35)]'>
-            <div class='pointer-events-auto absolute inset-0 flex min-h-0 flex-col'>
-              <SPPlayer
-                topSectionProps={{
+          <div
+            ref={collapsedBarContainerRef}
+            class='absolute right-0 bottom-0 left-0 z-30 px-2 py-3'
+            style={{
+              'view-transition-name': 'sp-player-bar',
+              opacity: `${clamp(1 - progress() * 1.1, 0, 1)}`,
+              transform: `translateY(${progress() * 12}px)`,
+              transition: shouldAnimate()
+                ? `opacity ${DEFAULT_SETTLE_DURATION_MS}ms ease-out, transform ${DEFAULT_SETTLE_DURATION_MS}ms ease-out`
+                : 'none',
+            }}
+          >
+            <div ref={collapsedBarHostRef} class='pointer-events-auto'>
+              <SPPlayerBar
+                iconsVisibility={{
+                  prev: false,
+                  playpause: true,
+                  next: false,
+                }}
+                onClickTitle={(entry) => {
+                  const albumId = entry?.albumId;
+                  if (!albumId) {
+                    openSheet();
+                    return;
+                  }
+
+                  navigate(resolveAlbumRoute(albumId));
+                }}
+                onClickArtist={(entry) => {
+                  const artistId = entry?.artistId;
+                  if (!artistId) {
+                    openSheet();
+                    return;
+                  }
+
+                  navigate(resolveArtistRoute(artistId));
+                }}
+                onClickRestArea={openSheet}
+                restAreaProps={{
                   class: 'touch-none',
-                  onPointerDown: beginDrag('collapse'),
+                  onPointerDown: beginDrag('expand'),
                   onPointerMove: handleDragMove,
                   onPointerUp: handleDragEnd,
                   onPointerCancel: handleDragCancel,
@@ -373,7 +395,33 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
               />
             </div>
           </div>
-        </div>
+
+          <Show when={shouldRenderFullPlayer()}>
+            <div
+              class='pointer-events-none absolute inset-x-0 z-40 overflow-hidden'
+              style={{
+                top: `${topOffsetPx()}px`,
+                bottom: `${bottomOffsetPx()}px`,
+                transform: `translateY(${translateY()}px)`,
+                transition: shouldAnimate() ? `transform ${DEFAULT_SETTLE_DURATION_MS}ms ease-out` : 'none',
+              }}
+            >
+              <div class='bg-primary-plane absolute inset-0 overflow-hidden shadow-[0_-12px_48px_rgba(0,0,0,0.35)]'>
+                <div class='pointer-events-auto absolute inset-0 flex min-h-0 flex-col'>
+                  <SPPlayer
+                    topSectionProps={{
+                      class: 'touch-none',
+                      onPointerDown: beginDrag('collapse'),
+                      onPointerMove: handleDragMove,
+                      onPointerUp: handleDragEnd,
+                      onPointerCancel: handleDragCancel,
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </Show>
+        </>
       </Show>
     </div>
   );

@@ -14,7 +14,7 @@ export const [currentTheme, setCurrentTheme] = createSignal<AppliedColorTheme>('
 let themeOverridesSheet: CSSStyleSheet | null = null;
 
 function isNamedTheme(theme: string | null): theme is TransonicColorTheme {
-  return theme === 'light' || theme === 'dark';
+  return theme === 'light' || theme === 'dark' || theme === 'trans';
 }
 
 function readStoredTheme(): TransonicColorTheme {

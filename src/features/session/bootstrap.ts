@@ -1,12 +1,10 @@
 import type { AppBootstrap } from '~/bindings';
-import { HOME_ERROR_ROUTE, HOME_ROUTE, INIT_LOGIN_ROUTE, resolveHomeRoute } from '~/features/navigation/routes';
-
-export { HOME_ERROR_ROUTE, HOME_ROUTE, INIT_LOGIN_ROUTE };
+import { resolveHomeRoute } from '~/features/navigation/routes';
 
 export type HomeErrorKind = 'no_network' | 'connection_error' | 'reauth_required';
 
 export function toHomeErrorRoute(kind: HomeErrorKind) {
-  return `${HOME_ERROR_ROUTE}?kind=${encodeURIComponent(kind)}`;
+  return `/home/error?kind=${encodeURIComponent(kind)}`;
 }
 
 export function resolveBootstrapRoute(bootstrap: AppBootstrap) {
@@ -22,6 +20,6 @@ export function resolveBootstrapRoute(bootstrap: AppBootstrap) {
     case 'reauth_required':
       return toHomeErrorRoute('reauth_required');
     case 'none':
-      return bootstrap.activeSession ? homeRoute : INIT_LOGIN_ROUTE;
+      return bootstrap.activeSession ? homeRoute : '/init_login';
   }
 }

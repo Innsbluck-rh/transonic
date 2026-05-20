@@ -1,7 +1,7 @@
 import { ParentComponent, Show } from 'solid-js';
 import { isSP } from '~/utils/isSP';
 
-const Layout: ParentComponent = (props) => {
+const AppLayout: ParentComponent = (props) => {
   return (
     <div class='bg-primary-plane flex h-dvh w-dvw flex-col'>
       <Show when={isSP()}>
@@ -15,4 +15,4 @@ const Layout: ParentComponent = (props) => {
   );
 };
 
-export default Layout;
+export default AppLayout;

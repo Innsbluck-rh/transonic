@@ -165,7 +165,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
                 <div class='border-primary-border absolute top-0 right-0 bottom-0 left-0 h-full w-full border-b'>
                   <Show
                     when={effectiveArtistImageSrc()}
-                    fallback={<div class='bg-primary-inner-surface flex h-full w-full items-center justify-center text-xs'></div>}
+                    fallback={<div class='bg-primary-surface flex h-full w-full items-center justify-center text-xs'></div>}
                   >
                     {(src) => (
                       <img
@@ -178,14 +178,14 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
                     )}
                   </Show>
                 </div>
-                <div class='bg-primary-inner-surface absolute top-0 right-0 bottom-0 left-0 flex h-full w-full opacity-75' />
+                <div class='bg-primary-surface absolute top-0 right-0 bottom-0 left-0 flex h-full w-full opacity-75' />
                 <p class='archivo text-primary-text absolute bottom-0 left-0 z-10 m-3 w-full text-2xl font-black tracking-tighter'>
                   {artistValue().name}
                 </p>
               </div>
 
               <div class='z-20 flex flex-col'>
-                <div class='border-secondary-border bg-primary-surface sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
+                <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
                   <Heading3 class='text-secondary-text'>albums</Heading3>
                   <div class='flex-1' />
                   <Icon

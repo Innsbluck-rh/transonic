@@ -5,6 +5,7 @@ dist
 build
 target
 src-tauri/gen
+third_party
 
 *.txt
 *.md

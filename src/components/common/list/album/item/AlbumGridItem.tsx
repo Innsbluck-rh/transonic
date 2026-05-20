@@ -59,11 +59,14 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         </Show>
         <Show when={props.inline}>
           <div class='absolute right-1 bottom-1 left-1 flex flex-col gap-0.5 overflow-hidden'>
-            <p class='bg-primary-surface/75 inline w-fit rounded p-1 text-xs font-bold' title={props.album.name ?? '[unknown]'}>
+            <p class='bg-primary-surface/60 inline w-fit rounded px-1 py-0.5 text-xs font-bold' title={props.album.name ?? '[unknown]'}>
               {props.album.name}
             </p>
             <Show when={!props.noArtistName}>
-              <span class='bg-primary-surface/75 inline w-fit truncate rounded p-1 text-[10px] leading-3' title={props.album.artist ?? undefined}>
+              <span
+                class='bg-primary-surface/60 inline w-fit truncate rounded px-1 py-0.5 text-[10px] leading-3'
+                title={props.album.artist ?? undefined}
+              >
                 {props.album.artist ?? 'unknown artist'}
               </span>
             </Show>

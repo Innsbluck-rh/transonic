@@ -9,10 +9,10 @@ type SettingSectionProps = {
 
 function SettingSection(props: SettingSectionProps) {
   return (
-    <section class='bg-primary-plane border-primary-border flex min-w-0 flex-col gap-3 rounded-lg border p-4'>
+    <section class='flex min-w-0 flex-col gap-1'>
       <Heading2>{props.title}</Heading2>
       {props.headerContent}
-      {props.children}
+      <div class='bg-primary-plane border-secondary-border flex flex-col gap-3 rounded-md border p-4'>{props.children}</div>
     </section>
   );
 }

@@ -2,7 +2,8 @@ import { Icon } from '@iconify-icon/solid';
 import { useLocation, useNavigate, useSearchParams } from '@solidjs/router';
 import { createMemo } from 'solid-js';
 import Heading1 from '~/components/common/Heading1';
-import { HOME_ERROR_ROUTE, type HomeErrorKind } from '~/features/session/bootstrap';
+import { resolveHomeRoute } from '~/features/navigation/routes';
+import { type HomeErrorKind } from '~/features/session/bootstrap';
 
 type AppErrorModel = {
   message: string;
@@ -38,7 +39,7 @@ function AppError() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  const isHomeErrorRoute = createMemo(() => location.pathname === HOME_ERROR_ROUTE);
+  const isHomeErrorRoute = createMemo(() => location.pathname === '/home/error');
   const model = createMemo<AppErrorModel>(() => {
     if (isHomeErrorRoute()) {
       return {
@@ -51,7 +52,7 @@ function AppError() {
     return {
       message: `This Page (${decodePath(location.pathname)}) is not available.`,
       actionLabel: 'Back to Home',
-      action: () => navigate('/sp'),
+      action: () => navigate(resolveHomeRoute()),
     };
   });
 

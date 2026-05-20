@@ -17,6 +17,7 @@
 }
 
 @theme {
+  --color-primary-bg: var(--theme-color-primary-bg);
   --color-primary-plane: var(--theme-color-primary-plane);
   --color-primary-surface: var(--theme-color-primary-surface);
   --color-primary-inner-surface: var(--theme-color-primary-inner-surface);
@@ -41,6 +42,7 @@
     /*'Noto Sans SC', 'Noto Sans CJK SC', 'Noto Sans TC', 'Noto Sans CJK TC', 'Noto Sans JP', 'Noto Sans CJK JP', 'Noto Sans KR', 'Noto Sans CJK KR',*/
     'Microsoft YaHei', 'Microsoft JhengHei', 'Yu Gothic', 'Malgun Gothic', 'Hiragino Sans', 'PingFang SC', 'PingFang TC';
   /* light theme default */
+  --theme-color-primary-bg: var(--color-zinc-200);
   --theme-color-primary-plane: var(--color-zinc-50);
   --theme-color-primary-surface: var(--color-zinc-100);
   --theme-color-primary-inner-surface: var(--color-zinc-300);
@@ -126,8 +128,20 @@
   option {
     @apply bg-primary-plane text-primary-text;
   }
-  input {
-    @apply border-primary-border border-b px-0 py-0 text-sm;
+  input:not([type]),
+  input[type='email'],
+  input[type='number'],
+  input[type='password'],
+  input[type='search'],
+  input[type='tel'],
+  input[type='text'],
+  input[type='url'] {
+    @apply border-primary-border bg-primary-surface text-primary-text min-w-0 rounded border px-3 py-2 text-sm;
+    color-scheme: inherit;
+  }
+
+  input[type='checkbox'] {
+    @apply accent-accent h-4 w-4 border border-current;
   }
 
   button {
@@ -213,7 +227,8 @@
   }
 
   .home-surface-root {
-    @apply bg-primary-surface flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
+    @apply bg-primary-bg flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
+    overscroll-behavior: none;
   }
 
   img {

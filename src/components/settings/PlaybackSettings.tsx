@@ -15,7 +15,6 @@ function PlaybackSettings() {
           <input
             type='checkbox'
             checked={isGaplessEnabled()}
-            class='accent-accent h-4 w-4 border border-current'
             onChange={(event) => setPlaybackSetting('gaplessPlaybackEnabled', event.currentTarget.checked)}
           />
         </label>

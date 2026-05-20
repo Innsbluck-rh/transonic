@@ -1,0 +1,3 @@
+[submodule "third_party/androidx-media"]
+	path = third_party/androidx-media
+	url = https://github.com/androidx/media.git

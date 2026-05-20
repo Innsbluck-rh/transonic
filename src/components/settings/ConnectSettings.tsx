@@ -167,12 +167,7 @@ function ConnectSettings() {
     <SettingSection title='Connect'>
       <label class='flex min-w-0 items-center justify-between gap-4'>
         <span class='min-w-0'>Use Transonic Connect</span>
-        <input
-          type='checkbox'
-          checked={connectEnabled()}
-          class='accent-accent h-4 w-4 border border-current'
-          onChange={(event) => setConnectEnabled(event.currentTarget.checked)}
-        />
+        <input type='checkbox' checked={connectEnabled()} onChange={(event) => setConnectEnabled(event.currentTarget.checked)} />
       </label>
 
       <fieldset disabled={!connectEnabled()} classList={{ 'opacity-50': !connectEnabled() }} class='flex min-w-0 flex-col gap-4'>
@@ -181,7 +176,6 @@ function ConnectSettings() {
           <input
             type='checkbox'
             checked={useSubsonicServerHost()}
-            class='accent-accent h-4 w-4 border border-current'
             onChange={(event) => {
               const checked = event.currentTarget.checked;
               setUseSubsonicServerHost(checked);
@@ -199,7 +193,6 @@ function ConnectSettings() {
               value={displayedConnectServerHost()}
               disabled={useSubsonicServerHost()}
               placeholder='https://connect.example'
-              class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
               classList={{
                 'text-secondary-text cursor-not-allowed opacity-50': useSubsonicServerHost(),
               }}
@@ -216,7 +209,6 @@ function ConnectSettings() {
               min='1'
               max='65535'
               value={connectServerPort()}
-              class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
               onInput={(event) => setConnectServerPort(event.currentTarget.value)}
             />
           </div>
@@ -224,12 +216,7 @@ function ConnectSettings() {
 
         <label class='flex min-w-0 flex-col gap-2'>
           <span>Device Name</span>
-          <input
-            value={connectDeviceName()}
-            placeholder='This device'
-            class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
-            onInput={(event) => setConnectDeviceName(event.currentTarget.value)}
-          />
+          <input value={connectDeviceName()} placeholder='This device' onInput={(event) => setConnectDeviceName(event.currentTarget.value)} />
         </label>
 
         <label class='flex min-w-0 items-center justify-between gap-4'>
@@ -237,7 +224,6 @@ function ConnectSettings() {
           <input
             type='checkbox'
             checked={allowInsecureConnectServer()}
-            class='accent-accent h-4 w-4 border border-current'
             onChange={(event) => setAllowInsecureConnectServer(event.currentTarget.checked)}
           />
         </label>

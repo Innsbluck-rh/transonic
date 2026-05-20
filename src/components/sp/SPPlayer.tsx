@@ -50,7 +50,10 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
 
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
-      <div {...props.topSectionProps} class={`relative flex h-auto w-full shrink-0 flex-col items-center ${props.topSectionProps?.class ?? ''}`}>
+      <div
+        {...props.topSectionProps}
+        class={`relative flex h-auto w-full shrink-0 flex-col items-center overflow-hidden ${props.topSectionProps?.class ?? ''}`}
+      >
         <div class='z-10 mt-8 flex h-full w-full flex-col items-center'>
           <div class='flex h-full w-full flex-col items-center px-8'>
             <Show
@@ -99,7 +102,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
             />
 
             <div
-              class='border-secondary-border mt-3 flex w-full flex-row items-center justify-evenly'
+              class='border-secondary-border mt-2 mb-4 flex w-full flex-row items-center justify-evenly'
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
@@ -115,27 +118,27 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               <PlayerIcon iconClass='scale-200 p-6' type='next' disabled={isControlDisabled()} onClick={next} />
             </div>
           </div>
-          <div class='mb-2 flex w-full flex-row justify-between px-2'>
+          <div class='absolute bottom-0 mb-2 flex w-full flex-row justify-between px-2'>
             <p class='archivo text-accent text-xs font-bold'>{currentPositionText()}</p>
             <p class='archivo text-xs font-bold'>{durationText()}</p>
           </div>
         </div>
 
         <Show when={coverArt()}>
-          {(assetUrl) => <img class='absolute h-full w-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
+          {(assetUrl) => <img class='absolute inset-0 z-0 size-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
         </Show>
-        <div class='absolute z-0 h-full w-full backdrop-blur-[5px]' />
-        <div class='bg-primary-plane absolute z-0 h-full w-full opacity-75' />
+        <div class='absolute inset-0 z-0 size-full backdrop-blur-[5px]' />
+        <div class='bg-primary-plane absolute z-0 size-full opacity-75' />
 
         <div class='absolute bottom-0 z-30 w-full translate-y-[50%]'>
           <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
         </div>
       </div>
 
-      <div class='bg-primary-surface border-secondary-border secondar flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
+      <div class='border-secondary-border z-30 flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
-      <div ref={setScrollContainerRef} class='bg-primary-surface flex-1 overflow-y-auto pb-3'>
+      <div ref={setScrollContainerRef} class='z-30 flex-1 overflow-y-auto pb-3'>
         <QueueList queue={queue()} itemRef={setItemRef} />
       </div>
     </div>

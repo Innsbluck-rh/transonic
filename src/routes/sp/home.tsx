@@ -1,12 +1,10 @@
 import { createSignal, For, onMount, Show } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
 import Heading2 from '~/components/common/Heading2';
-import AlbumHorizontalList from '~/components/common/list/album/AlbumHorizontalList';
+import AlbumGrid from '~/components/common/list/album/AlbumGrid';
 import RouteHeader from '~/components/common/RouteHeader';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
-import { usePlayback } from '~/features/playback/usePlayback';
-import { sessionStore } from '~/stores/SessionStore';
 
 type HomeAlbumSection = {
   heading: string;
@@ -15,13 +13,12 @@ type HomeAlbumSection = {
 };
 
 const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> = [
-  { heading: 'newest', context: 'newest' },
+  { heading: 'recently added', context: 'newest' },
   { heading: 'random picks', context: 'random' },
 ];
 
-function Home() {
+function SPHome() {
   const navigate = useSPNavigate();
-  const { playAlbum, insertAfterCurrent, appendToQueue } = usePlayback();
   const [albumSections, setAlbumSections] = createSignal<HomeAlbumSection[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = createSignal(false);
   const [albumError, setAlbumError] = createSignal<string | null>(null);
@@ -35,7 +32,7 @@ function Home() {
         HOME_ALBUM_CONTEXTS.map(async (section) => {
           const result = await commands.getAlbumList({
             context: section.context,
-            size: 16,
+            size: 3,
             offset: null,
             fromYear: null,
             toYear: null,
@@ -83,40 +80,35 @@ function Home() {
   });
 
   return (
-    <Show
-      when={sessionStore.activeSession}
-      fallback={
-        <div>
-          <p>seems like there's no active profile.</p>
-        </div>
-      }
-    >
-      <div class='home-surface-root p-0'>
-        <RouteHeader title='Home' />
-        <div class='mt-2' />
+    <div class='home-surface-root overflow-y-auto p-0'>
+      <RouteHeader title='Home' />
+      <div class='mt-2' />
 
-        <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
+      <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
+      <div class='flex flex-col gap-4'>
         <Show when={!isLoadingAlbums()} fallback={<p class='text-sm text-zinc-400'>Loading album lists...</p>}>
           <For each={albumSections()}>
             {(section) => (
-              <div class='flex w-full flex-col gap-1 overflow-x-hidden'>
-                <Heading2 class='px-3'>{section.heading}</Heading2>
-                <AlbumHorizontalList
-                  class='px-4'
-                  albums={section.albums}
-                  emptyMessage={`No albums returned for ${section.heading}.`}
-                  onItemClick={async (album) => {
-                    navigate(resolveAlbumRoute(album.id, 'pc'));
-                  }}
-                />
+              <div class='flex flex-col'>
+                <Heading2 class='px-2'>{section.heading}</Heading2>
+                <div class='m-3'>
+                  <AlbumGrid
+                    inline
+                    albums={section.albums}
+                    emptyMessage={`No albums returned for ${section.heading}.`}
+                    onItemClick={(album) => {
+                      navigate(resolveAlbumRoute(album.id));
+                    }}
+                  />
+                </div>
               </div>
             )}
           </For>
         </Show>
       </div>
-    </Show>
+    </div>
   );
 }
 
-export default Home;
+export default SPHome;

@@ -9,14 +9,14 @@ import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 function SettingsRoute() {
   return (
     <div
-      class='home-surface-root p-0'
+      class='home-surface-root relative p-0'
       style={{
         'padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
         'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
       }}
     >
       <RouteHeader title='Settings' />
-      <div class='flex flex-1 flex-col gap-4 p-3 lg:p-5'>
+      <div class='flex flex-1 flex-col gap-4 px-4 py-4 lg:p-5'>
         <AppearanceSettings />
         <PlaybackSettings />
         <ServerSettings />

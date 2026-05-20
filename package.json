@@ -21,6 +21,7 @@
     "prettier": "pnpm format",
     "lint-staged": "lint-staged",
     "prepare": "simple-git-hooks",
+    "setup:media3-flac": "node scripts/setup-media3-flac.mjs",
     "bindings:export": "cargo run --manifest-path src-tauri/Cargo.toml --bin export-bindings",
     "bindings:check": "cargo run --manifest-path src-tauri/Cargo.toml --bin check-bindings"
   },

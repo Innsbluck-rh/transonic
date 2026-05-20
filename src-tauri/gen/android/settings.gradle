@@ -1,3 +1,5 @@
 include ':app'
+include ':media3-decoder-flac'
+project(':media3-decoder-flac').projectDir = new File(rootDir, 'media3-decoder-flac')
 
 apply from: 'tauri.settings.gradle'

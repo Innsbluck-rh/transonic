@@ -7,7 +7,7 @@ import { startPlaybackStateSync } from '~/features/playback/service';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import { sessionStore } from '~/stores/SessionStore';
 
-const HomeLayoutSP: ParentComponent = (props) => {
+const MobileHomeLayout: ParentComponent = (props) => {
   let disposed = false;
   let unlisten: (() => void) | undefined;
 
@@ -64,7 +64,7 @@ const HomeLayoutSP: ParentComponent = (props) => {
       <div class='flex min-h-0 flex-1 flex-col'>
         <SPHeader />
 
-        <div class='bg-primary-surface relative flex min-h-0 flex-1 flex-col overflow-hidden'>
+        <div class='bg-primary-bg relative flex min-h-0 flex-1 flex-col overflow-hidden'>
           <div
             class='absolute inset-0 flex min-h-0 flex-1 flex-col overflow-hidden'
             style={{
@@ -83,4 +83,4 @@ const HomeLayoutSP: ParentComponent = (props) => {
   );
 };
 
-export default HomeLayoutSP;
+export default MobileHomeLayout;

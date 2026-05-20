@@ -122,11 +122,9 @@ const AuthForm: Component<AuthFormProps> = (props) => {
         <span>Display name</span>
         <input
           type='text'
-          class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
           value={formData.displayName}
           onInput={(event) => setFormData('displayName', event.currentTarget.value)}
           placeholder='Navidrome'
-          autocomplete='off'
         />
       </label>
 
@@ -135,7 +133,6 @@ const AuthForm: Component<AuthFormProps> = (props) => {
         <div class='grid grid-cols-[minmax(0,1fr)_7rem] gap-2'>
           <input
             type='text'
-            class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
             value={formData.serverBaseUrl}
             onInput={(event) => setFormData('serverBaseUrl', event.currentTarget.value)}
             onBlur={(event) => {
@@ -146,18 +143,15 @@ const AuthForm: Component<AuthFormProps> = (props) => {
               }
             }}
             placeholder='https://your-server.example'
-            autocomplete='url'
             required
           />
           <input
-            class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
             type='number'
             min='1'
             max='65535'
             value={formData.serverPort}
             onInput={(event) => setFormData('serverPort', event.currentTarget.value)}
             placeholder='4533'
-            autocomplete='off'
           />
         </div>
       </label>
@@ -166,11 +160,9 @@ const AuthForm: Component<AuthFormProps> = (props) => {
         <span>Base path</span>
         <input
           type='text'
-          class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
           value={formData.serverPath}
           onInput={(event) => setFormData('serverPath', event.currentTarget.value)}
           placeholder='rest'
-          autocomplete='off'
         />
       </label>*/}
 
@@ -190,12 +182,10 @@ const AuthForm: Component<AuthFormProps> = (props) => {
         <label class='contents items-center'>
           <span>Username</span>
           <input
-            class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
             type='text'
             value={formData.username}
             onInput={(event) => setFormData('username', event.currentTarget.value)}
             placeholder='demo'
-            autocomplete='username'
             required
           />
         </label>
@@ -204,12 +194,10 @@ const AuthForm: Component<AuthFormProps> = (props) => {
       <label class='contents items-center'>
         <span>{formData.authKind === 'password' ? 'Password' : 'API key'}</span>
         <input
-          class='bg-primary-surface border-primary-border min-w-0 rounded border px-3 py-2'
           type={formData.authKind === 'password' ? 'password' : 'text'}
           value={formData.secret}
           onInput={(event) => setFormData('secret', event.currentTarget.value)}
           placeholder={formData.authKind === 'password' ? 'Your password' : 'Paste an OpenSubsonic API key'}
-          autocomplete={formData.authKind === 'password' ? 'current-password' : 'off'}
           required
         />
       </label>

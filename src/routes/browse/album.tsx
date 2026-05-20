@@ -91,7 +91,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
 
   return (
     <div class='home-surface-root w-full gap-0 p-0'>
-      <div class='bg-primary-inner-surface relative z-10 flex w-full flex-col items-center px-3.5 pt-5 pb-0 lg:flex-row lg:pt-4 lg:pb-4'>
+      <div class='bg-primary-surface relative z-10 flex w-full flex-col items-center px-3.5 pt-7 pb-0 lg:flex-row lg:pt-4 lg:pb-4'>
         <div
           class='group border-secondary-border pointer-events-auto relative z-10 h-auto border shadow-xl'
           onClick={() => {
@@ -157,8 +157,8 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         </div>
       </div>
 
-      <div class='bg-primary-surface border-secondary-border z-20 flex w-full flex-col border-t pb-4'>
-        <div class='border-secondary-border bg-primary-surface sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
+      <div class='border-secondary-border z-20 flex w-full flex-col border-t pb-4'>
+        <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
           <Heading3 class='text-secondary-text'>songs</Heading3>
         </div>
         <div

@@ -28,8 +28,6 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
     playingState,
     isInterrupted,
     isControlDisabled,
-    currentPositionText,
-    durationText,
     interruptLabel: playbackInterruptLabel,
     togglePlayPause,
     progressPercent,
@@ -57,7 +55,7 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
       <Show when={coverArt()}>
         {(assetUrl) => <img class='absolute h-full w-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
       </Show>
-      <div class='absolute z-0 h-full w-full backdrop-blur-[3px]'></div>
+      <div class='absolute z-0 h-full w-full backdrop-blur-[2px]'></div>
       <div class='bg-primary-plane absolute z-0 h-full w-full opacity-50'></div>
       <div
         class='bg-primary-playing absolute z-0 h-full opacity-80'
@@ -103,22 +101,12 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
                     }}
                   />
                 </div>
-                {/*<div class='ml-4 flex h-full flex-row'>
-                  <p class='archivo text-secondary-text text-xs'>
-                    {currentPositionText()} / {durationText()}
-                  </p>
-                </div>*/}
               </>
             }
           >
             <Match when={playingState() === 'error'}>
               <div class='flex-1'>
                 <p class='archivo text-secondary-text italic'>[error occured]</p>
-              </div>
-            </Match>
-            <Match when={playingState() === 'idle'}>
-              <div class='flex-1'>
-                <p class='archivo text-secondary-text italic'>[nothing played]</p>
               </div>
             </Match>
           </Switch>

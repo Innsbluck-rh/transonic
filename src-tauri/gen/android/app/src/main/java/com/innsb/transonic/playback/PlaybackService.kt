@@ -4,6 +4,7 @@ import android.app.PendingIntent
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import androidx.core.content.FileProvider
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -123,6 +124,7 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     player = ExoPlayer.Builder(this)
       .setRenderersFactory(
         DefaultRenderersFactory(this)
+          .setExtensionRendererMode(DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
           .setEnableDecoderFallback(true)
       )
       .setHandleAudioBecomingNoisy(true)
@@ -369,7 +371,7 @@ class PlaybackService : MediaSessionService(), Player.Listener {
       pending.callback(
         Result.failure(
           IllegalStateException(
-            error.message ?: "Android playback failed."
+            formatPlaybackError(error)
           )
         )
       )
@@ -382,8 +384,31 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     rustBridge.enqueuePlaybackEvent(
       "error",
       currentAbsolutePositionMs(),
-      error.message ?: "Android playback failed.",
+      formatPlaybackError(error),
     )
+  }
+
+  private fun formatPlaybackError(error: PlaybackException): String {
+    val builder = StringBuilder()
+      .append(error.message ?: "Android playback failed.")
+      .append('\n')
+      .append("errorCode=")
+      .append(error.errorCode)
+      .append(" (")
+      .append(error.errorCodeName)
+      .append(')')
+
+    error.cause?.let { cause ->
+      builder
+        .append("\n\nCause: ")
+        .append(cause::class.java.name)
+        .append(": ")
+        .append(cause.message ?: "")
+        .append("\n\n")
+        .append(Log.getStackTraceString(cause))
+    }
+
+    return builder.toString()
   }
 
   private fun buildMediaSource(request: LoadPreparedMediaArgs): ProgressiveMediaSource {

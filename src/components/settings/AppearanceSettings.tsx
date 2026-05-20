@@ -5,6 +5,7 @@ import SettingSection from './SettingSection';
 const themeOptions = [
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
+  { value: 'trans', label: 'Transonic' },
 ] as const;
 
 function AppearanceSettings() {

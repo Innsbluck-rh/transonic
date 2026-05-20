@@ -1,6 +1,6 @@
 import { Component, createSignal, For } from 'solid-js';
 
-import { BROWSE_MODE_URLS, BrowseMode } from '../IndexContent';
+import { BROWSE_MODES, type BrowseMode } from '~/features/navigation/routes';
 
 interface IndexModeSelectProps {
   defaultMode: BrowseMode;
@@ -20,7 +20,7 @@ const IndexModeSelect2: Component<IndexModeSelectProps> = (props) => {
           props.onSelect?.(e.currentTarget.value as BrowseMode);
         }}
       >
-        <For each={Object.keys(BROWSE_MODE_URLS)}>{(key) => <option value={key}>{key}</option>}</For>
+        <For each={BROWSE_MODES}>{(key) => <option value={key}>{key}</option>}</For>
       </select>
     </div>
   );
