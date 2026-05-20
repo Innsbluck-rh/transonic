@@ -1,6 +1,7 @@
 import { Icon } from '@iconify-icon/solid';
 import interact from 'interactjs';
 import { Component } from 'solid-js';
+import Heading3 from '~/components/common/Heading3';
 import QueueList from '~/components/common/list/song/QueueList';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
@@ -40,9 +41,10 @@ const QueueSideBar: Component = () => {
     },
   });
   return (
-    <div class='queue-sidebar bg-primary-plane border-primary-border flex h-full w-80 max-w-[50%] min-w-56 flex-col overflow-y-hidden border-l'>
-      <div class='border-secondary-border flex h-6 w-full flex-row items-center border-b px-2'>
-        <p class='archivo text-secondary-text min-w-0 flex-1 text-[10px] font-black'>Playback Queue</p>
+    <div class='bg-primary-plane queue-sidebar border-primary-border flex h-full w-80 max-w-[50%] min-w-56 flex-col overflow-y-hidden border-l'>
+      <div class='border-secondary-border flex w-full flex-row items-center border-b px-2 py-1'>
+        <Heading3>Queue</Heading3>
+        <div class='flex-1'></div>
         <Icon
           icon='pixelarticons:loader'
           class='cursor-pointer text-[13px]'

@@ -51,7 +51,7 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   return (
-    <div class='bg-primary-plane relative flex w-full flex-col overflow-hidden rounded-xl shadow-[0_1px_8px_0_rgb(0_0_0/0.25)]'>
+    <div class='bg-primary-plane ripple relative flex w-full flex-col overflow-hidden rounded-xl shadow-[0_1px_8px_0_rgb(0_0_0/0.25)]'>
       <Show when={coverArt()}>
         {(assetUrl) => <img class='absolute h-full w-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
       </Show>

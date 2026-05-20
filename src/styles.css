@@ -1,6 +1,24 @@
 @import 'tailwindcss';
 @import 'css-ripple-effect/dist/ripple.min.css';
 
+@media (hover: none), (pointer: coarse) {
+  .ripple::after {
+    transform: scale(0, 0);
+    opacity: 0;
+    transition:
+      opacity 160ms ease-out,
+      transform 0s linear 160ms;
+  }
+
+  .ripple:active::after {
+    transform: scale(10, 10);
+    opacity: 0.2;
+    transition:
+      transform 500ms ease-out,
+      opacity 0s;
+  }
+}
+
 .archivo-black {
   font-family: 'Archivo Black', var(--cjk-fonts), sans-serif;
   font-weight: 900;

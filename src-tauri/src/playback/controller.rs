@@ -132,6 +132,10 @@ impl PlaybackController {
         self.active_profile_id = profile_id;
     }
 
+    pub fn is_initialized_for_profile(&self, profile_id: &str) -> bool {
+        self.active_profile_id.as_deref() == Some(profile_id)
+    }
+
     pub fn clear_gapless_preparation(&mut self) {
         self.backend.clear_prepared();
         self.prepared_next = None;
@@ -453,6 +457,13 @@ impl PlaybackController {
             return Err("Playback queue index is out of range.".to_string());
         }
 
+        if matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+        ) {
+            self.sync_current_position_from_backend()?;
+            self.report_current_server_playback_stopped(context, self.status.current_position_ms);
+        }
         self.backend.stop()?;
         self.clear_native_events();
         self.status.current_index = Some(index);
@@ -640,6 +651,8 @@ impl PlaybackController {
             self.status.playing_state,
             PlayingState::Playing | PlayingState::Paused
         ) {
+            self.sync_current_position_from_backend()?;
+            self.report_current_server_playback_stopped(context, self.status.current_position_ms);
             self.load_track_at_index(context, next_index, 0, autoplay)?;
         } else {
             self.status.current_index = Some(next_index);
@@ -670,6 +683,8 @@ impl PlaybackController {
             self.status.playing_state,
             PlayingState::Playing | PlayingState::Paused
         ) {
+            self.sync_current_position_from_backend()?;
+            self.report_current_server_playback_stopped(context, self.status.current_position_ms);
             self.load_track_at_index(context, prev_index, 0, autoplay)?;
         } else {
             self.status.current_index = Some(prev_index);
@@ -1391,10 +1406,24 @@ impl PlaybackController {
         else {
             return Ok(false);
         };
-        let Some(entry) = current_queue_entry(&self.status.queue, Some(target.queue_index)) else {
+        let Some(entry) =
+            current_queue_entry(&self.status.queue, Some(target.queue_index)).cloned()
+        else {
             self.clear_gapless_preparation();
             return Ok(false);
         };
+
+        let ended_entry =
+            current_queue_entry(&self.status.queue, self.status.current_index).cloned();
+        let ended_position_ms = self.status.current_position_ms;
+        if let (Some(context), Some(entry)) = (context, ended_entry.as_ref()) {
+            self.report_server_playback_state(
+                context,
+                entry,
+                ended_position_ms,
+                ServerPlaybackState::Stopped,
+            );
+        }
 
         self.status.playing_state = PlayingState::Playing;
         self.status.interrupt_reason = None;
@@ -1436,7 +1465,6 @@ impl PlaybackController {
             return Ok(false);
         };
         let Some(next_index) = current_index.checked_add(1) else {
-            self.transition_to_stopped_end_of_queue();
             if let (Some(context), Some(entry)) = (context, ended_entry.as_ref()) {
                 self.report_server_playback_state(
                     context,
@@ -1445,13 +1473,13 @@ impl PlaybackController {
                     ServerPlaybackState::Stopped,
                 );
             }
+            self.transition_to_stopped_end_of_queue();
             return Ok(true);
         };
         let has_next = usize::try_from(next_index)
             .ok()
             .is_some_and(|index| index < self.status.queue.len());
         if !has_next {
-            self.transition_to_stopped_end_of_queue();
             if let (Some(context), Some(entry)) = (context, ended_entry.as_ref()) {
                 self.report_server_playback_state(
                     context,
@@ -1460,6 +1488,7 @@ impl PlaybackController {
                     ServerPlaybackState::Stopped,
                 );
             }
+            self.transition_to_stopped_end_of_queue();
             return Ok(true);
         }
 
@@ -1467,6 +1496,14 @@ impl PlaybackController {
             self.transition_to_stopped_end_of_queue();
             return Ok(true);
         };
+        if let Some(entry) = ended_entry.as_ref() {
+            self.report_server_playback_state(
+                runtime_context,
+                entry,
+                ended_position_ms,
+                ServerPlaybackState::Stopped,
+            );
+        }
         self.load_track_at_index(runtime_context, next_index, 0, true)?;
         self.report_status();
         Ok(false)
@@ -1576,6 +1613,23 @@ impl PlaybackController {
         self.server_reporter.clear();
     }
 
+    fn report_current_server_playback_stopped(
+        &mut self,
+        context: &PlaybackRuntimeContext<'_>,
+        position_ms: u32,
+    ) {
+        if let Some(entry) =
+            current_queue_entry(&self.status.queue, self.status.current_index).cloned()
+        {
+            self.report_server_playback_state(
+                context,
+                &entry,
+                position_ms,
+                ServerPlaybackState::Stopped,
+            );
+        }
+    }
+
     fn report_server_playback_state(
         &mut self,
         context: &PlaybackRuntimeContext<'_>,
@@ -1596,6 +1650,8 @@ impl PlaybackController {
             ServerPlaybackTrack {
                 song_id: entry.id.clone(),
                 media_type: server_playback_media_type(entry),
+                queue_index: self.status.current_index,
+                duration_ms: entry.duration.map(|duration| u64::from(duration) * 1000),
             },
             position_ms,
             state,
@@ -2489,6 +2545,129 @@ mod tests {
                     song_id: "song-a".to_string(),
                     position_ms: 8_000,
                     state: ServerPlaybackState::Stopped,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn server_reporting_stops_previous_track_before_manual_next() {
+        let (mut controller, backend_state, server_reporter_state) =
+            controller_with_mock_backend_and_server_reporter(true);
+        let (client, capability_matrix) = runtime_context_with_reporting(true, true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: Some("profile-1"),
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 120_000;
+        controller.next(&runtime_context).unwrap();
+
+        let events = server_reporter_state
+            .lock()
+            .unwrap()
+            .reported_events
+            .clone();
+        assert_eq!(
+            events,
+            vec![
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Starting,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Playing,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 120_000,
+                    state: ServerPlaybackState::Stopped,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-b".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Starting,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-b".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Playing,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn server_reporting_stops_previous_track_before_auto_advance() {
+        let (mut controller, _, server_reporter_state) =
+            controller_with_mock_backend_and_server_reporter(true);
+        let (client, capability_matrix) = runtime_context_with_reporting(true, true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: Some("profile-1"),
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+
+        controller.play(&runtime_context).unwrap();
+        controller
+            .handle_track_ended(Some(&runtime_context))
+            .unwrap();
+
+        let events = server_reporter_state
+            .lock()
+            .unwrap()
+            .reported_events
+            .clone();
+        assert_eq!(
+            events,
+            vec![
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Starting,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Playing,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-a".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Stopped,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-b".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Starting,
+                },
+                MockServerReportEvent {
+                    profile_id: "profile-1".to_string(),
+                    song_id: "song-b".to_string(),
+                    position_ms: 0,
+                    state: ServerPlaybackState::Playing,
                 },
             ]
         );
@@ -3649,5 +3828,16 @@ mod tests {
         // Should start fresh - queue not restored
         assert_eq!(status.queue.len(), 0);
         assert_eq!(status.playing_state, PlayingState::Idle);
+    }
+
+    #[test]
+    fn is_initialized_for_profile_tracks_active_profile() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+
+        assert!(!controller.is_initialized_for_profile("profile-1"));
+
+        controller.set_active_profile_id(Some("profile-1".to_string()));
+        assert!(controller.is_initialized_for_profile("profile-1"));
+        assert!(!controller.is_initialized_for_profile("profile-2"));
     }
 }

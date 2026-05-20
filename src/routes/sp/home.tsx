@@ -13,6 +13,7 @@ type HomeAlbumSection = {
 };
 
 const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> = [
+  { heading: 'recently played', context: 'recent' },
   { heading: 'recently added', context: 'newest' },
   { heading: 'random picks', context: 'random' },
 ];

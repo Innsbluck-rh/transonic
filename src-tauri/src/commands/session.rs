@@ -48,6 +48,13 @@ fn restore_playback_state(
     playback: &State<'_, PlaybackControllerState>,
     active_profile_id: &str,
 ) {
+    if is_playback_state_initialized_for_profile(playback, active_profile_id) {
+        log::info!(
+            "restore_playback_state: keeping live playback state for profile {active_profile_id}"
+        );
+        return;
+    }
+
     let config_dir = match app.path().app_config_dir() {
         Ok(dir) => dir,
         Err(error) => {
@@ -89,6 +96,14 @@ fn restore_playback_state(
         state_file.current_position_ms,
     );
     log::info!("restore_playback_state: restored playback state for profile {active_profile_id}");
+}
+
+fn is_playback_state_initialized_for_profile(
+    playback: &State<'_, PlaybackControllerState>,
+    profile_id: &str,
+) -> bool {
+    let controller = playback.0.lock().unwrap();
+    controller.is_initialized_for_profile(profile_id)
 }
 
 fn set_active_profile_id(playback: &State<'_, PlaybackControllerState>, profile_id: &str) {

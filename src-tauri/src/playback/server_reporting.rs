@@ -12,6 +12,8 @@ use crate::models::CapabilityMatrix;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(15);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60 * 60);
+const FALLBACK_SCROBBLE_MAX_THRESHOLD_MS: u64 = 4 * 60 * 1000;
+const FALLBACK_SCROBBLE_UNKNOWN_DURATION_THRESHOLD_MS: u64 = 30 * 1000;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ServerPlaybackState {
@@ -43,6 +45,8 @@ pub struct ServerPlaybackReportingContext {
 pub struct ServerPlaybackTrack {
     pub song_id: String,
     pub media_type: MediaType,
+    pub queue_index: Option<u32>,
+    pub duration_ms: Option<u64>,
 }
 
 pub trait PlaybackServerReporter: Send {
@@ -91,9 +95,10 @@ enum ServerPlaybackCommand {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct ActiveFallbackTrack {
+struct FallbackTrackKey {
     profile_id: String,
     song_id: String,
+    queue_index: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -144,6 +149,100 @@ impl ActiveReportPlaybackSession {
     }
 }
 
+#[derive(Debug, Clone)]
+struct ActiveFallbackScrobbleSession {
+    context: ServerPlaybackReportingContext,
+    track: ServerPlaybackTrack,
+    state: ServerPlaybackState,
+    position_ms: u64,
+    position_updated_at: Instant,
+    played_ms: u64,
+    now_playing_reported: bool,
+    played_scrobbled: bool,
+}
+
+impl ActiveFallbackScrobbleSession {
+    fn new(
+        context: ServerPlaybackReportingContext,
+        track: ServerPlaybackTrack,
+        position_ms: u32,
+        state: ServerPlaybackState,
+    ) -> Self {
+        Self {
+            context,
+            track,
+            state,
+            position_ms: u64::from(position_ms),
+            position_updated_at: Instant::now(),
+            played_ms: 0,
+            now_playing_reported: false,
+            played_scrobbled: false,
+        }
+    }
+
+    fn key(&self) -> FallbackTrackKey {
+        fallback_track_key(&self.context, &self.track)
+    }
+
+    fn refresh_progress(&mut self) {
+        if self.state == ServerPlaybackState::Playing {
+            let elapsed_ms = self.position_updated_at.elapsed().as_millis() as u64;
+            self.played_ms = self.played_ms.saturating_add(elapsed_ms);
+            self.position_ms = self.position_ms.saturating_add(elapsed_ms);
+        }
+        self.position_updated_at = Instant::now();
+    }
+
+    fn update(&mut self, position_ms: u32, state: ServerPlaybackState) {
+        self.refresh_progress();
+        self.position_ms = u64::from(position_ms);
+        self.state = state;
+    }
+
+    fn mark_now_playing_reported(&mut self) {
+        self.now_playing_reported = true;
+    }
+
+    fn should_submit_played_scrobble(&mut self) -> bool {
+        self.refresh_progress();
+        should_submit_fallback_scrobble(
+            self.played_ms,
+            self.track.duration_ms,
+            self.played_scrobbled,
+        )
+    }
+
+    fn mark_played_scrobbled(&mut self) {
+        self.played_scrobbled = true;
+    }
+}
+
+fn fallback_track_key(
+    context: &ServerPlaybackReportingContext,
+    track: &ServerPlaybackTrack,
+) -> FallbackTrackKey {
+    FallbackTrackKey {
+        profile_id: context.profile_id.clone(),
+        song_id: track.song_id.clone(),
+        queue_index: track.queue_index,
+    }
+}
+
+fn fallback_scrobble_threshold_ms(duration_ms: Option<u64>) -> u64 {
+    duration_ms
+        .filter(|duration_ms| *duration_ms > 0)
+        .map(|duration_ms| (duration_ms / 2).min(FALLBACK_SCROBBLE_MAX_THRESHOLD_MS))
+        .unwrap_or(FALLBACK_SCROBBLE_UNKNOWN_DURATION_THRESHOLD_MS)
+}
+
+fn should_submit_fallback_scrobble(
+    played_ms: u64,
+    duration_ms: Option<u64>,
+    already_scrobbled: bool,
+) -> bool {
+    !already_scrobbled && played_ms >= fallback_scrobble_threshold_ms(duration_ms)
+}
+
 impl BackgroundPlaybackServerReporter {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel::<ServerPlaybackCommand>();
@@ -152,7 +251,7 @@ impl BackgroundPlaybackServerReporter {
             .name("playback-server-reporter".into())
             .spawn(move || {
                 let mut active_report_playback: Option<ActiveReportPlaybackSession> = None;
-                let mut active_fallback_track: Option<ActiveFallbackTrack> = None;
+                let mut active_fallback_scrobble: Option<ActiveFallbackScrobbleSession> = None;
 
                 loop {
                     let timeout = active_report_playback
@@ -184,33 +283,23 @@ impl BackgroundPlaybackServerReporter {
                                         state,
                                     )),
                                 };
-                                active_fallback_track = None;
+                                active_fallback_scrobble = None;
                                 continue;
                             }
 
-                            match state {
-                                ServerPlaybackState::Playing => {
-                                    let next_active_track = ActiveFallbackTrack {
-                                        profile_id: context.profile_id.clone(),
-                                        song_id: track.song_id.clone(),
-                                    };
-
-                                    if active_fallback_track.as_ref() != Some(&next_active_track) {
-                                        spawn_now_playing_scrobble(context, track);
-                                        active_fallback_track = Some(next_active_track);
-                                    }
-                                }
-                                ServerPlaybackState::Stopped => {
-                                    active_fallback_track = None;
-                                }
-                                ServerPlaybackState::Starting | ServerPlaybackState::Paused => {}
-                            }
+                            handle_fallback_report(
+                                &mut active_fallback_scrobble,
+                                context,
+                                track,
+                                position_ms,
+                                state,
+                            );
 
                             active_report_playback = None;
                         }
                         Ok(ServerPlaybackCommand::Clear) => {
                             active_report_playback = None;
-                            active_fallback_track = None;
+                            active_fallback_scrobble = None;
                         }
                         Err(RecvTimeoutError::Timeout) => {
                             let Some(session) = active_report_playback.as_mut() else {
@@ -267,6 +356,69 @@ impl PlaybackServerReporter for BackgroundPlaybackServerReporter {
     }
 }
 
+fn handle_fallback_report(
+    active_session: &mut Option<ActiveFallbackScrobbleSession>,
+    context: ServerPlaybackReportingContext,
+    track: ServerPlaybackTrack,
+    position_ms: u32,
+    state: ServerPlaybackState,
+) {
+    let next_key = fallback_track_key(&context, &track);
+    if active_session
+        .as_ref()
+        .is_some_and(|session| session.key() != next_key)
+    {
+        finalize_fallback_scrobble(active_session);
+    }
+
+    if active_session.is_none() {
+        *active_session = Some(ActiveFallbackScrobbleSession::new(
+            context,
+            track,
+            position_ms,
+            state.clone(),
+        ));
+    } else if let Some(session) = active_session.as_mut() {
+        session.update(position_ms, state.clone());
+    }
+
+    match state {
+        ServerPlaybackState::Playing => {
+            if let Some(session) = active_session.as_mut() {
+                if !session.now_playing_reported {
+                    spawn_now_playing_scrobble(session.context.clone(), session.track.clone());
+                    session.mark_now_playing_reported();
+                }
+                submit_fallback_scrobble_if_ready(session);
+            }
+        }
+        ServerPlaybackState::Paused => {
+            if let Some(session) = active_session.as_mut() {
+                submit_fallback_scrobble_if_ready(session);
+            }
+        }
+        ServerPlaybackState::Stopped => {
+            finalize_fallback_scrobble(active_session);
+        }
+        ServerPlaybackState::Starting => {}
+    }
+}
+
+fn finalize_fallback_scrobble(active_session: &mut Option<ActiveFallbackScrobbleSession>) {
+    let Some(session) = active_session.as_mut() else {
+        return;
+    };
+    submit_fallback_scrobble_if_ready(session);
+    *active_session = None;
+}
+
+fn submit_fallback_scrobble_if_ready(session: &mut ActiveFallbackScrobbleSession) {
+    if session.should_submit_played_scrobble() {
+        spawn_played_scrobble(session.context.clone(), session.track.clone());
+        session.mark_played_scrobbled();
+    }
+}
+
 fn spawn_report_playback(
     context: ServerPlaybackReportingContext,
     track: ServerPlaybackTrack,
@@ -282,7 +434,7 @@ fn spawn_report_playback(
                 position_ms,
                 state: state.as_api_state(),
                 playback_rate: Some(1.0),
-                ignore_scrobble: Some(true),
+                ignore_scrobble: Some(false),
             })
             .await
         {
@@ -315,4 +467,73 @@ fn spawn_now_playing_scrobble(context: ServerPlaybackReportingContext, track: Se
             );
         }
     });
+}
+
+fn spawn_played_scrobble(context: ServerPlaybackReportingContext, track: ServerPlaybackTrack) {
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = context
+            .client
+            .scrobble(ScrobbleRequest {
+                ids: vec![track.song_id.clone()],
+                time: None,
+                submission: Some(true),
+            })
+            .await
+        {
+            log::warn!(
+                "server_reporting: scrobble(played) failed for profile={} song_id={}: {:?}",
+                context.profile_id,
+                track.song_id,
+                error
+            );
+        }
+    });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        fallback_scrobble_threshold_ms, should_submit_fallback_scrobble,
+        FALLBACK_SCROBBLE_MAX_THRESHOLD_MS, FALLBACK_SCROBBLE_UNKNOWN_DURATION_THRESHOLD_MS,
+    };
+
+    #[test]
+    fn fallback_scrobble_threshold_uses_half_duration_capped_at_four_minutes() {
+        assert_eq!(fallback_scrobble_threshold_ms(Some(180_000)), 90_000);
+        assert_eq!(
+            fallback_scrobble_threshold_ms(Some(20 * 60 * 1000)),
+            FALLBACK_SCROBBLE_MAX_THRESHOLD_MS
+        );
+    }
+
+    #[test]
+    fn fallback_scrobble_threshold_uses_unknown_duration_default() {
+        assert_eq!(
+            fallback_scrobble_threshold_ms(None),
+            FALLBACK_SCROBBLE_UNKNOWN_DURATION_THRESHOLD_MS
+        );
+        assert_eq!(
+            fallback_scrobble_threshold_ms(Some(0)),
+            FALLBACK_SCROBBLE_UNKNOWN_DURATION_THRESHOLD_MS
+        );
+    }
+
+    #[test]
+    fn fallback_scrobble_submission_requires_threshold_and_no_prior_submission() {
+        assert!(!should_submit_fallback_scrobble(
+            89_999,
+            Some(180_000),
+            false
+        ));
+        assert!(should_submit_fallback_scrobble(
+            90_000,
+            Some(180_000),
+            false
+        ));
+        assert!(!should_submit_fallback_scrobble(
+            90_000,
+            Some(180_000),
+            true
+        ));
+    }
 }
