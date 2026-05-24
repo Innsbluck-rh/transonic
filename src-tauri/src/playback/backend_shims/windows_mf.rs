@@ -186,6 +186,10 @@ impl PlaybackBackend for MfPlaybackBackend {
         self.send_u32(|reply| WorkerJob::CurrentPosition { reply })
     }
 
+    fn set_volume(&mut self, _volume: f32) -> Result<(), String> {
+        Ok(())
+    }
+
     fn pause(&mut self) -> Result<(), String> {
         self.send_unit(|reply| WorkerJob::Pause { reply })
     }

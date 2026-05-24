@@ -6,8 +6,8 @@ use opensubsonic_client::{
 use crate::{
     cover_art_cache::CoverArtCache,
     models::{
-        CapabilityMatrix, GaplessState, GaplessStatus, InterruptReason, PlaybackCapabilities,
-        PlaybackStatus, PlayingState, SongResponse,
+        normalize_volume, CapabilityMatrix, GaplessState, GaplessStatus, InterruptReason,
+        PlaybackCapabilities, PlaybackError, PlaybackStatus, PlayingState, SongResponse,
     },
     playback_state::{PlaybackStateFile, PlaybackStatePersister},
 };
@@ -29,6 +29,15 @@ pub struct PlaybackRuntimeContext<'a> {
     #[allow(dead_code)]
     pub cover_art_cache: Option<&'a CoverArtCache>,
     pub profile_id: Option<&'a str>,
+}
+
+const HANDLED_PLAYBACK_ERROR_PREFIX: &str = "[transonic-handled-playback-error]";
+
+fn playback_error_from_load_failure(error: &str) -> PlaybackError {
+    PlaybackError {
+        message: error.replace(HANDLED_PLAYBACK_ERROR_PREFIX, ""),
+        handled: error.contains(HANDLED_PLAYBACK_ERROR_PREFIX),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,15 +107,20 @@ pub struct PlaybackController {
 
 impl PlaybackController {
     pub fn new(
-        backend: Box<dyn PlaybackBackend>,
+        mut backend: Box<dyn PlaybackBackend>,
         reporter: Box<dyn PlaybackReporter>,
         server_reporter: Box<dyn PlaybackServerReporter>,
         queue_sync: Box<dyn QueueSyncGateway>,
         native_events: Box<dyn NativePlaybackEventSource>,
         persister: Box<dyn PlaybackStatePersister>,
         gapless_playback_enabled: bool,
+        initial_volume: f32,
     ) -> Self {
         let playback_capabilities = backend.capabilities();
+        let volume = normalize_volume(initial_volume);
+        if let Err(error) = backend.set_volume(volume) {
+            log::warn!("controller.new: failed to apply initial volume: {error}");
+        }
         Self {
             backend,
             reporter,
@@ -182,7 +196,7 @@ impl PlaybackController {
         } else {
             PlayingState::Stopped
         };
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -203,6 +217,12 @@ impl PlaybackController {
 
     pub fn capabilities(&self) -> PlaybackCapabilities {
         self.playback_capabilities.clone()
+    }
+
+    pub fn set_volume(&mut self, volume: f32) -> Result<(), String> {
+        let volume = normalize_volume(volume);
+        self.backend.set_volume(volume)?;
+        Ok(())
     }
 
     pub fn state(&mut self) -> PlaybackStatus {
@@ -285,7 +305,7 @@ impl PlaybackController {
         self.status.current_index = current_index;
         self.status.current_position_ms = 0;
         self.status.current_song_id = next_song_id;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -331,7 +351,7 @@ impl PlaybackController {
 
         self.status.current_song_id = current_song_id(&self.status.queue, Some(index));
         self.status.current_position_ms = position_ms;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -414,6 +434,157 @@ impl PlaybackController {
         Ok(self.state())
     }
 
+    pub fn move_queue_index(
+        &mut self,
+        from_index: u32,
+        to_index: u32,
+    ) -> Result<PlaybackStatus, String> {
+        let from_index = usize::try_from(from_index)
+            .map_err(|_| "Playback queue index is out of range.".to_string())?;
+        let to_index = usize::try_from(to_index)
+            .map_err(|_| "Playback queue index is out of range.".to_string())?;
+        if from_index >= self.status.queue.len() || to_index >= self.status.queue.len() {
+            return Err("Playback queue index is out of range.".to_string());
+        }
+        if from_index == to_index {
+            return Ok(self.state());
+        }
+
+        let current_index = self
+            .status
+            .current_index
+            .and_then(|value| usize::try_from(value).ok())
+            .filter(|value| *value < self.status.queue.len());
+
+        self.clear_gapless_preparation();
+
+        let entry = self.status.queue.remove(from_index);
+        self.status.queue.insert(to_index, entry);
+
+        let next_current_index = match current_index {
+            None => None,
+            Some(current_index) if current_index == from_index => Some(to_index),
+            Some(current_index) => {
+                let after_remove = if from_index < current_index {
+                    current_index - 1
+                } else {
+                    current_index
+                };
+                Some(if to_index <= after_remove {
+                    after_remove + 1
+                } else {
+                    after_remove
+                })
+            }
+        }
+        .map(|value| {
+            u32::try_from(value).map_err(|_| "Playback queue index is out of range.".to_string())
+        })
+        .transpose()?;
+
+        self.status.current_index = next_current_index;
+        self.status.current_song_id =
+            current_song_id(&self.status.queue, self.status.current_index);
+
+        self.sync_queue_state();
+        self.persist_state();
+        self.report_status();
+        Ok(self.state())
+    }
+
+    pub fn remove_queue_index(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+        index: u32,
+    ) -> Result<PlaybackStatus, String> {
+        let remove_index = usize::try_from(index)
+            .map_err(|_| "Playback queue index is out of range.".to_string())?;
+        if remove_index >= self.status.queue.len() {
+            return Err("Playback queue index is out of range.".to_string());
+        }
+
+        let current_index = self
+            .status
+            .current_index
+            .and_then(|value| usize::try_from(value).ok())
+            .filter(|value| *value < self.status.queue.len());
+        let removing_current = current_index == Some(remove_index);
+        let was_loaded = matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+        );
+        let autoplay = self.should_autoplay();
+
+        if removing_current {
+            self.sync_current_position_from_backend()?;
+        }
+        let removed_position_ms = self.status.current_position_ms;
+        let removed_entry = self.status.queue[remove_index].clone();
+
+        self.clear_gapless_preparation();
+
+        if removing_current && was_loaded {
+            self.backend.stop()?;
+            self.clear_native_events();
+            if let Some(context) = context {
+                self.report_server_playback_state(
+                    context,
+                    &removed_entry,
+                    removed_position_ms,
+                    ServerPlaybackState::Stopped,
+                );
+            }
+            self.clear_server_reporting();
+        }
+
+        self.status.queue.remove(remove_index);
+        let next_current_index = match current_index {
+            None => None,
+            Some(_) if self.status.queue.is_empty() => None,
+            Some(current_index) if current_index > remove_index => Some(current_index - 1),
+            Some(current_index) if current_index < remove_index => Some(current_index),
+            Some(_) => Some(remove_index.min(self.status.queue.len() - 1)),
+        }
+        .map(|value| {
+            u32::try_from(value).map_err(|_| "Playback queue index is out of range.".to_string())
+        })
+        .transpose()?;
+
+        self.status.current_index = next_current_index;
+        self.status.current_song_id =
+            current_song_id(&self.status.queue, self.status.current_index);
+
+        if removing_current {
+            self.status.current_position_ms = 0;
+            self.status.playback_error = None;
+            self.status.interrupt_reason = None;
+            self.status.pending_seek_position_ms = None;
+            self.interrupted_resume_state = None;
+
+            if self.status.queue.is_empty() {
+                self.status.playing_state = PlayingState::Idle;
+            } else {
+                self.status.playing_state = PlayingState::Stopped;
+                if was_loaded {
+                    if let (Some(context), Some(next_index)) = (context, self.status.current_index)
+                    {
+                        self.sync_queue_state();
+                        self.load_track_at_index(context, next_index, 0, autoplay)?;
+                        self.persist_state();
+                        self.process_native_events_inner(Some(context), false)?;
+                        self.report_status();
+                        return Ok(self.state());
+                    }
+                }
+            }
+        }
+
+        self.sync_queue_state();
+        self.persist_state();
+        self.report_status();
+        Ok(self.state())
+    }
+
     pub fn play(&mut self, context: &PlaybackRuntimeContext<'_>) -> Result<PlaybackStatus, String> {
         let index = self.ensure_current_index()?;
 
@@ -421,7 +592,7 @@ impl PlaybackController {
         if self.status.playing_state == PlayingState::Paused {
             self.backend.resume()?;
             self.status.playing_state = PlayingState::Playing;
-            self.status.error = None;
+            self.status.playback_error = None;
             self.status.interrupt_reason = None;
             self.process_native_events_inner(Some(context), false)?;
             if let Some(entry) =
@@ -470,7 +641,7 @@ impl PlaybackController {
         self.status.current_song_id = current_song_id(&self.status.queue, Some(index));
         self.status.current_position_ms = 0;
         self.status.playing_state = PlayingState::Stopped;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -490,7 +661,7 @@ impl PlaybackController {
         self.sync_current_position_from_backend()?;
         self.backend.pause()?;
         self.status.playing_state = PlayingState::Paused;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -537,7 +708,7 @@ impl PlaybackController {
         self.clear_server_reporting();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -582,7 +753,7 @@ impl PlaybackController {
                     log::info!(
                         "controller.seek: backend applied native seek at position_ms={requested_position_ms}"
                     );
-                    self.status.error = None;
+                    self.status.playback_error = None;
                     self.status.interrupt_reason = None;
                     self.status.pending_seek_position_ms = Some(requested_position_ms);
                 }
@@ -600,7 +771,7 @@ impl PlaybackController {
             }
         } else {
             self.status.current_position_ms = requested_position_ms;
-            self.status.error = None;
+            self.status.playback_error = None;
             self.status.interrupt_reason = None;
             self.status.pending_seek_position_ms = None;
             self.interrupted_resume_state = None;
@@ -659,7 +830,7 @@ impl PlaybackController {
             self.status.current_song_id = current_song_id(&self.status.queue, Some(next_index));
             self.status.current_position_ms = 0;
             self.status.playing_state = PlayingState::Stopped;
-            self.status.error = None;
+            self.status.playback_error = None;
             self.status.interrupt_reason = None;
             self.status.pending_seek_position_ms = None;
             self.interrupted_resume_state = None;
@@ -691,7 +862,7 @@ impl PlaybackController {
             self.status.current_song_id = current_song_id(&self.status.queue, Some(prev_index));
             self.status.current_position_ms = 0;
             self.status.playing_state = PlayingState::Stopped;
-            self.status.error = None;
+            self.status.playback_error = None;
             self.status.interrupt_reason = None;
             self.status.pending_seek_position_ms = None;
             self.interrupted_resume_state = None;
@@ -710,7 +881,7 @@ impl PlaybackController {
         self.clear_native_events();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -810,7 +981,7 @@ impl PlaybackController {
         self.status.current_index = Some(index);
         self.status.current_song_id = Some(song_id.clone());
         self.status.current_position_ms = requested_position_ms;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.interrupted_resume_state = None;
         self.report_status();
         self.report_server_playback_state(
@@ -840,13 +1011,15 @@ impl PlaybackController {
         };
 
         if let Err(error) = load_result {
+            let playback_error = playback_error_from_load_failure(&error);
+            let returned_error = playback_error.message.clone();
             self.status.playing_state = PlayingState::Error;
-            self.status.error = Some(error.clone());
+            self.status.playback_error = Some(playback_error);
             self.status.interrupt_reason = None;
             self.status.pending_seek_position_ms = None;
             self.clear_server_reporting();
             self.report_status();
-            return Err(error);
+            return Err(returned_error);
         }
 
         self.clear_native_events();
@@ -857,7 +1030,7 @@ impl PlaybackController {
         };
         self.status.current_position_ms = requested_position_ms;
         self.status.current_song_id = Some(song_id);
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -898,7 +1071,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = Some(requested_position_ms);
         self.status.current_index = Some(index);
         self.status.current_song_id = Some(song_id.clone());
-        self.status.error = None;
+        self.status.playback_error = None;
         self.interrupted_resume_state = None;
         self.report_status();
         self.report_server_playback_state(
@@ -926,7 +1099,7 @@ impl PlaybackController {
         self.status.current_index = Some(index);
         self.status.current_song_id = Some(song_id);
         self.status.current_position_ms = requested_position_ms;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -1248,7 +1421,7 @@ impl PlaybackController {
             .current_position_ms()
             .map_err(|error| format!("Failed to sync the backend playback position: {error}"))?;
         self.status.current_position_ms = current_position_ms;
-        self.status.error = None;
+        self.status.playback_error = None;
         Ok(())
     }
 
@@ -1292,12 +1465,12 @@ impl PlaybackController {
                         InterruptReason::StreamBufferingStall
                     });
                 self.status.current_position_ms = position_ms;
-                self.status.error = None;
+                self.status.playback_error = None;
                 Ok(true)
             }
             PlaybackNativeEvent::Ready { position_ms } => {
                 self.status.current_position_ms = position_ms;
-                self.status.error = None;
+                self.status.playback_error = None;
                 self.confirm_pending_seek();
                 self.status.interrupt_reason = None;
                 if matches!(self.status.playing_state, PlayingState::Interrupted) {
@@ -1313,7 +1486,7 @@ impl PlaybackController {
                 self.status.playing_state = PlayingState::Playing;
                 self.status.interrupt_reason = None;
                 self.status.current_position_ms = position_ms;
-                self.status.error = None;
+                self.status.playback_error = None;
                 self.confirm_pending_seek();
                 self.interrupted_resume_state = None;
                 Ok(true)
@@ -1322,22 +1495,22 @@ impl PlaybackController {
                 self.status.playing_state = PlayingState::Paused;
                 self.status.interrupt_reason = None;
                 self.status.current_position_ms = position_ms;
-                self.status.error = None;
+                self.status.playback_error = None;
                 self.confirm_pending_seek();
                 self.interrupted_resume_state = None;
                 Ok(true)
             }
             PlaybackNativeEvent::SeekProcessed { position_ms } => {
                 self.status.current_position_ms = position_ms;
-                self.status.error = None;
+                self.status.playback_error = None;
                 self.confirm_pending_seek();
                 Ok(true)
             }
-            PlaybackNativeEvent::Error { message } => {
+            PlaybackNativeEvent::Error { message, handled } => {
                 self.status.playing_state = PlayingState::Error;
                 self.status.interrupt_reason = None;
                 self.status.pending_seek_position_ms = None;
-                self.status.error = Some(message);
+                self.status.playback_error = Some(PlaybackError { message, handled });
                 self.interrupted_resume_state = None;
                 Ok(true)
             }
@@ -1431,7 +1604,7 @@ impl PlaybackController {
         self.status.current_index = Some(target.queue_index);
         self.status.current_song_id = Some(entry.id.clone());
         self.status.current_position_ms = 0;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.interrupted_resume_state = None;
         self.gapless_failure = None;
         self.prepared_next = None;
@@ -1514,7 +1687,7 @@ impl PlaybackController {
         self.clear_server_reporting();
         self.status.playing_state = PlayingState::Stopped;
         self.status.current_position_ms = 0;
-        self.status.error = None;
+        self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
@@ -1772,7 +1945,10 @@ mod tests {
 
     use opensubsonic_client::{normalize_base_url, Auth, ClientConfig};
 
-    use super::{current_song_id, PlaybackController, PlaybackRuntimeContext, PlaybackStatus};
+    use super::{
+        current_song_id, playback_error_from_load_failure, PlaybackController,
+        PlaybackRuntimeContext, PlaybackStatus, HANDLED_PLAYBACK_ERROR_PREFIX,
+    };
     use crate::{
         models::{
             CapabilityMatrix, GaplessState, InterruptReason, PlaybackCapabilities, PlayingState,
@@ -1826,6 +2002,7 @@ mod tests {
         pause_calls: usize,
         resume_calls: usize,
         stop_calls: usize,
+        volume_calls: Vec<f32>,
         activate_prepared_calls: usize,
         clear_prepared_calls: usize,
         activated_prepared_urls: Vec<String>,
@@ -1988,6 +2165,11 @@ mod tests {
             let mut state = self.state.lock().unwrap();
             state.current_position_calls += 1;
             Ok(state.current_position_ms)
+        }
+
+        fn set_volume(&mut self, volume: f32) -> Result<(), String> {
+            self.state.lock().unwrap().volume_calls.push(volume);
+            Ok(())
         }
 
         fn update_artwork(
@@ -2157,6 +2339,7 @@ mod tests {
             Box::new(NoopNativePlaybackEventSource),
             Box::new(NoopPlaybackStatePersister),
             false,
+            1.0,
         );
         (controller, state, reporter_state)
     }
@@ -2197,6 +2380,7 @@ mod tests {
             }),
             Box::new(NoopPlaybackStatePersister),
             false,
+            1.0,
         );
         (controller, state, reporter_state, native_events)
     }
@@ -2241,6 +2425,7 @@ mod tests {
             Box::new(NoopNativePlaybackEventSource),
             Box::new(NoopPlaybackStatePersister),
             false,
+            1.0,
         );
         (controller, state, reporter_state)
     }
@@ -2277,6 +2462,7 @@ mod tests {
             Box::new(NoopNativePlaybackEventSource),
             Box::new(NoopPlaybackStatePersister),
             false,
+            1.0,
         );
         if playback_report {
             controller.set_active_profile_id(Some("profile-1".to_string()));
@@ -3499,6 +3685,54 @@ mod tests {
     }
 
     #[test]
+    fn handled_load_failure_marker_is_stripped_from_playback_error() {
+        let error = playback_error_from_load_failure(&format!(
+            "Failed to load Android playback media: {HANDLED_PLAYBACK_ERROR_PREFIX}timeout"
+        ));
+
+        assert!(error.handled);
+        assert_eq!(
+            error.message,
+            "Failed to load Android playback media: timeout"
+        );
+    }
+
+    #[test]
+    fn native_handled_error_keeps_error_state_but_marks_error_handled() {
+        let (mut controller, _, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Error {
+                message: "network timeout".to_string(),
+                handled: true,
+            });
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        let error = status.playback_error.unwrap();
+        assert_eq!(status.playing_state, PlayingState::Error);
+        assert_eq!(error.message, "network timeout");
+        assert!(error.handled);
+    }
+
+    #[test]
     fn runtime_buffering_reports_stream_buffering_stall() {
         let (mut controller, _, _, native_events) =
             controller_with_mock_backend_and_native_events(false);
@@ -3641,8 +3875,10 @@ mod tests {
         );
         assert!(reported_states
             .last()
-            .and_then(|status| status.error.as_deref())
-            .is_some_and(|message| message.contains("Failed to load playback stream.")));
+            .and_then(|status| status.playback_error.as_ref())
+            .is_some_and(
+                |error| !error.handled && error.message.contains("Failed to load playback stream.")
+            ));
     }
 
     #[test]
@@ -3759,6 +3995,205 @@ mod tests {
     }
 
     #[test]
+    fn move_queue_index_moves_item_and_keeps_current_entry() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(
+                queue_entries(&["song-a", "song-b", "song-c", "song-d"]),
+                Some(2),
+            )
+            .unwrap();
+        controller.set_position(12_345).unwrap();
+
+        let status = controller.move_queue_index(0, 2).unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["song-b", "song-c", "song-a", "song-d"]);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("song-c".to_string()));
+        assert_eq!(status.current_position_ms, 12_345);
+    }
+
+    #[test]
+    fn move_queue_index_before_current_shifts_current_entry_right() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(
+                queue_entries(&["song-a", "song-b", "song-c", "song-d"]),
+                Some(1),
+            )
+            .unwrap();
+
+        let status = controller.move_queue_index(3, 0).unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["song-d", "song-a", "song-b", "song-c"]);
+        assert_eq!(status.current_index, Some(2));
+        assert_eq!(status.current_song_id, Some("song-b".to_string()));
+    }
+
+    #[test]
+    fn move_current_queue_index_updates_current_index_without_reloading() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(1))
+            .unwrap();
+        controller.set_position(12_345).unwrap();
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        let status = controller.move_queue_index(1, 2).unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["song-a", "song-c", "song-b"]);
+        assert_eq!(status.current_index, Some(2));
+        assert_eq!(status.current_song_id, Some("song-b".to_string()));
+        assert_eq!(status.current_position_ms, 12_345);
+        assert_eq!(backend_state.lock().unwrap().stop_calls, stop_calls_before);
+    }
+
+    #[test]
+    fn move_queue_index_rejects_out_of_range_index() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+
+        let result = controller.move_queue_index(0, 1);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_queue_index_after_current_keeps_current_entry() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(0))
+            .unwrap();
+        controller.set_position(12_345).unwrap();
+
+        let status = controller.remove_queue_index(None, 2).unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["song-a", "song-b"]);
+        assert_eq!(status.current_index, Some(0));
+        assert_eq!(status.current_song_id, Some("song-a".to_string()));
+        assert_eq!(status.current_position_ms, 12_345);
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+    }
+
+    #[test]
+    fn remove_queue_index_before_current_shifts_current_index() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(2))
+            .unwrap();
+        controller.set_position(12_345).unwrap();
+
+        let status = controller.remove_queue_index(None, 0).unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["song-b", "song-c"]);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("song-c".to_string()));
+        assert_eq!(status.current_position_ms, 12_345);
+    }
+
+    #[test]
+    fn remove_current_queue_index_selects_next_entry_when_stopped() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(1))
+            .unwrap();
+        controller.set_position(12_345).unwrap();
+
+        let status = controller.remove_queue_index(None, 1).unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["song-a", "song-c"]);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("song-c".to_string()));
+        assert_eq!(status.current_position_ms, 0);
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+    }
+
+    #[test]
+    fn remove_current_queue_index_selects_previous_entry_at_end() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(2))
+            .unwrap();
+
+        let status = controller.remove_queue_index(None, 2).unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+
+        assert_eq!(ids, vec!["song-a", "song-b"]);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("song-b".to_string()));
+        assert_eq!(status.current_position_ms, 0);
+    }
+
+    #[test]
+    fn remove_only_current_queue_index_resets_to_idle() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+
+        let status = controller.remove_queue_index(None, 0).unwrap();
+
+        assert!(status.queue.is_empty());
+        assert_eq!(status.current_index, None);
+        assert_eq!(status.current_song_id, None);
+        assert_eq!(status.current_position_ms, 0);
+        assert_eq!(status.playing_state, PlayingState::Idle);
+    }
+
+    #[test]
+    fn remove_current_queue_index_loads_replacement_when_playing() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(1))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+        backend_state.lock().unwrap().current_position_ms = 4_321;
+
+        let status = controller
+            .remove_queue_index(Some(&runtime_context), 1)
+            .unwrap();
+        let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
+        let backend_state = backend_state.lock().unwrap();
+
+        assert_eq!(ids, vec!["song-a", "song-c"]);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("song-c".to_string()));
+        assert_eq!(status.current_position_ms, 0);
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(backend_state.stop_calls, stop_calls_before + 1);
+        assert_eq!(backend_state.load_calls.len(), 2);
+        assert!(backend_state.load_calls[1].contains("song-c"));
+    }
+
+    #[test]
+    fn remove_queue_index_rejects_out_of_range_index() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+
+        let result = controller.remove_queue_index(None, 1);
+
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn set_position_updates_stopped_queue_position() {
         let (mut controller, _, _) = controller_with_mock_backend(false);
         controller
@@ -3797,6 +4232,19 @@ mod tests {
         assert_eq!(
             backend_state.lock().unwrap().stop_calls,
             stop_calls_before + 1
+        );
+    }
+
+    #[test]
+    fn set_volume_clamps_and_forwards_to_backend() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+
+        controller.set_volume(0.42).unwrap();
+        controller.set_volume(5.0).unwrap();
+
+        assert_eq!(
+            backend_state.lock().unwrap().volume_calls,
+            vec![1.0, 0.42, 1.0]
         );
     }
 

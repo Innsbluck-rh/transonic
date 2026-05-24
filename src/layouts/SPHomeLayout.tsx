@@ -7,7 +7,7 @@ import { startPlaybackStateSync } from '~/features/playback/service';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import { sessionStore } from '~/stores/SessionStore';
 
-const MobileHomeLayout: ParentComponent = (props) => {
+const SPHomeLayout: ParentComponent = (props) => {
   let disposed = false;
   let unlisten: (() => void) | undefined;
 
@@ -83,4 +83,4 @@ const MobileHomeLayout: ParentComponent = (props) => {
   );
 };
 
-export default MobileHomeLayout;
+export default SPHomeLayout;

@@ -6,7 +6,10 @@ export default function PlaybackErrorDialog() {
   const [visibleError, setVisibleError] = createSignal<string | null>(null);
   const [dismissedError, setDismissedError] = createSignal<string | null>(null);
   const [copyState, setCopyState] = createSignal<string | null>(null);
-  const playbackError = createMemo(() => playbackStore.status?.error ?? null);
+  const playbackError = createMemo(() => {
+    const error = playbackStore.status?.playbackError ?? null;
+    return error && !error.handled ? error.message : null;
+  });
 
   createEffect(() => {
     const error = playbackError();

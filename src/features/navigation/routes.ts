@@ -23,23 +23,23 @@ export function resolveSettingsRoute(target?: RouteTarget) {
 
 export function resolveArtistRoute(artistId: string, target?: RouteTarget) {
   const encodedArtistId = encodePathSegment(artistId);
-  return resolveRouteTarget(target) === 'sp' ? `/sp/artists/${encodedArtistId}` : `/browse/artists/${encodedArtistId}`;
+  return resolveRouteTarget(target) === 'sp' ? `/sp/browse/artists/${encodedArtistId}` : `/browse/artists/${encodedArtistId}`;
 }
 
 export function resolveFolderRoute(libraryId: string, nodeId: string | null | undefined, target?: RouteTarget) {
   const routeTarget = resolveRouteTarget(target);
   const encodedLibraryId = encodePathSegment(libraryId);
   if (!nodeId) {
-    return routeTarget === 'sp' ? `/sp/folders/${encodedLibraryId}` : `/browse/folders/${encodedLibraryId}`;
+    return routeTarget === 'sp' ? `/sp/browse/folders/${encodedLibraryId}` : `/browse/folders/${encodedLibraryId}`;
   }
 
   const encodedNodeId = encodePathSegment(nodeId);
-  return routeTarget === 'sp' ? `/sp/folders/${encodedLibraryId}/${encodedNodeId}` : `/browse/folders/${encodedLibraryId}/${encodedNodeId}`;
+  return routeTarget === 'sp' ? `/sp/browse/folders/${encodedLibraryId}/${encodedNodeId}` : `/browse/folders/${encodedLibraryId}/${encodedNodeId}`;
 }
 
 export function resolveAlbumRoute(albumId: string, target?: RouteTarget) {
   const encodedAlbumId = encodePathSegment(albumId);
-  return resolveRouteTarget(target) === 'sp' ? `/sp/albums/${encodedAlbumId}` : `/browse/album/${encodedAlbumId}`;
+  return resolveRouteTarget(target) === 'sp' ? `/sp/browse/albums/${encodedAlbumId}` : `/browse/album/${encodedAlbumId}`;
 }
 
 export function resolveSPBrowseRoute() {

@@ -14,7 +14,7 @@ function createPlaybackStatus(overrides: Partial<PlaybackStatus> = {}): Playback
     currentIndex: null,
     currentPositionMs: 0,
     currentSongId: null,
-    error: null,
+    playbackError: null,
     ...overrides,
   };
 }

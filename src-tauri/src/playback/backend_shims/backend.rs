@@ -79,6 +79,7 @@ pub trait PlaybackBackend: Send {
     }
     fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String>;
     fn current_position_ms(&self) -> Result<u32, String>;
+    fn set_volume(&mut self, volume: f32) -> Result<(), String>;
     fn pause(&mut self) -> Result<(), String>;
     fn resume(&mut self) -> Result<(), String>;
     fn stop(&mut self) -> Result<(), String>;

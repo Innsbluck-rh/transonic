@@ -32,6 +32,8 @@ import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.SettableFuture
 import java.io.File
 
+private const val HANDLED_PLAYBACK_ERROR_PREFIX = "[transonic-handled-playback-error]"
+
 private data class PendingLoad(
   val mediaId: String,
   val callback: (Result<Unit>) -> Unit,
@@ -200,6 +202,7 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     val mediaSource = buildMediaSource(request)
     player.stop()
     player.clearMediaItems()
+    player.volume = request.volume.coerceIn(0f, 1f)
     player.setMediaSource(mediaSource, request.localStartPositionMs)
     player.playWhenReady = request.autoplay
     player.prepare()
@@ -365,13 +368,15 @@ class PlaybackService : MediaSessionService(), Player.Listener {
   }
 
   override fun onPlayerError(error: PlaybackException) {
+    val message = formatPlaybackError(error)
+    val handled = isHandledNetworkPlaybackError(error)
     val pending = pendingLoad
     pendingLoad = null
     if (pending != null) {
       pending.callback(
         Result.failure(
           IllegalStateException(
-            formatPlaybackError(error)
+            if (handled) "$HANDLED_PLAYBACK_ERROR_PREFIX$message" else message
           )
         )
       )
@@ -382,10 +387,15 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     transitioningMediaState = null
     manualTransitionPendingMediaId = null
     rustBridge.enqueuePlaybackEvent(
-      "error",
+      if (handled) "handled_error" else "error",
       currentAbsolutePositionMs(),
-      formatPlaybackError(error),
+      message,
     )
+  }
+
+  private fun isHandledNetworkPlaybackError(error: PlaybackException): Boolean {
+    return error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED ||
+      error.errorCode == PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
   }
 
   private fun formatPlaybackError(error: PlaybackException): String {

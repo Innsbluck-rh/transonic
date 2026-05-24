@@ -11,8 +11,6 @@ import { playerBarRequest } from './SPPlayerBarController';
 
 export { closePlayerBar, openPlayerBar } from './SPPlayerBarController';
 
-// ── コンポーネント本体 ──────────────────────────────────────────
-
 interface SPExpandablePlayerBarProps {
   topOffsetPx?: number;
   bottomOffsetPx?: number;

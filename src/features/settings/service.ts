@@ -4,8 +4,12 @@ import { commands, type AppSettings, type SettingsOrigin } from '~/bindings';
 const SETTINGS_STORAGE_KEY = 'transonic.settings.v1';
 
 const DEFAULT_SETTINGS: AppSettings = {
+  appearance: {
+    albumDisplayMode: 'grid',
+  },
   playback: {
     gaplessPlaybackEnabled: false,
+    volume: 1,
   },
   connect: {
     enabled: false,
@@ -20,9 +24,16 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 export const [settingsStore, setSettingsStore] = createStore<AppSettings>(DEFAULT_SETTINGS);
 
+function normalizeAppearanceSettings(raw: Partial<AppSettings['appearance']> | null | undefined): AppSettings['appearance'] {
+  return {
+    albumDisplayMode: raw?.albumDisplayMode === 'list' ? 'list' : 'grid',
+  };
+}
+
 function normalizePlaybackSettings(raw: Partial<AppSettings['playback']> | null | undefined): AppSettings['playback'] {
   const legacyGaplessStrategy = raw && 'prebufferStrategy' in raw ? (raw as Partial<{ prebufferStrategy: unknown }>).prebufferStrategy : null;
   const legacyGaplessEnabled = raw && 'prebufferEnabled' in raw ? (raw as Partial<{ prebufferEnabled: unknown }>).prebufferEnabled : null;
+  const volume = typeof raw?.volume === 'number' && Number.isFinite(raw.volume) ? Math.min(Math.max(raw.volume, 0), 1) : 1;
 
   return {
     gaplessPlaybackEnabled:
@@ -31,12 +42,14 @@ function normalizePlaybackSettings(raw: Partial<AppSettings['playback']> | null 
         : typeof legacyGaplessEnabled === 'boolean'
           ? legacyGaplessEnabled
           : legacyGaplessStrategy === 'next_track',
+    volume,
   };
 }
 
 function normalizeSettings(raw: unknown): AppSettings {
   const candidate = typeof raw === 'object' && raw !== null ? (raw as Partial<AppSettings>) : null;
   return {
+    appearance: normalizeAppearanceSettings(candidate?.appearance),
     playback: normalizePlaybackSettings(candidate?.playback),
     connect: normalizeConnectSettings(candidate?.connect),
   };
@@ -170,6 +183,9 @@ export async function hydrateSettings(settings: AppSettings, settingsOrigin: Set
 
 export async function setPlaybackSetting<K extends keyof AppSettings['playback']>(key: K, value: AppSettings['playback'][K]) {
   const previousSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+    },
     playback: {
       ...settingsStore.playback,
     },
@@ -178,6 +194,9 @@ export async function setPlaybackSetting<K extends keyof AppSettings['playback']
     },
   };
   const nextSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+    },
     playback: {
       ...settingsStore.playback,
       [key]: value,
@@ -198,8 +217,11 @@ export async function setPlaybackSetting<K extends keyof AppSettings['playback']
   setSettingsStore(result.data);
 }
 
-export async function setConnectSetting<K extends keyof AppSettings['connect']>(key: K, value: AppSettings['connect'][K]) {
+export async function setAppearanceSetting<K extends keyof AppSettings['appearance']>(key: K, value: AppSettings['appearance'][K]) {
   const previousSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+    },
     playback: {
       ...settingsStore.playback,
     },
@@ -208,6 +230,45 @@ export async function setConnectSetting<K extends keyof AppSettings['connect']>(
     },
   };
   const nextSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+      [key]: value,
+    },
+    playback: {
+      ...settingsStore.playback,
+    },
+    connect: {
+      ...settingsStore.connect,
+    },
+  };
+
+  setSettingsStore(nextSettings);
+  const result = await commands.settingsUpdate({ settings: nextSettings });
+  if (result.status === 'error') {
+    console.error(result.error);
+    setSettingsStore(previousSettings);
+    return;
+  }
+
+  setSettingsStore(result.data);
+}
+
+export async function setConnectSetting<K extends keyof AppSettings['connect']>(key: K, value: AppSettings['connect'][K]) {
+  const previousSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+    },
+    playback: {
+      ...settingsStore.playback,
+    },
+    connect: {
+      ...settingsStore.connect,
+    },
+  };
+  const nextSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+    },
     playback: {
       ...settingsStore.playback,
     },
@@ -230,6 +291,9 @@ export async function setConnectSetting<K extends keyof AppSettings['connect']>(
 
 export async function setConnectSettings(connect: AppSettings['connect']) {
   const previousSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+    },
     playback: {
       ...settingsStore.playback,
     },
@@ -238,6 +302,9 @@ export async function setConnectSettings(connect: AppSettings['connect']) {
     },
   };
   const nextSettings: AppSettings = {
+    appearance: {
+      ...settingsStore.appearance,
+    },
     playback: {
       ...settingsStore.playback,
     },

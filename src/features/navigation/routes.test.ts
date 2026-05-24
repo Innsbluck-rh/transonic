@@ -19,9 +19,9 @@ describe('navigation routes', () => {
     const encodedId = encodeURIComponent(id);
 
     expect(resolveArtistRoute(id, 'pc')).toBe(`/browse/artists/${encodedId}`);
-    expect(resolveArtistRoute(id, 'sp')).toBe(`/sp/artists/${encodedId}`);
+    expect(resolveArtistRoute(id, 'sp')).toBe(`/sp/browse/artists/${encodedId}`);
     expect(resolveAlbumRoute(id, 'pc')).toBe(`/browse/album/${encodedId}`);
-    expect(resolveAlbumRoute(id, 'sp')).toBe(`/sp/albums/${encodedId}`);
+    expect(resolveAlbumRoute(id, 'sp')).toBe(`/sp/browse/albums/${encodedId}`);
   });
 
   it('encodes folder library and node ids for each target', () => {
@@ -32,7 +32,7 @@ describe('navigation routes', () => {
 
     expect(resolveFolderRoute(libraryId, null, 'pc')).toBe(`/browse/folders/${encodedLibraryId}`);
     expect(resolveFolderRoute(libraryId, nodeId, 'pc')).toBe(`/browse/folders/${encodedLibraryId}/${encodedNodeId}`);
-    expect(resolveFolderRoute(libraryId, null, 'sp')).toBe(`/sp/folders/${encodedLibraryId}`);
-    expect(resolveFolderRoute(libraryId, nodeId, 'sp')).toBe(`/sp/folders/${encodedLibraryId}/${encodedNodeId}`);
+    expect(resolveFolderRoute(libraryId, null, 'sp')).toBe(`/sp/browse/folders/${encodedLibraryId}`);
+    expect(resolveFolderRoute(libraryId, nodeId, 'sp')).toBe(`/sp/browse/folders/${encodedLibraryId}/${encodedNodeId}`);
   });
 });

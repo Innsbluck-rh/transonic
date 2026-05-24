@@ -30,17 +30,18 @@ pub use browse::{
 #[allow(unused_imports)]
 pub use connect::{
     ConnectDevicePresence, ConnectDeviceWithPlayback, ConnectDevicesUpdated,
-    ConnectPlaybackDeviceState, ConnectPlaybackTakeoverRequest, ConnectRemotePlaybackRequest,
-    ConnectRuntimeStatus,
+    ConnectPlaybackDeviceState, ConnectPlaybackState, ConnectPlaybackTakeoverRequest,
+    ConnectRemotePlaybackRequest, ConnectRuntimeStatus,
 };
 #[allow(unused_imports)]
 pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
 #[allow(unused_imports)]
 pub use playback::{
     GaplessState, GaplessStatus, InterruptReason, MediaNotificationTap,
-    PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest, PlaybackPlayQueueIndexRequest,
-    PlaybackSeekRequest, PlaybackSetPositionRequest, PlaybackSetQueueRequest, PlaybackStatus,
-    PlayingState, QueueSource,
+    PlaybackAppendToQueueRequest, PlaybackError, PlaybackInsertAfterCurrentRequest,
+    PlaybackMoveQueueIndexRequest, PlaybackPlayQueueIndexRequest, PlaybackRemoveQueueIndexRequest,
+    PlaybackSeekRequest, PlaybackSetPositionRequest, PlaybackSetQueueRequest,
+    PlaybackSetVolumeRequest, PlaybackStatus, PlayingState, QueueSource,
 };
 #[allow(unused_imports)]
 pub use session::{
@@ -50,5 +51,6 @@ pub use session::{
 };
 #[allow(unused_imports)]
 pub use settings::{
-    AppSettings, ConnectSettings, PlaybackSettings, SettingsOrigin, SettingsUpdateRequest,
+    normalize_volume, AlbumDisplayMode, AppSettings, AppearanceSettings, ConnectSettings,
+    PlaybackSettings, SettingsOrigin, SettingsUpdateRequest,
 };

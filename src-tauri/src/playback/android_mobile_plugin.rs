@@ -28,6 +28,7 @@ pub struct AndroidPreparedMediaRequest {
     pub artist: Option<String>,
     pub album: Option<String>,
     pub artwork_path: Option<String>,
+    pub volume: f32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -41,6 +42,12 @@ pub struct AndroidActivatePreparedMediaRequest {
 pub struct AndroidUpdateMediaArtworkRequest {
     pub media_id: String,
     pub artwork_path: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AndroidSetVolumeRequest {
+    pub volume: f32,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -105,6 +112,12 @@ impl AndroidPlaybackBridge {
         self.handle
             .run_mobile_plugin::<()>("updateMediaArtwork", payload)
             .map_err(|error| format!("Failed to update the Android media artwork: {error}"))
+    }
+
+    pub fn set_volume(&self, payload: &AndroidSetVolumeRequest) -> Result<(), String> {
+        self.handle
+            .run_mobile_plugin::<()>("setVolume", payload)
+            .map_err(|error| format!("Failed to set Android playback volume: {error}"))
     }
 
     pub fn pause(&self) -> Result<(), String> {

@@ -1,16 +1,16 @@
 package com.innsb.transonic
 
-import android.Manifest
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
+import android.view.WindowManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebView
 import androidx.activity.enableEdgeToEdge
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import com.innsb.transonic.playback.PlaybackService
 import com.innsb.transonic.playback.RustPlaybackBridge
 import kotlin.math.roundToInt
@@ -21,6 +21,9 @@ class MainActivity : TauriActivity() {
   private var safeAreaInsetRight = "0px"
   private var safeAreaInsetBottom = "0px"
   private var safeAreaInsetLeft = "0px"
+  private var appliedStatusBarColor: Int? = null
+  private var appliedNavigationBarColor: Int? = null
+  private var appliedUseDarkSystemBarIcons = false
 
   override fun onCreate(savedInstanceState: Bundle?) {
     enableEdgeToEdge()
@@ -35,6 +38,7 @@ class MainActivity : TauriActivity() {
     super.onWebViewCreate(webView)
     mainWebView = webView
     webView.addJavascriptInterface(SafeAreaInsetsBridge(), "TransonicSafeAreaInsets")
+    webView.addJavascriptInterface(SystemBarsBridge(), "TransonicSystemBars")
 
     ViewCompat.setOnApplyWindowInsetsListener(webView) { _, windowInsets ->
       syncSafeAreaInsets(webView, windowInsets)
@@ -50,6 +54,7 @@ class MainActivity : TauriActivity() {
 
   override fun onResume() {
     super.onResume()
+    reapplySystemBarsTheme()
     mainWebView?.let { webView ->
       ViewCompat.requestApplyInsets(webView)
       webView.post { syncSafeAreaInsets(webView, ViewCompat.getRootWindowInsets(webView)) }
@@ -103,6 +108,47 @@ class MainActivity : TauriActivity() {
     return "${(physicalPx / density).roundToInt()}px"
   }
 
+  private fun applySystemBarsTheme(statusBarColorText: String?, navigationBarColorText: String?, useDarkSystemBarIcons: Boolean) {
+    val statusBarColor = parseCssColor(statusBarColorText, Color.BLACK)
+    val requestedNavigationBarColor = parseCssColor(navigationBarColorText, statusBarColor)
+    applySystemBarsTheme(statusBarColor, requestedNavigationBarColor, useDarkSystemBarIcons)
+  }
+
+  @Suppress("DEPRECATION")
+  private fun applySystemBarsTheme(statusBarColor: Int, requestedNavigationBarColor: Int, useDarkSystemBarIcons: Boolean) {
+    val navigationBarSupportsDarkIcons = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+    val navigationBarColor =
+      if (navigationBarSupportsDarkIcons || !useDarkSystemBarIcons) {
+        requestedNavigationBarColor
+      } else {
+        Color.BLACK
+      }
+
+    window.clearFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS or WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION)
+    window.addFlags(WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACKGROUNDS)
+    window.statusBarColor = statusBarColor
+    window.navigationBarColor = navigationBarColor
+
+    WindowInsetsControllerCompat(window, window.decorView).run {
+      isAppearanceLightStatusBars = useDarkSystemBarIcons
+      isAppearanceLightNavigationBars = navigationBarSupportsDarkIcons && useDarkSystemBarIcons
+    }
+
+    appliedStatusBarColor = statusBarColor
+    appliedNavigationBarColor = requestedNavigationBarColor
+    appliedUseDarkSystemBarIcons = useDarkSystemBarIcons
+  }
+
+  private fun reapplySystemBarsTheme() {
+    val statusBarColor = appliedStatusBarColor ?: return
+    applySystemBarsTheme(statusBarColor, appliedNavigationBarColor ?: statusBarColor, appliedUseDarkSystemBarIcons)
+  }
+
+  private fun parseCssColor(value: String?, fallback: Int): Int {
+    val colorText = value?.trim().takeUnless { it.isNullOrEmpty() } ?: return fallback
+    return runCatching { Color.parseColor(colorText) }.getOrDefault(fallback)
+  }
+
   private inner class SafeAreaInsetsBridge {
     @JavascriptInterface
     fun top(): String = safeAreaInsetTop
@@ -115,5 +161,14 @@ class MainActivity : TauriActivity() {
 
     @JavascriptInterface
     fun left(): String = safeAreaInsetLeft
+  }
+
+  private inner class SystemBarsBridge {
+    @JavascriptInterface
+    fun applyTheme(statusBarColor: String?, navigationBarColor: String?, useDarkSystemBarIcons: Boolean) {
+      runOnUiThread {
+        applySystemBarsTheme(statusBarColor, navigationBarColor, useDarkSystemBarIcons)
+      }
+    }
   }
 }

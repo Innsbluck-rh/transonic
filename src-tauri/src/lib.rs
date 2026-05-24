@@ -95,11 +95,7 @@ pub fn run() {
                     AppSettingsStore::default_at(settings_path)
                 }
             };
-            let initial_gapless_playback_enabled = settings_store
-                .snapshot()
-                .0
-                .playback
-                .gapless_playback_enabled;
+            let initial_playback_settings = settings_store.snapshot().0.playback;
             app.manage(AppSettingsState::new(settings_store));
             let persister_path = playback_state_path(&config_dir);
             let persister = Box::new(FilePlaybackStatePersister::new(persister_path));
@@ -110,7 +106,8 @@ pub fn run() {
                 &app.handle(),
                 app_handle.clone(),
                 persister,
-                initial_gapless_playback_enabled,
+                initial_playback_settings.gapless_playback_enabled,
+                initial_playback_settings.volume,
             );
             app.manage(PlaybackControllerState::new(controller));
             let cover_art_cache_root = app

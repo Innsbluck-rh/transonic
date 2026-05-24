@@ -10,10 +10,9 @@ function SPBrowseIndex() {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Artists');
 
   return (
-    <div class='home-surface-root relative flex w-full flex-col gap-0 overflow-y-auto p-0'>
+    <div class='home-surface-root relative flex size-full flex-col gap-0 overflow-y-auto p-0'>
       <RouteHeader title='Browse'>
-        <div class='flex-1'></div>
-        <div class='p-1.5'>
+        <div class='ml-auto p-1.5'>
           <IndexModeSelect2
             defaultMode={browseMode()}
             onSelect={(mode) => {

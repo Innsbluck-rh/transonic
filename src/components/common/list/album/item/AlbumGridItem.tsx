@@ -47,15 +47,15 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
       }}
     >
       <div
-        class='ripple border-secondary-border relative aspect-square h-full w-full border'
+        class='ripple border-secondary-border relative aspect-square size-full border'
         classList={{
           'cursor-pointer': isClickable,
         }}
         onClick={(e) => props.onClick?.(e)}
         onDblClick={(e) => props.onDblClick?.(e)}
       >
-        <Show when={src()} fallback={<div class='border-secondary-border h-full w-full border' />}>
-          {(assetUrl) => <img src={assetUrl()} class='h-full w-full object-cover' loading='lazy' decoding='async' />}
+        <Show when={src()} fallback={<div class='border-secondary-border size-full border' />}>
+          {(assetUrl) => <img src={assetUrl()} class='size-full object-cover' loading='lazy' decoding='async' />}
         </Show>
         <Show when={props.inline}>
           <div class='absolute right-1 bottom-1 left-1 flex flex-col gap-0.5 overflow-hidden'>

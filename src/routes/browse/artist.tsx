@@ -13,9 +13,9 @@ import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { fetchArtistImageAssetUrl } from '~/features/artist/service';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { setAppearanceSetting, settingsStore } from '~/features/settings/service';
 import { sessionStore } from '~/stores/SessionStore';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
-import { setTempStore, tempStore } from '~/stores/TempStore';
 
 const SIMILAR_ARTIST_COUNT = 8;
 
@@ -161,15 +161,15 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
         <Show when={artist()}>
           {(artistValue) => (
             <div class='flex flex-col'>
-              <div class='relative z-10 flex h-42 w-full flex-col'>
-                <div class='border-primary-border absolute top-0 right-0 bottom-0 left-0 h-full w-full border-b'>
+              <div class='relative z-20 flex h-42 w-full flex-col'>
+                <div class='border-primary-border absolute inset-0 size-full border-b'>
                   <Show
                     when={effectiveArtistImageSrc()}
-                    fallback={<div class='bg-primary-surface flex h-full w-full items-center justify-center text-xs'></div>}
+                    fallback={<div class='bg-primary-surface flex size-full items-center justify-center text-xs'></div>}
                   >
                     {(src) => (
                       <img
-                        class='h-full w-full object-cover object-center'
+                        class='size-full object-cover object-center'
                         src={src()}
                         onError={() => setFailedSrc(src())}
                         loading='lazy'
@@ -178,27 +178,34 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
                     )}
                   </Show>
                 </div>
-                <div class='bg-primary-surface absolute top-0 right-0 bottom-0 left-0 flex h-full w-full opacity-75' />
-                <p class='archivo text-primary-text absolute bottom-0 left-0 z-10 m-3 w-full text-2xl font-black tracking-tighter'>
-                  {artistValue().name}
-                </p>
+                <div class='bg-primary-surface absolute inset-0 size-full opacity-75' />
+                <p class='archivo text-primary-text absolute bottom-0 left-0 m-3 w-full text-2xl font-black tracking-tighter'>{artistValue().name}</p>
               </div>
 
-              <div class='z-20 flex flex-col'>
+              <div class='flex flex-col'>
                 <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
                   <Heading3 class='text-secondary-text'>albums</Heading3>
                   <div class='flex-1' />
-                  <Icon
-                    icon={tempStore.albumMode === 'grid' ? 'pixelarticons:grid-2x2-2' : 'pixelarticons:bulletlist-sharp'}
-                    class='cursor-pointer p-0.5 text-[15px]'
+                  <div
+                    class='flex h-full items-center'
                     onClick={() => {
-                      setTempStore('albumMode', tempStore.albumMode === 'grid' ? 'list' : 'grid');
+                      void setAppearanceSetting('albumDisplayMode', settingsStore.appearance.albumDisplayMode === 'grid' ? 'list' : 'grid');
                     }}
-                  />
+                  >
+                    <div class='px-0.8 my-auto flex h-fit min-w-13 items-end'>
+                      <Icon
+                        icon={settingsStore.appearance.albumDisplayMode === 'grid' ? 'pixelarticons:grid-2x2-2' : 'pixelarticons:bulletlist-sharp'}
+                        class='cursor-pointer text-[15px]'
+                      />
+                      <p class='archivo text-secondary-text px-1 text-center text-xs leading-none font-bold tracking-tight'>
+                        {settingsStore.appearance.albumDisplayMode === 'grid' ? 'Grid' : 'List'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
                 <Switch>
-                  <Match when={tempStore.albumMode === 'grid'}>
-                    <div class='p-2'>
+                  <Match when={settingsStore.appearance.albumDisplayMode === 'grid'}>
+                    <div class='p-3'>
                       <AlbumGrid
                         albums={albums()}
                         inline={true}
@@ -210,7 +217,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
                       />
                     </div>
                   </Match>
-                  <Match when={tempStore.albumMode === 'list'}>
+                  <Match when={settingsStore.appearance.albumDisplayMode === 'list'}>
                     <AlbumList
                       albums={albums()}
                       noArtistName={true}

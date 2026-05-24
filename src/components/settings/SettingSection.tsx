@@ -12,7 +12,7 @@ function SettingSection(props: SettingSectionProps) {
     <section class='flex min-w-0 flex-col gap-1'>
       <Heading2>{props.title}</Heading2>
       {props.headerContent}
-      <div class='bg-primary-plane border-secondary-border flex flex-col gap-3 rounded-md border p-4'>{props.children}</div>
+      <div class='bg-primary-plane border-secondary-border flex flex-col gap-4 rounded-md border p-4'>{props.children}</div>
     </section>
   );
 }

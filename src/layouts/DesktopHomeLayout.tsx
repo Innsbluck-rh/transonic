@@ -43,7 +43,7 @@ const DesktopHomeLayout: ParentComponent = (props) => {
         <div class='flex h-full flex-col'>
           <Header shouldShowProfiles={true} titleHref={resolveHomeRoute('pc')} />
 
-          <div class='flex h-full w-full flex-row overflow-hidden'>
+          <div class='flex size-full flex-row overflow-hidden'>
             <IndexSideBar />
             <div class='flex h-full min-w-0 flex-1 flex-col'>{props.children}</div>
             <QueueSideBar />

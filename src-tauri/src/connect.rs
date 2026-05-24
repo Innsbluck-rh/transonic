@@ -23,7 +23,8 @@ use crate::{
     commands::{common::service, playback::active_runtime_parts},
     models::{
         AuthInput, ConnectDevicePresence, ConnectDeviceWithPlayback, ConnectDevicesUpdated,
-        ConnectPlaybackDeviceState, ConnectRuntimeStatus, ConnectSettings, PlaybackStatus,
+        ConnectPlaybackDeviceState, ConnectPlaybackState, ConnectRuntimeStatus, ConnectSettings,
+        PlaybackStatus,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
@@ -51,13 +52,13 @@ struct ConnectRuntimeInner {
     status: ConnectRuntimeStatus,
     sender: Option<mpsc::UnboundedSender<ConnectOutbound>>,
     device_id: Option<String>,
-    last_status: Option<PlaybackStatus>,
+    last_status: Option<ConnectPlaybackState>,
     devices: Vec<ConnectDevicePresence>,
     playback_by_device: BTreeMap<String, ConnectPlaybackDeviceState>,
 }
 
 enum ConnectOutbound {
-    PlaybackStatus(PlaybackStatus),
+    PlaybackState(ConnectPlaybackState),
     Envelope(ConnectOutboundEnvelope),
 }
 
@@ -145,7 +146,7 @@ impl ConnectRuntime {
             inner.last_status.clone()
         };
         if let Some(status) = cached_status {
-            let _ = sender.send(ConnectOutbound::PlaybackStatus(status));
+            let _ = sender.send(ConnectOutbound::PlaybackState(status));
         }
     }
 
@@ -160,13 +161,14 @@ impl ConnectRuntime {
     }
 
     fn publish_status(&self, status: PlaybackStatus) {
+        let state = ConnectPlaybackState::from(status);
         let sender = {
             let mut inner = self.inner.lock().unwrap();
-            inner.last_status = Some(status.clone());
+            inner.last_status = Some(state.clone());
             inner.sender.clone()
         };
         if let Some(sender) = sender {
-            let _ = sender.send(ConnectOutbound::PlaybackStatus(status));
+            let _ = sender.send(ConnectOutbound::PlaybackState(state));
         }
     }
 
@@ -289,9 +291,9 @@ impl ConnectRuntime {
             .map_err(|_| "connect: websocket writer is not available".to_string())
     }
 
-    fn snapshot_for_status(
+    fn snapshot_for_state(
         &self,
-        status: PlaybackStatus,
+        state: ConnectPlaybackState,
     ) -> Result<ConnectPlaybackDeviceState, String> {
         let inner = self.inner.lock().unwrap();
         let device_id = inner
@@ -301,9 +303,9 @@ impl ConnectRuntime {
         Ok(ConnectPlaybackDeviceState {
             seq: inner.status.seq.saturating_add(1),
             source_device_id: device_id,
-            position_ms: status.current_position_ms,
+            position_ms: state.current_position_ms,
             updated_at: connect_timestamp(),
-            state: status,
+            state,
         })
     }
 
@@ -367,7 +369,7 @@ impl ConnectRuntime {
             (inner.devices_with_playback(), republish)
         };
         if let Some((sender, status)) = republish {
-            let _ = sender.send(ConnectOutbound::PlaybackStatus(status));
+            let _ = sender.send(ConnectOutbound::PlaybackState(status));
         }
         Some(devices)
     }
@@ -532,7 +534,7 @@ async fn run_connect_once(
         tokio::select! {
             Some(outbound) = receiver.recv() => {
                 match outbound {
-                    ConnectOutbound::PlaybackStatus(status) => {
+                    ConnectOutbound::PlaybackState(state) => {
                         let Some(seq) = runtime.next_seq(generation) else {
                             return Ok(ConnectRunResult::Restart);
                         };
@@ -543,7 +545,7 @@ async fn run_connect_once(
                             device_id: &login_response.device_id,
                             payload: PlaybackPublishPayload {
                                 seq,
-                                state: status,
+                                state,
                             },
                         };
                         write_json_message(&mut write, &envelope).await?;
@@ -702,7 +704,7 @@ async fn handle_handoff_request(
         }
     };
 
-    let snapshot = runtime.snapshot_for_status(status)?;
+    let snapshot = runtime.snapshot_for_state(ConnectPlaybackState::from(status))?;
     runtime.send_handoff_accept(
         generation,
         payload.handoff_id,
@@ -878,7 +880,7 @@ async fn execute_remote_playback_command(
     .map_err(|error| format!("connect: remote command task failed: {error}"))?
 }
 
-fn takeover_current_index(state: &PlaybackStatus) -> Option<u32> {
+fn takeover_current_index(state: &ConnectPlaybackState) -> Option<u32> {
     if state.queue.is_empty() {
         return None;
     }
@@ -983,7 +985,7 @@ struct ConnectEnvelope<'a, T> {
 #[derive(Debug, Serialize)]
 struct PlaybackPublishPayload {
     seq: u32,
-    state: PlaybackStatus,
+    state: ConnectPlaybackState,
 }
 
 #[derive(Debug, Deserialize)]
@@ -1041,7 +1043,7 @@ struct HandoffCompletePayload {
 struct StoredPlaybackSnapshotPayload {
     seq: u32,
     source_device_id: String,
-    state: PlaybackStatus,
+    state: ConnectPlaybackState,
     current_position_ms: u32,
     updated_at: String,
 }

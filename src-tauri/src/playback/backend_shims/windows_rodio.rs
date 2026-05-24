@@ -1,3 +1,4 @@
+use crate::models::normalize_volume;
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
@@ -14,6 +15,10 @@ enum PlaybackJob {
     },
     CurrentPosition {
         result_tx: std::sync::mpsc::Sender<Result<u32, String>>,
+    },
+    SetVolume {
+        volume: f32,
+        result_tx: std::sync::mpsc::Sender<Result<(), String>>,
     },
     Pause {
         result_tx: std::sync::mpsc::Sender<Result<(), String>>,
@@ -88,6 +93,10 @@ impl PlaybackBackend for WindowsPlaybackBackend {
         self.request_position_result(|result_tx| PlaybackJob::CurrentPosition { result_tx })
     }
 
+    fn set_volume(&mut self, volume: f32) -> Result<(), String> {
+        self.request_result(|result_tx| PlaybackJob::SetVolume { volume, result_tx })
+    }
+
     fn pause(&mut self) -> Result<(), String> {
         self.request_result(|result_tx| PlaybackJob::Pause { result_tx })
     }
@@ -112,6 +121,9 @@ fn playback_worker_loop(rx: std::sync::mpsc::Receiver<PlaybackJob>) {
             PlaybackJob::CurrentPosition { result_tx } => {
                 let _ = result_tx.send(worker.current_position_ms());
             }
+            PlaybackJob::SetVolume { volume, result_tx } => {
+                let _ = result_tx.send(worker.set_volume(volume));
+            }
             PlaybackJob::Pause { result_tx } => {
                 let _ = result_tx.send(worker.pause());
             }
@@ -125,11 +137,22 @@ fn playback_worker_loop(rx: std::sync::mpsc::Receiver<PlaybackJob>) {
     }
 }
 
-#[derive(Default)]
 struct WindowsPlaybackWorker {
     output_stream: Option<rodio::MixerDeviceSink>,
     sink: Option<rodio::Player>,
     loaded_absolute_position_ms: Option<u32>,
+    volume: f32,
+}
+
+impl Default for WindowsPlaybackWorker {
+    fn default() -> Self {
+        Self {
+            output_stream: None,
+            sink: None,
+            loaded_absolute_position_ms: None,
+            volume: 1.0,
+        }
+    }
 }
 
 impl WindowsPlaybackWorker {
@@ -194,6 +217,7 @@ impl WindowsPlaybackWorker {
                 .map_err(|error| format!("Failed to seek decoded stream bytes: {error}"))?;
         }
         let sink = rodio::Player::connect_new(self.ensure_output_stream()?.mixer());
+        sink.set_volume(self.volume);
 
         if let Some(existing_sink) = self.sink.take() {
             existing_sink.stop();
@@ -223,6 +247,14 @@ impl WindowsPlaybackWorker {
         let elapsed_ms = sink.get_pos().as_millis();
         let elapsed_ms = u32::try_from(elapsed_ms).unwrap_or(u32::MAX);
         Ok(base_position_ms.saturating_add(elapsed_ms))
+    }
+
+    fn set_volume(&mut self, volume: f32) -> Result<(), String> {
+        self.volume = normalize_volume(volume);
+        if let Some(sink) = self.sink.as_ref() {
+            sink.set_volume(self.volume);
+        }
+        Ok(())
     }
 
     fn pause(&mut self) -> Result<(), String> {

@@ -4,7 +4,6 @@ import { Component, onCleanup, onMount, Show } from 'solid-js';
 import { createStore } from 'solid-js/store';
 import { resolveSettingsRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
-import { isSP } from '~/utils/isSP';
 import Title from '../Title';
 
 interface HeaderProps {
@@ -33,7 +32,6 @@ const Header: Component<HeaderProps> = (props) => {
       maximized: await window.isMaximized(),
       closable: await window.isClosable(),
     });
-    console.log(windowStore);
   }
 
   onMount(async () => {
@@ -50,14 +48,7 @@ const Header: Component<HeaderProps> = (props) => {
   });
 
   return (
-    <div
-      class='bg-primary-plane border-primary-border flex flex-row items-center border-b px-1.5'
-      classList={{
-        'h-10': isSP(),
-        'h-12': !isSP(),
-      }}
-      data-tauri-drag-region
-    >
+    <div class='bg-primary-plane border-primary-border flex h-10 max-h-10 min-h-10 flex-row items-center border-b px-1.5' data-tauri-drag-region>
       <Show when={props.titleHref} fallback={<Title>{props.title ?? 'Transonic'}</Title>}>
         <Title class='cursor-pointer' onClick={() => navigate(props.titleHref!)}>
           {props.title ?? 'Transonic'}
@@ -75,41 +66,36 @@ const Header: Component<HeaderProps> = (props) => {
         </div>
       </div>
 
-      <Show when={!isSP()}>
-        <div
-          data-tauri-drag-exclude
-          class='hover:bg-primary-hover ml-2 flex h-full w-11 items-center justify-center'
-          classList={{
-            ['cursor-pointer']: windowStore.minimizable,
-          }}
-          onClick={() => getCurrentWindow().minimize()}
-        >
-          <Icon class='text-primary-text text-md' icon='material-symbols:minimize' />
-        </div>
-        <div
-          data-tauri-drag-exclude
-          class='hover:bg-primary-hover flex h-full w-11 items-center justify-center'
-          classList={{
-            ['cursor-pointer']: windowStore.maximizable,
-          }}
-          onClick={() => getCurrentWindow().toggleMaximize()}
-        >
-          <Icon
-            class='text-primary-text text-sm'
-            icon={windowStore.maximized ? 'material-symbols:stack-outline' : 'material-symbols:square-outline'}
-          />
-        </div>
-        <div
-          data-tauri-drag-exclude
-          class='group hover:bg-primary-hover flex h-full w-11 items-center justify-center'
-          classList={{
-            ['cursor-pointer']: windowStore.closable,
-          }}
-          onClick={() => getCurrentWindow().close()}
-        >
-          <Icon class='text-primary-text text-md group-hover:text-red-500' icon='material-symbols:close' />
-        </div>
-      </Show>
+      <div
+        data-tauri-drag-exclude
+        class='hover:bg-primary-hover ml-2 flex h-full w-11 items-center justify-center'
+        classList={{
+          ['cursor-pointer']: windowStore.minimizable,
+        }}
+        onClick={() => getCurrentWindow().minimize()}
+      >
+        <Icon class='text-primary-text text-md' icon='material-symbols:minimize' />
+      </div>
+      <div
+        data-tauri-drag-exclude
+        class='hover:bg-primary-hover flex h-full w-11 items-center justify-center'
+        classList={{
+          ['cursor-pointer']: windowStore.maximizable,
+        }}
+        onClick={() => getCurrentWindow().toggleMaximize()}
+      >
+        <Icon class='text-primary-text text-sm' icon={windowStore.maximized ? 'material-symbols:stack-outline' : 'material-symbols:square-outline'} />
+      </div>
+      <div
+        data-tauri-drag-exclude
+        class='group hover:bg-primary-hover flex h-full w-11 items-center justify-center'
+        classList={{
+          ['cursor-pointer']: windowStore.closable,
+        }}
+        onClick={() => getCurrentWindow().close()}
+      >
+        <Icon class='text-primary-text text-md group-hover:text-red-500' icon='material-symbols:close' />
+      </div>
     </div>
   );
 };

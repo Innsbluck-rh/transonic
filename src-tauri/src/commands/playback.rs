@@ -8,8 +8,10 @@ use crate::{
     commands::common::{client, format_api_error},
     models::{
         CapabilityMatrix, PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest,
-        PlaybackPlayQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
-        PlaybackSetQueueRequest, PlaybackStatus, QueueSource, SongResponse,
+        PlaybackMoveQueueIndexRequest, PlaybackPlayQueueIndexRequest,
+        PlaybackRemoveQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
+        PlaybackSetQueueRequest, PlaybackSetVolumeRequest, PlaybackStatus, QueueSource,
+        SongResponse,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
@@ -307,6 +309,88 @@ pub fn playback_play_queue_index(
 
 #[tauri::command]
 #[specta::specta]
+pub fn playback_remove_queue_index(
+    app: AppHandle,
+    payload: PlaybackRemoveQueueIndexRequest,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = (|| -> Result<(), String> {
+            let sessions = app.state::<ActiveSessionState>();
+            let cover_art_cache = app.state::<CoverArtCacheState>();
+            let playback = app.state::<PlaybackControllerState>();
+
+            let runtime_context = active_runtime_parts(&app, &sessions).ok().map(
+                |(active_client, active_capability_matrix, active_profile_id)| {
+                    (
+                        active_client,
+                        active_capability_matrix,
+                        active_profile_id,
+                        cover_art_cache.0.clone(),
+                    )
+                },
+            );
+
+            {
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                if let Some((
+                    active_client,
+                    active_capability_matrix,
+                    active_profile_id,
+                    cover_art_cache,
+                )) = runtime_context.as_ref()
+                {
+                    let runtime_context = PlaybackRuntimeContext {
+                        client: active_client,
+                        capability_matrix: active_capability_matrix,
+                        cover_art_cache: Some(cover_art_cache),
+                        profile_id: Some(active_profile_id),
+                    };
+                    controller.remove_queue_index(Some(&runtime_context), payload.index)?;
+                } else {
+                    controller.remove_queue_index(None, payload.index)?;
+                }
+            }
+            spawn_current_artwork_update(&app);
+            Ok(())
+        })();
+
+        if let Err(error) = result {
+            log::error!("playback_remove_queue_index: failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn playback_move_queue_index(
+    app: AppHandle,
+    payload: PlaybackMoveQueueIndexRequest,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = (|| -> Result<(), String> {
+            let playback = app.state::<PlaybackControllerState>();
+            let mut controller = playback
+                .0
+                .lock()
+                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+            controller.move_queue_index(payload.from_index, payload.to_index)?;
+            spawn_current_artwork_update(&app);
+            Ok(())
+        })();
+
+        if let Err(error) = result {
+            log::error!("playback_move_queue_index: failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn playback_set_position(
     app: AppHandle,
     payload: PlaybackSetPositionRequest,
@@ -326,6 +410,19 @@ pub fn playback_set_position(
         }
     });
     Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn playback_set_volume(
+    state: State<'_, PlaybackControllerState>,
+    payload: PlaybackSetVolumeRequest,
+) -> Result<(), String> {
+    let mut controller = state
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+    controller.set_volume(payload.volume)
 }
 
 #[tauri::command]

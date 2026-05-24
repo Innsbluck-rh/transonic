@@ -22,13 +22,13 @@
 //! channel) instead of requiring a full reload.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
-use crate::models::PlaybackCapabilities;
+use crate::models::{normalize_volume, PlaybackCapabilities};
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
@@ -323,6 +323,10 @@ enum ActiveWorkerJob {
     CurrentPosition {
         reply: std::sync::mpsc::Sender<Result<u32, String>>,
     },
+    SetVolume {
+        volume: f32,
+        reply: std::sync::mpsc::Sender<Result<(), String>>,
+    },
     Pause {
         reply: std::sync::mpsc::Sender<Result<(), String>>,
     },
@@ -579,6 +583,10 @@ impl PlaybackBackend for SymphoniaPlaybackBackend {
         self.send_u32(|reply| ActiveWorkerJob::CurrentPosition { reply })
     }
 
+    fn set_volume(&mut self, volume: f32) -> Result<(), String> {
+        self.send_active_unit(|reply| ActiveWorkerJob::SetVolume { volume, reply })
+    }
+
     fn pause(&mut self) -> Result<(), String> {
         self.send_active_unit(|reply| ActiveWorkerJob::Pause { reply })
     }
@@ -653,6 +661,10 @@ impl AudioRing {
     }
 }
 
+fn volume_to_bits(volume: f32) -> u32 {
+    normalize_volume(volume).to_bits()
+}
+
 #[derive(Clone)]
 struct RoutedTrack {
     ring: Arc<AudioRing>,
@@ -673,10 +685,11 @@ struct StreamRouterState {
 
 struct StreamRouter {
     inner: Mutex<StreamRouterState>,
+    volume_bits: AtomicU32,
 }
 
 impl StreamRouter {
-    fn new(current_ring: Arc<AudioRing>, base_position_ms: u32) -> Self {
+    fn new(current_ring: Arc<AudioRing>, base_position_ms: u32, volume: f32) -> Self {
         Self {
             inner: Mutex::new(StreamRouterState {
                 current: RoutedTrack {
@@ -685,6 +698,7 @@ impl StreamRouter {
                 },
                 pending: None,
             }),
+            volume_bits: AtomicU32::new(volume_to_bits(volume)),
         }
     }
 
@@ -700,6 +714,15 @@ impl StreamRouter {
 
     fn update_current_base_position(&self, base_position_ms: u32) {
         self.inner.lock().unwrap().current.base_position_ms = base_position_ms;
+    }
+
+    fn set_volume(&self, volume: f32) {
+        self.volume_bits
+            .store(volume_to_bits(volume), Ordering::Release);
+    }
+
+    fn volume(&self) -> f32 {
+        f32::from_bits(self.volume_bits.load(Ordering::Acquire))
     }
 
     fn clear_pending(&self) {
@@ -788,6 +811,7 @@ fn active_worker_main(
     prepared_state: Arc<SharedPreparedState>,
 ) {
     let mut session: Option<ActiveSession> = None;
+    let mut volume = 1.0_f32;
 
     while let Ok(job) = rx.recv() {
         match job {
@@ -798,7 +822,7 @@ fn active_worker_main(
                 }
                 event_hub.reset();
                 match prepare_session(&request, true).and_then(|prepared| {
-                    activate_session(prepared, &event_hub, &active_tx, request.autoplay)
+                    activate_session(prepared, &event_hub, &active_tx, request.autoplay, volume)
                 }) {
                     Ok(active_session) => {
                         session = Some(active_session);
@@ -820,7 +844,7 @@ fn active_worker_main(
 
                 tear_down_active(&mut session);
                 event_hub.reset();
-                match activate_session(prepared, &event_hub, &active_tx, autoplay) {
+                match activate_session(prepared, &event_hub, &active_tx, autoplay, volume) {
                     Ok(active_session) => {
                         session = Some(active_session);
                         let _ = reply.send(Ok(()));
@@ -870,6 +894,17 @@ fn active_worker_main(
                     .map(|s| Ok(s.stream_router.current_position_ms()))
                     .unwrap_or_else(|| Err("No stream is loaded for playback.".to_string()));
                 let _ = reply.send(result);
+            }
+
+            ActiveWorkerJob::SetVolume {
+                volume: next_volume,
+                reply,
+            } => {
+                volume = normalize_volume(next_volume);
+                if let Some(ref s) = session {
+                    s.stream_router.set_volume(volume);
+                }
+                let _ = reply.send(Ok(()));
             }
 
             ActiveWorkerJob::Pause { reply } => {
@@ -1159,6 +1194,7 @@ fn activate_session(
     event_hub: &SymphoniaPlaybackEventHub,
     active_tx: &std::sync::mpsc::Sender<ActiveWorkerJob>,
     autoplay: bool,
+    volume: f32,
 ) -> Result<ActiveSession, String> {
     let PreparedSession {
         core,
@@ -1168,6 +1204,7 @@ fn activate_session(
     let stream_router = Arc::new(StreamRouter::new(
         Arc::clone(&core.ring),
         absolute_start_position_ms,
+        volume,
     ));
     let cpal_stream = match build_cpal_stream(
         Arc::clone(&stream_router),
@@ -1251,6 +1288,7 @@ fn download_response_body(
                 let msg = format!("Download read error: {e}");
                 log::error!("symphonia-download: {msg}");
                 let mut inner = shared.inner.lock().unwrap();
+                // TODO: classify recoverable network errors as handled once this shim reports structured playback errors.
                 inner.error = Some(msg);
                 inner.complete = true;
                 shared.condvar.notify_all();
@@ -1598,7 +1636,14 @@ fn build_cpal_stream(
 
                 while written < data.len() {
                     let current = stream_router.current_track();
-                    let wrote = current.ring.drain_into(&mut data[written..]);
+                    let start = written;
+                    let wrote = current.ring.drain_into(&mut data[start..]);
+                    let volume = stream_router.volume();
+                    if volume != 1.0 {
+                        for sample in &mut data[start..start + wrote] {
+                            *sample *= volume;
+                        }
+                    }
                     written += wrote;
                     if written == data.len() {
                         break;

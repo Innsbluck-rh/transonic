@@ -6,7 +6,10 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::models::{AppSettings, ConnectSettings, PlaybackSettings, SettingsOrigin};
+use crate::models::{
+    normalize_volume, AppSettings, AppearanceSettings, ConnectSettings, PlaybackSettings,
+    SettingsOrigin,
+};
 
 const APP_SETTINGS_FILENAME: &str = "app-settings.json";
 
@@ -15,6 +18,8 @@ const APP_SETTINGS_FILENAME: &str = "app-settings.json";
 struct AppSettingsFile {
     #[serde(default = "default_version")]
     version: u32,
+    #[serde(default)]
+    appearance: AppearanceSettings,
     #[serde(default)]
     playback: PlaybackSettings,
     #[serde(default)]
@@ -25,6 +30,7 @@ impl Default for AppSettingsFile {
     fn default() -> Self {
         Self {
             version: default_version(),
+            appearance: AppearanceSettings::default(),
             playback: PlaybackSettings::default(),
             connect: ConnectSettings::default(),
         }
@@ -34,6 +40,7 @@ impl Default for AppSettingsFile {
 impl From<AppSettingsFile> for AppSettings {
     fn from(value: AppSettingsFile) -> Self {
         Self {
+            appearance: value.appearance,
             playback: value.playback,
             connect: value.connect,
         }
@@ -44,6 +51,7 @@ impl From<AppSettings> for AppSettingsFile {
     fn from(value: AppSettings) -> Self {
         Self {
             version: default_version(),
+            appearance: value.appearance,
             playback: value.playback,
             connect: value.connect,
         }
@@ -82,6 +90,7 @@ impl AppSettingsStore {
     }
 
     pub fn replace(&mut self, settings: AppSettings) -> Result<AppSettings, String> {
+        let settings = normalize_app_settings(settings);
         save_app_settings_file(&self.path, &settings)?;
         self.settings = settings.clone();
         self.origin = SettingsOrigin::Stored;
@@ -127,6 +136,11 @@ fn save_app_settings_file(path: &Path, settings: &AppSettings) -> Result<(), Str
     Ok(())
 }
 
+fn normalize_app_settings(mut settings: AppSettings) -> AppSettings {
+    settings.playback.volume = normalize_volume(settings.playback.volume);
+    settings
+}
+
 fn default_version() -> u32 {
     1
 }
@@ -136,7 +150,7 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{app_settings_path, AppSettingsStore};
-    use crate::models::AppSettings;
+    use crate::models::{AlbumDisplayMode, AppSettings};
 
     #[test]
     fn missing_settings_file_uses_defaults() {
@@ -154,13 +168,44 @@ mod tests {
         let path = app_settings_path(dir.path());
         let mut store = AppSettingsStore::load(path.clone()).unwrap();
         let mut settings = AppSettings::default();
+        settings.appearance.album_display_mode = AlbumDisplayMode::List;
         settings.playback.gapless_playback_enabled = true;
+        settings.playback.volume = 0.42;
 
         store.replace(settings.clone()).unwrap();
 
         let reloaded = AppSettingsStore::load(path).unwrap();
         let (restored_settings, origin) = reloaded.snapshot();
         assert_eq!(restored_settings, settings);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn settings_store_clamps_playback_volume_when_replacing() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        let mut store = AppSettingsStore::load(path).unwrap();
+        let mut settings = AppSettings::default();
+        settings.playback.volume = 5.0;
+
+        let stored = store.replace(settings).unwrap();
+
+        assert_eq!(stored.playback.volume, 1.0);
+    }
+
+    #[test]
+    fn playback_volume_defaults_and_clamps_when_loading_settings() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"volume\": 2.0\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert_eq!(settings.playback.volume, 1.0);
         assert_eq!(origin, crate::models::SettingsOrigin::Stored);
     }
 
@@ -209,6 +254,25 @@ mod tests {
         let store = AppSettingsStore::load(path).unwrap();
         let (settings, origin) = store.snapshot();
         assert_eq!(settings.connect, crate::models::ConnectSettings::default());
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn missing_appearance_settings_use_defaults() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"gaplessPlaybackEnabled\": true\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert_eq!(
+            settings.appearance,
+            crate::models::AppearanceSettings::default()
+        );
         assert_eq!(origin, crate::models::SettingsOrigin::Stored);
     }
 

@@ -78,8 +78,34 @@ pub struct PlaybackSetPositionRequest {
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct PlaybackSetVolumeRequest {
+    pub volume: f32,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct PlaybackPlayQueueIndexRequest {
     pub index: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackRemoveQueueIndexRequest {
+    pub index: u32,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackMoveQueueIndexRequest {
+    pub from_index: u32,
+    pub to_index: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackError {
+    pub message: String,
+    pub handled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
@@ -93,7 +119,7 @@ pub struct PlaybackStatus {
     pub current_index: Option<u32>,
     pub current_position_ms: u32,
     pub current_song_id: Option<String>,
-    pub error: Option<String>,
+    pub playback_error: Option<PlaybackError>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
@@ -125,7 +151,7 @@ impl PlaybackStatus {
             current_index: None,
             current_position_ms: 0,
             current_song_id: None,
-            error: None,
+            playback_error: None,
         }
     }
 }

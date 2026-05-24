@@ -116,7 +116,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           />
         </div>
 
-        <div class='mt-8 flex w-full flex-col items-start lg:mt-4 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
+        <div class='mt-6 flex w-full flex-col items-start lg:mt-4 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
           <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo text-2xl font-black tracking-tighter lg:mb-1 lg:text-3xl' />
           <MarqueeParagraph
             onClick={() => {

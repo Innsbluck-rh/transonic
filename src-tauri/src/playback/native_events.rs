@@ -12,7 +12,7 @@ pub enum PlaybackNativeEvent {
     Playing { position_ms: u32 },
     Paused { position_ms: u32 },
     SeekProcessed { position_ms: u32 },
-    Error { message: String },
+    Error { message: String, handled: bool },
     GaplessPrepared { generation: u64 },
     GaplessFailed { generation: u64, message: String },
     GaplessTransition,

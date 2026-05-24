@@ -50,6 +50,7 @@ pub(crate) fn create_playback_controller(
     app_handle: PlaybackEventAppHandle,
     persister: Box<dyn PlaybackStatePersister>,
     gapless_playback_enabled: bool,
+    initial_volume: f32,
 ) -> PlaybackController {
     let reporter: Box<dyn reporting::PlaybackReporter> =
         Box::new(CompositePlaybackReporter::new(vec![
@@ -72,6 +73,7 @@ pub(crate) fn create_playback_controller(
                 Box::new(runtime_state.event_hub.clone()),
                 persister,
                 gapless_playback_enabled,
+                initial_volume,
             );
         }
     }
@@ -87,6 +89,7 @@ pub(crate) fn create_playback_controller(
             Box::new(event_hub),
             persister,
             gapless_playback_enabled,
+            initial_volume,
         );
     }
 
@@ -100,6 +103,7 @@ pub(crate) fn create_playback_controller(
             Box::new(NoopNativePlaybackEventSource),
             persister,
             gapless_playback_enabled,
+            initial_volume,
         );
     }
 

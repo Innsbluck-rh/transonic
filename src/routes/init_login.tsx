@@ -95,7 +95,7 @@ function InitLogin() {
         <Header title='Login to server' shouldShowProfiles={false} />
       </Show>
       <RouteHeader title={'Login'} />
-      <div class='bg-primary-surface flex h-full w-full flex-col gap-3 p-4'>
+      <div class='bg-primary-surface flex size-full flex-col gap-3 p-4'>
         <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
 
         <Show when={submitError()}>

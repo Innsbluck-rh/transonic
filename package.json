@@ -27,6 +27,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
     "@iconify-icon/solid": "^3.0.3",
     "@solidjs/meta": "^0.29.4",
     "@solidjs/router": "^0.16.1",

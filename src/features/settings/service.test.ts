@@ -8,15 +8,19 @@ vi.mock('~/bindings', () => ({
 
 import { commands } from '~/bindings';
 
-import { setConnectSetting, setPlaybackSetting, setSettingsStore, settingsStore } from './service';
+import { setAppearanceSetting, setConnectSetting, setPlaybackSetting, setSettingsStore, settingsStore } from './service';
 
 describe('settings service', () => {
   const settingsUpdate = vi.mocked(commands.settingsUpdate);
 
   beforeEach(() => {
     setSettingsStore({
+      appearance: {
+        albumDisplayMode: 'grid',
+      },
       playback: {
         gaplessPlaybackEnabled: false,
+        volume: 1,
       },
       connect: {
         enabled: false,
@@ -46,6 +50,19 @@ describe('settings service', () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledWith('write failed');
     expect(settingsStore.playback.gaplessPlaybackEnabled).toBe(false);
+  });
+
+  it('rolls back optimistic appearance setting changes when persistence fails', async () => {
+    settingsUpdate.mockResolvedValue({
+      status: 'error',
+      error: 'write failed',
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await setAppearanceSetting('albumDisplayMode', 'list');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('write failed');
+    expect(settingsStore.appearance.albumDisplayMode).toBe('grid');
   });
 
   it('rolls back optimistic connect setting changes when persistence fails', async () => {

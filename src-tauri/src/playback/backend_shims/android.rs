@@ -1,7 +1,7 @@
-use crate::models::PlaybackCapabilities;
+use crate::models::{normalize_volume, PlaybackCapabilities};
 use crate::playback::android_mobile_plugin::{
     AndroidActivatePreparedMediaRequest, AndroidPlaybackBridge, AndroidPlaybackHeader,
-    AndroidPreparedMediaRequest, AndroidUpdateMediaArtworkRequest,
+    AndroidPreparedMediaRequest, AndroidSetVolumeRequest, AndroidUpdateMediaArtworkRequest,
 };
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
@@ -20,6 +20,7 @@ trait AndroidPlaybackControl: Send {
         &self,
         payload: &AndroidUpdateMediaArtworkRequest,
     ) -> Result<(), String>;
+    fn set_volume(&self, payload: &AndroidSetVolumeRequest) -> Result<(), String>;
     fn pause(&self) -> Result<(), String>;
     fn stop(&self) -> Result<(), String>;
     fn seek_to(&self, position_ms: u32) -> Result<(), String>;
@@ -57,6 +58,10 @@ impl AndroidPlaybackControl for AndroidPlaybackBridge {
         Self::update_media_artwork(self, payload)
     }
 
+    fn set_volume(&self, payload: &AndroidSetVolumeRequest) -> Result<(), String> {
+        Self::set_volume(self, payload)
+    }
+
     fn pause(&self) -> Result<(), String> {
         Self::pause(self)
     }
@@ -79,6 +84,7 @@ struct AndroidPlaybackBackend {
     next_prepare_generation: u64,
     prepared_generation: Option<u64>,
     next_media_instance_id: u64,
+    volume: f32,
 }
 
 impl AndroidPlaybackBackend {
@@ -88,6 +94,7 @@ impl AndroidPlaybackBackend {
             next_prepare_generation: 0,
             prepared_generation: None,
             next_media_instance_id: 0,
+            volume: 1.0,
         }
     }
 
@@ -125,6 +132,7 @@ impl AndroidPlaybackBackend {
             artist: request.artist,
             album: request.album,
             artwork_path: request.artwork_path,
+            volume: self.volume,
         })
     }
 }
@@ -200,6 +208,13 @@ impl PlaybackBackend for AndroidPlaybackBackend {
 
     fn current_position_ms(&self) -> Result<u32, String> {
         self.bridge.current_position_ms()
+    }
+
+    fn set_volume(&mut self, volume: f32) -> Result<(), String> {
+        self.volume = normalize_volume(volume);
+        self.bridge.set_volume(&AndroidSetVolumeRequest {
+            volume: self.volume,
+        })
     }
 
     fn pause(&mut self) -> Result<(), String> {
@@ -279,6 +294,10 @@ mod tests {
             payload: &AndroidUpdateMediaArtworkRequest,
         ) -> Result<(), String> {
             self.lock().unwrap().updated_artwork.push(payload.clone());
+            Ok(())
+        }
+
+        fn set_volume(&self, _payload: &AndroidSetVolumeRequest) -> Result<(), String> {
             Ok(())
         }
 

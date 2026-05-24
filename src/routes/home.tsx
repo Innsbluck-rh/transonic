@@ -92,29 +92,31 @@ function Home() {
         </div>
       }
     >
-      <div class='home-surface-root p-0'>
+      <div class='home-surface-root overflow-y-auto p-0'>
         <RouteHeader title='Home' />
         <div class='mt-2' />
 
         <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
-        <Show when={!isLoadingAlbums()} fallback={<p class='text-sm text-zinc-400'>Loading album lists...</p>}>
-          <For each={albumSections()}>
-            {(section) => (
-              <div class='flex w-full flex-col gap-1 overflow-x-hidden'>
-                <Heading2 class='px-3'>{section.heading}</Heading2>
-                <AlbumHorizontalList
-                  class='px-4'
-                  albums={section.albums}
-                  emptyMessage={`No albums returned for ${section.heading}.`}
-                  onItemClick={async (album) => {
-                    navigate(resolveAlbumRoute(album.id, 'pc'));
-                  }}
-                />
-              </div>
-            )}
-          </For>
-        </Show>
+        <div class='flex w-full flex-col gap-3 pb-4'>
+          <Show when={!isLoadingAlbums()} fallback={<p class='m-3 text-sm text-zinc-400'>Loading album lists...</p>}>
+            <For each={albumSections()}>
+              {(section) => (
+                <div class='flex w-full flex-col gap-1 overflow-x-hidden'>
+                  <Heading2 class='px-3'>{section.heading}</Heading2>
+                  <AlbumHorizontalList
+                    class='px-4'
+                    albums={section.albums}
+                    emptyMessage={`No albums returned for ${section.heading}.`}
+                    onItemClick={async (album) => {
+                      navigate(resolveAlbumRoute(album.id, 'pc'));
+                    }}
+                  />
+                </div>
+              )}
+            </For>
+          </Show>
+        </div>
       </div>
     </Show>
   );

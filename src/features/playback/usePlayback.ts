@@ -1,5 +1,6 @@
 import { createMemo, createSignal } from 'solid-js';
 import { commands, InterruptReason, PlayingState, type QueueSource, type SongResponse } from '~/bindings';
+import { setPlaybackSetting, settingsStore } from '~/features/settings/service';
 import { formatClockTime } from '~/utils/duration';
 import { hasPlaybackCommandError } from './service';
 
@@ -13,12 +14,20 @@ function clampPositionMs(positionMs: number, durationMs: number) {
   return Math.min(Math.max(0, positionMs), durationMs);
 }
 
+function clampVolume(volume: number) {
+  if (!Number.isFinite(volume)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(volume, 0), 1);
+}
+
 function isControlDisabledForState(state?: PlayingState) {
-  return !state || state === 'idle' || state === 'error' || state === 'interrupted';
+  return !state || state === 'idle' || state === 'interrupted';
 }
 
 function isSeekDisabledForState(state?: PlayingState) {
-  return !state || state === 'idle' || state === 'error' || state === 'interrupted';
+  return !state || state === 'idle' || state === 'interrupted';
 }
 
 function isPositionAdvancingState(state?: PlayingState) {
@@ -51,6 +60,7 @@ function isSameQueue(q1: SongResponse[], q2: SongResponse[]) {
 
 export function usePlayback() {
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
+  const [previewVolume, setPreviewVolume] = createSignal<number | null>(null);
 
   const status = createMemo(() => playbackStore.status);
   const authoritativeReceivedAtMs = createMemo(() => playbackStore.authoritativeReceivedAtMs);
@@ -111,6 +121,7 @@ export function usePlayback() {
   const currentPositionText = createMemo(() => formatClockTime(currentPositionMs() / 1000));
   const durationText = createMemo(() => formatClockTime(durationMs() / 1000));
   const gaplessStatus = createMemo(() => status()?.gaplessStatus ?? null);
+  const volume = createMemo(() => previewVolume() ?? clampVolume(settingsStore.playback.volume));
 
   const play = () => {
     commands.playbackPlay().then(hasPlaybackCommandError);
@@ -151,6 +162,24 @@ export function usePlayback() {
 
   const previewSeek = (nextPositionMs: number | null) => {
     setPreviewPositionMs(nextPositionMs);
+  };
+
+  const setVolume = (nextVolume: number) => {
+    const clampedVolume = clampVolume(nextVolume);
+    setPreviewVolume(null);
+    commands.playbackSetVolume({ volume: clampedVolume }).then(hasPlaybackCommandError);
+    void setPlaybackSetting('volume', clampedVolume);
+  };
+
+  const previewVolumeChange = (nextVolume: number | null) => {
+    if (nextVolume === null) {
+      setPreviewVolume(null);
+      return;
+    }
+
+    const clampedVolume = clampVolume(nextVolume);
+    setPreviewVolume(clampedVolume);
+    commands.playbackSetVolume({ volume: clampedVolume }).then(hasPlaybackCommandError);
   };
 
   const playQueueIndex = (index: number) => {
@@ -213,6 +242,7 @@ export function usePlayback() {
     currentPositionText,
     durationText,
     gaplessStatus,
+    volume,
     interruptLabel,
     isQueueIndexActive,
     queueIndexProgressPercent,
@@ -223,6 +253,8 @@ export function usePlayback() {
     next,
     seek,
     previewSeek,
+    setVolume,
+    previewVolume: previewVolumeChange,
     playQueueIndex,
     playAlbum,
     playFolderAlbum,

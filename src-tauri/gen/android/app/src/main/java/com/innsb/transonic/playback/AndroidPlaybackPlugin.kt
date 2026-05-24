@@ -37,6 +37,7 @@ private const val KEY_TITLE = "title"
 private const val KEY_ARTIST = "artist"
 private const val KEY_ALBUM = "album"
 private const val KEY_ARTWORK_PATH = "artworkPath"
+private const val KEY_VOLUME = "volume"
 
 @InvokeArg
 @Keep
@@ -58,6 +59,7 @@ class LoadPreparedMediaArgs {
   var artist: String? = null
   var album: String? = null
   var artworkPath: String? = null
+  var volume: Float = 1f
 }
 
 @InvokeArg
@@ -77,6 +79,12 @@ class UpdateMediaArtworkArgs {
 @Keep
 class SeekToArgs {
   var positionMs: Long = 0
+}
+
+@InvokeArg
+@Keep
+class SetVolumeArgs {
+  var volume: Float = 1f
 }
 
 @Keep
@@ -110,6 +118,7 @@ private fun LoadPreparedMediaArgs.toBundle(): Bundle {
     putString(KEY_ARTIST, artist)
     putString(KEY_ALBUM, album)
     putString(KEY_ARTWORK_PATH, artworkPath)
+    putFloat(KEY_VOLUME, volume)
   }
 }
 
@@ -155,6 +164,7 @@ internal fun Bundle.toLoadPreparedMediaArgs(): LoadPreparedMediaArgs? {
     this.artist = getString(KEY_ARTIST)
     this.album = getString(KEY_ALBUM)
     this.artworkPath = getString(KEY_ARTWORK_PATH)
+    this.volume = getFloat(KEY_VOLUME, 1f)
   }
 }
 
@@ -632,6 +642,18 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
       )
     }) {
       invoke.resolveObject(CurrentPositionResponse(0))
+    }
+  }
+
+  @Command
+  @Keep
+  fun setVolume(invoke: Invoke) {
+    val args = invoke.parseArgs(SetVolumeArgs::class.java)
+    if (!PlaybackControllerHost.withExistingController { controller ->
+      controller.volume = args.volume.coerceIn(0f, 1f)
+      invoke.resolve()
+    }) {
+      invoke.resolve()
     }
   }
 }

@@ -221,6 +221,11 @@ pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_enqu
         "gapless_transition" => PlaybackNativeEvent::GaplessTransition,
         "error" => PlaybackNativeEvent::Error {
             message: message.unwrap_or_else(|| "Android playback failed.".to_string()),
+            handled: false,
+        },
+        "handled_error" => PlaybackNativeEvent::Error {
+            message: message.unwrap_or_else(|| "Android playback failed.".to_string()),
+            handled: true,
         },
         "ended" => PlaybackNativeEvent::Ended,
         _ => return,

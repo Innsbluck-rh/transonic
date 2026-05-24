@@ -1,8 +1,9 @@
-import type { SongResponse } from '~/bindings';
+import { commands, type SongResponse } from '~/bindings';
 import { resolveAlbumRoute, resolveArtistRoute } from '../navigation/routes';
+import { hasPlaybackCommandError } from '../playback/service';
 import type { MenuItem } from './types';
 
-export function buildQueueItemMenuItems(song: SongResponse, _index: number, navigate: (to: string | number) => void): MenuItem[] {
+export function buildQueueItemMenuItems(song: SongResponse, index: () => number, navigate: (to: string | number) => void): MenuItem[] {
   const albumId = song.albumId;
   const artistId = song.artistId;
 
@@ -11,7 +12,7 @@ export function buildQueueItemMenuItems(song: SongResponse, _index: number, navi
     icon: 'material-symbols:playlist-remove',
     label: 'Remove from queue',
     onClick: () => {
-      // TODO: implement remove from queue (includes the behavior after removing playing entry)
+      commands.playbackRemoveQueueIndex({ index: index() }).then(hasPlaybackCommandError);
     },
   });
 

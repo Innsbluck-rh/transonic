@@ -50,33 +50,24 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
 
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
-      <div
-        {...props.topSectionProps}
-        class={`relative flex h-auto w-full shrink-0 flex-col items-center overflow-hidden ${props.topSectionProps?.class ?? ''}`}
-      >
-        <div class='z-10 mt-8 flex h-full w-full flex-col items-center'>
-          <div class='flex h-full w-full flex-col items-center px-8'>
-            <Show
-              when={coverArt()}
-              fallback={
-                <div class='border-secondary-border flex aspect-square h-auto w-56 max-w-1/2 min-w-1/3 items-center justify-center border'>
-                  <LoadCircle />
-                </div>
-              }
-            >
-              {(assetUrl) => (
-                <img
-                  class='aspect-square h-auto w-56 max-w-1/2 min-w-1/3 object-cover object-center shadow-xl'
-                  src={assetUrl()}
-                  loading='lazy'
-                  decoding='async'
-                />
-              )}
-            </Show>
-
+      <div {...props.topSectionProps} class={`relative flex h-auto w-full shrink-0 flex-col items-center ${props.topSectionProps?.class ?? ''}`}>
+        <div class='z-10 mt-4 flex size-full flex-col items-center'>
+          <div class='flex size-full flex-col items-center px-8'>
+            <div class='relative flex aspect-square h-auto w-46 min-w-1/3 shadow-xl'>
+              <Show
+                when={coverArt()}
+                fallback={
+                  <div class='border-secondary-border absolute inset-0 flex items-center justify-center border'>
+                    <LoadCircle />
+                  </div>
+                }
+              >
+                {(assetUrl) => <img class='absolute inset-0 object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
+              </Show>
+            </div>
             <MarqueeParagraph
               text={currentEntry()?.title || ''}
-              class='archivo mt-5 w-full text-center text-2xl font-black tracking-tighter'
+              class='archivo mt-4 w-full text-center text-2xl font-black tracking-tighter'
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
@@ -124,21 +115,23 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
           </div>
         </div>
 
-        <Show when={coverArt()}>
-          {(assetUrl) => <img class='absolute inset-0 z-0 size-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
-        </Show>
-        <div class='absolute inset-0 z-0 size-full backdrop-blur-[5px]' />
-        <div class='bg-primary-plane absolute z-0 size-full opacity-75' />
+        <div class='bg-primary-plane absolute inset-0 -z-10 size-full overflow-hidden'>
+          <Show when={coverArt()}>
+            {(assetUrl) => <img class='absolute -z-10 size-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
+          </Show>
+          <div class='absolute -z-10 size-full backdrop-blur-[5px]' />
+          <div class='bg-primary-plane absolute -z-10 size-full opacity-75' />
+        </div>
 
         <div class='absolute bottom-0 z-30 w-full translate-y-[50%]'>
           <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
         </div>
       </div>
 
-      <div class='border-secondary-border z-30 flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
+      <div class='border-secondary-border flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
-      <div ref={setScrollContainerRef} class='z-30 flex-1 overflow-y-auto pb-3'>
+      <div ref={setScrollContainerRef} class='flex-1 overflow-y-auto pb-3'>
         <QueueList queue={queue()} itemRef={setItemRef} />
       </div>
     </div>

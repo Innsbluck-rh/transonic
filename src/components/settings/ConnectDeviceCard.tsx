@@ -18,14 +18,15 @@ function formatPosition(ms: number) {
 }
 
 export function currentSong(playback: NonNullable<ConnectDeviceEntry['playback']>) {
+  const queue = playback.state.queue ?? [];
   const index = playback.state.currentIndex;
-  if (index !== null) {
-    const song = playback.state.queue[index];
+  if (index != null) {
+    const song = queue[index];
     if (song) {
       return song;
     }
   }
-  return playback.state.queue.find((song) => song.id === playback.state.currentSongId) ?? null;
+  return queue.find((song) => song.id === playback.state.currentSongId) ?? null;
 }
 
 function ConnectDeviceCard(props: ConnectDeviceCardProps) {
@@ -35,7 +36,7 @@ function ConnectDeviceCard(props: ConnectDeviceCardProps) {
   const coverArt = () => props.coverArtSrc(song()?.coverArtId);
   const isSelf = () => props.entry.device.deviceId === connectStore.runtime.deviceId;
   const canControl = () => connectStore.runtime.connected && props.entry.device.online && !isSelf();
-  const canTake = () => canControl() && !!props.entry.playback && props.entry.playback.state.queue.length > 0;
+  const canTake = () => canControl() && !!props.entry.playback && (props.entry.playback.state.queue ?? []).length > 0;
   const canPause = () => canControl() && !!props.entry.playback && props.entry.playback.state.playingState !== 'idle';
 
   const runAction = async (action: 'take' | 'pause') => {

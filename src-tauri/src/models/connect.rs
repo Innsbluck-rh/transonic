@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri_specta::Event;
 
-use super::PlaybackStatus;
+use super::{PlaybackStatus, PlayingState, SongResponse};
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
@@ -27,10 +27,36 @@ pub struct ConnectDevicePresence {
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
+pub struct ConnectPlaybackState {
+    pub playing_state: PlayingState,
+    #[serde(default)]
+    pub queue: Vec<SongResponse>,
+    #[serde(default)]
+    pub current_index: Option<u32>,
+    #[serde(default)]
+    pub current_position_ms: u32,
+    #[serde(default)]
+    pub current_song_id: Option<String>,
+}
+
+impl From<PlaybackStatus> for ConnectPlaybackState {
+    fn from(status: PlaybackStatus) -> Self {
+        Self {
+            playing_state: status.playing_state,
+            queue: status.queue,
+            current_index: status.current_index,
+            current_position_ms: status.current_position_ms,
+            current_song_id: status.current_song_id,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
 pub struct ConnectPlaybackDeviceState {
     pub seq: u32,
     pub source_device_id: String,
-    pub state: PlaybackStatus,
+    pub state: ConnectPlaybackState,
     pub position_ms: u32,
     pub updated_at: String,
 }

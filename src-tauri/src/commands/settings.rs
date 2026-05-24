@@ -68,7 +68,19 @@ pub fn settings_update(
         }
     }
 
-    crate::connect::restart(&app);
+    if (previous_settings.playback.volume - updated_settings.playback.volume).abs() > f32::EPSILON {
+        let mut controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+        if let Err(error) = controller.set_volume(updated_settings.playback.volume) {
+            log::warn!("settings_update: failed to refresh volume: {error}");
+        }
+    }
+
+    if previous_settings.connect != updated_settings.connect {
+        crate::connect::restart(&app);
+    }
     snapshot_settings(&settings)
 }
 
