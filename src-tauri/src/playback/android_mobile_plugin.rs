@@ -5,6 +5,7 @@ use tauri::{
 };
 
 use super::native_events::AndroidPlaybackEventHub;
+use crate::models::PlaybackActualStreamInfo;
 
 const PLUGIN_IDENTIFIER: &str = "com.innsb.transonic.playback";
 
@@ -54,6 +55,20 @@ pub struct AndroidSetVolumeRequest {
 #[serde(rename_all = "camelCase")]
 struct AndroidPositionResponse {
     position_ms: u64,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AndroidCurrentStreamInfoResponse {
+    available: bool,
+    codec: Option<String>,
+    codec_profile: Option<String>,
+    sample_rate: Option<u32>,
+    channels: Option<u32>,
+    bit_depth: Option<u32>,
+    bitrate: Option<u32>,
+    sample_format: Option<String>,
+    mime_type: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -144,6 +159,28 @@ impl AndroidPlaybackBridge {
             .run_mobile_plugin::<AndroidPositionResponse>("currentPositionMs", ())
             .map_err(|error| format!("Failed to query the Android playback position: {error}"))?;
         Ok(u32::try_from(response.position_ms).unwrap_or(u32::MAX))
+    }
+
+    pub fn current_stream_info(&self) -> Result<Option<PlaybackActualStreamInfo>, String> {
+        let response = self
+            .handle
+            .run_mobile_plugin::<AndroidCurrentStreamInfoResponse>("currentStreamInfo", ())
+            .map_err(|error| {
+                format!("Failed to query the Android playback stream info: {error}")
+            })?;
+        if !response.available {
+            return Ok(None);
+        }
+        Ok(Some(PlaybackActualStreamInfo {
+            codec: response.codec,
+            codec_profile: response.codec_profile,
+            sample_rate: response.sample_rate,
+            channels: response.channels,
+            bit_depth: response.bit_depth,
+            bitrate: response.bitrate,
+            sample_format: response.sample_format,
+            mime_type: response.mime_type,
+        }))
     }
 
     pub fn default_device_name(&self) -> Result<String, String> {

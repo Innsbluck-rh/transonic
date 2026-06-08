@@ -38,9 +38,7 @@
   --color-primary-bg: var(--theme-color-primary-bg);
   --color-primary-plane: var(--theme-color-primary-plane);
   --color-primary-surface: var(--theme-color-primary-surface);
-  --color-primary-inner-surface: var(--theme-color-primary-inner-surface);
   --color-primary-selected: var(--theme-color-primary-selected);
-  --color-primary-playing: var(--theme-color-primary-playing);
   --color-primary-on-playing: var(--theme-color-primary-on-playing);
   --color-primary-hover: var(--theme-color-primary-hover);
 
@@ -62,18 +60,16 @@
   /* light theme default */
   --theme-color-primary-bg: var(--color-zinc-200);
   --theme-color-primary-plane: var(--color-zinc-50);
-  --theme-color-primary-surface: var(--color-zinc-100);
-  --theme-color-primary-inner-surface: var(--color-zinc-300);
+  --theme-color-primary-surface: var(--color-gray-100);
   --theme-color-primary-selected: var(--color-zinc-200);
-  --theme-color-primary-playing: var(--color-sky-600);
-  --theme-color-primary-on-playing: var(--color-zinc-200);
-  --theme-color-primary-hover: var(--color-zinc-200);
+  --theme-color-accent: var(--color-sky-600);
+  --theme-color-primary-on-playing: var(--color-zinc-800);
+  --theme-color-primary-hover: var(--color-gray-200);
   --theme-color-primary-border: rgb(0 0 0 / 0.25);
   --theme-color-secondary-border: rgb(0 0 0 / 0.1);
-  --theme-color-primary-text: var(--color-gray-800);
-  --theme-color-secondary-text: var(--color-gray-600);
+  --theme-color-primary-text: var(--color-gray-700);
+  --theme-color-secondary-text: var(--color-gray-500);
   --theme-color-sp-nav-space: var(--color-zinc-400);
-  --theme-color-accent: var(--color-sky-600);
   --player-bar-height: 0.15rem;
   --player-bar-detect-height: 1rem;
   --player-bar-handle-size: 0.75rem;
@@ -208,7 +204,7 @@
   }
 
   .song-item[data-current='true'] {
-    @apply bg-primary-playing;
+    @apply bg-accent/60;
     --song-item-leading-color: var(--color-primary-on-playing);
     --song-item-title-color: var(--color-primary-on-playing);
     --song-item-meta-color: var(--color-primary-on-playing);
@@ -224,7 +220,7 @@
     }
 
     .song-item[data-current='true']:hover {
-      @apply bg-primary-playing;
+      @apply bg-accent/75;
     }
   }
 
@@ -247,14 +243,6 @@
   .home-surface-root {
     @apply bg-primary-bg flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
     overscroll-behavior: none;
-  }
-
-  img {
-    -webkit-user-drag: none;
-    user-drag: none;
-    /* テキスト選択も防ぐ場合 */
-    user-select: none;
-    -webkit-user-select: none;
   }
 }
 

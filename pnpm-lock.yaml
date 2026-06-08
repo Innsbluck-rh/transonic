@@ -47,6 +47,9 @@ importers:
       solid-js:
         specifier: ^1.9.12
         version: 1.9.12
+      tauri-plugin-app-events-api:
+        specifier: ~0.2.0
+        version: 0.2.0
     devDependencies:
       '@tailwindcss/vite':
         specifier: ^4.2.2
@@ -1575,6 +1578,9 @@ packages:
     resolution: {integrity: sha512-1MOpMXuhGzGL5TTCZFItxCc0AARf1EZFQkGqMm7ERKj8+Hgr5oLvJOVFcC+lRmR8hCe2S3jC4T5D7Vg/d7/fhA==}
     engines: {node: '>=6'}
 
+  tauri-plugin-app-events-api@0.2.0:
+    resolution: {integrity: sha512-CnlAeucWhT+Rgx6CCsqUpq2D3pqgx0fhjSPKomH7O2t1rGVu5kGLMkYvaCX6gqVTUYpIWX5BLV7LGY2DRri0QA==}
+
   tinybench@2.9.0:
     resolution: {integrity: sha512-0+DUvqWMValLmha6lr4kD8iAMK1HzV0/aKnCtWb9v9641TnP/MFb7Pc2bxoxQjTXAErryXVgUOfv2YqNllqGeg==}
 
@@ -3097,6 +3103,10 @@ snapshots:
   tailwindcss@4.2.2: {}
 
   tapable@2.3.2: {}
+
+  tauri-plugin-app-events-api@0.2.0:
+    dependencies:
+      '@tauri-apps/api': 2.10.1
 
   tinybench@2.9.0: {}
 

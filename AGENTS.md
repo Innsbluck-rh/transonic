@@ -8,6 +8,7 @@
 - When you assigned to "research"(「調査」), "consider"(「検討」) or "investigate", you MUST NOT change anything.
 - Unless there are special circumstances, do not use commands that include building the Tauri app. It will take a considerably long time. Most errors should be detectable with tsc+cargo check+tests.
 - When executing cargo-related commands, please use `pnpm cargo:check` and `pnpm cargo:test` whenever possible.
+- There's `./third_party` folder containing a large libraries. Usually you should exclude this folder from the scope of commands such as `rg` to prevent unwanted noise.
 
 ## platform-specific code
 

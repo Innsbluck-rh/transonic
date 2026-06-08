@@ -23,12 +23,14 @@
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::JoinHandle;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
-use crate::models::{normalize_volume, PlaybackCapabilities};
+use crate::models::{
+    normalize_volume, PlaybackActualStreamInfo, PlaybackCapabilities, PlaybackTranscodingCodec,
+};
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
@@ -48,6 +50,10 @@ struct SharedDownloadBuffer {
     condvar: Condvar,
     /// Total file size obtained from the `Content-Length` HTTP header.
     total_len: u64,
+    /// Symphonia 0.6 probes trailing metadata when a source is seekable and
+    /// reports a byte length. Keep this disabled until format probing has
+    /// completed so progressive playback does not block on the file tail.
+    expose_byte_len: AtomicBool,
     /// Set to `true` to cancel the download and unblock any waiting `Read`.
     cancel: AtomicBool,
 }
@@ -88,8 +94,13 @@ impl SharedDownloadBuffer {
             }),
             condvar: Condvar::new(),
             total_len,
+            expose_byte_len: AtomicBool::new(false),
             cancel: AtomicBool::new(false),
         }
+    }
+
+    fn expose_byte_len_after_probe(&self) {
+        self.expose_byte_len.store(true, Ordering::Release);
     }
 
     /// Signal cancellation and wake any blocked reader.
@@ -259,7 +270,10 @@ impl symphonia::core::io::MediaSource for StreamingMediaSource {
     }
 
     fn byte_len(&self) -> Option<u64> {
-        Some(self.shared.total_len)
+        self.shared
+            .expose_byte_len
+            .load(Ordering::Acquire)
+            .then_some(self.shared.total_len)
     }
 }
 
@@ -303,6 +317,50 @@ pub fn create_playback_backend(event_hub: SymphoniaPlaybackEventHub) -> Box<dyn 
     Box::new(SymphoniaPlaybackBackend::new(event_hub))
 }
 
+fn symphonia_codec_registry() -> &'static symphonia::core::codecs::registry::CodecRegistry {
+    static REGISTRY: OnceLock<symphonia::core::codecs::registry::CodecRegistry> = OnceLock::new();
+    REGISTRY.get_or_init(|| {
+        let mut registry = symphonia::core::codecs::registry::CodecRegistry::new();
+        symphonia::default::register_enabled_codecs(&mut registry);
+        registry.register_audio_decoder::<symphonia_adapter_libopus::OpusDecoder>();
+        registry
+    })
+}
+
+fn symphonia_actual_stream_info(
+    params: &symphonia::core::codecs::audio::AudioCodecParameters,
+) -> PlaybackActualStreamInfo {
+    let registry_entry = symphonia_codec_registry().get_audio_decoder(params.codec);
+    let codec = registry_entry
+        .map(|entry| entry.codec.info.short_name.to_string())
+        .or_else(|| Some(params.codec.to_string()));
+    let codec_profile = params.profile.and_then(|profile| {
+        registry_entry.and_then(|entry| {
+            entry
+                .codec
+                .info
+                .profiles
+                .iter()
+                .find(|candidate| candidate.profile == profile)
+                .map(|candidate| candidate.short_name.to_string())
+        })
+    });
+
+    PlaybackActualStreamInfo {
+        codec,
+        codec_profile,
+        sample_rate: params.sample_rate,
+        channels: params
+            .channels
+            .as_ref()
+            .map(|channels| channels.count() as u32),
+        bit_depth: params.bits_per_sample.or(params.bits_per_coded_sample),
+        bitrate: None,
+        sample_format: params.sample_format.map(|format| format!("{format:?}")),
+        mime_type: None,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Worker-thread job enum (RPC messages)
 // ---------------------------------------------------------------------------
@@ -322,6 +380,9 @@ enum ActiveWorkerJob {
     },
     CurrentPosition {
         reply: std::sync::mpsc::Sender<Result<u32, String>>,
+    },
+    CurrentStreamInfo {
+        reply: std::sync::mpsc::Sender<Result<Option<PlaybackActualStreamInfo>, String>>,
     },
     SetVolume {
         volume: f32,
@@ -398,6 +459,7 @@ struct PreparedSessionSummary {
     absolute_start_position_ms: u32,
     channels: u16,
     sample_rate: u32,
+    actual_stream_info: PlaybackActualStreamInfo,
 }
 
 impl SharedPreparedState {
@@ -435,6 +497,7 @@ impl SharedPreparedState {
             absolute_start_position_ms: session.absolute_start_position_ms,
             channels: session.core.channels,
             sample_rate: session.core.sample_rate,
+            actual_stream_info: session.core.actual_stream_info.clone(),
         })
     }
 
@@ -532,6 +595,14 @@ impl PlaybackBackend for SymphoniaPlaybackBackend {
     fn capabilities(&self) -> PlaybackCapabilities {
         PlaybackCapabilities {
             gapless_playback: true,
+            transcoding_codecs: vec![
+                PlaybackTranscodingCodec::Mp3,
+                PlaybackTranscodingCodec::Flac,
+                PlaybackTranscodingCodec::Aac,
+                PlaybackTranscodingCodec::Alac,
+                PlaybackTranscodingCodec::Vorbis,
+                PlaybackTranscodingCodec::Opus,
+            ],
         }
     }
 
@@ -581,6 +652,16 @@ impl PlaybackBackend for SymphoniaPlaybackBackend {
 
     fn current_position_ms(&self) -> Result<u32, String> {
         self.send_u32(|reply| ActiveWorkerJob::CurrentPosition { reply })
+    }
+
+    fn current_stream_info(&self) -> Result<Option<PlaybackActualStreamInfo>, String> {
+        let (tx, rx) = std::sync::mpsc::channel();
+        self.active_tx
+            .send(ActiveWorkerJob::CurrentStreamInfo { reply: tx })
+            .map_err(|_| "Symphonia playback active worker is unavailable.".to_string())?;
+        rx.recv().unwrap_or_else(|_| {
+            Err("Symphonia playback active worker terminated unexpectedly.".to_string())
+        })
     }
 
     fn set_volume(&mut self, volume: f32) -> Result<(), String> {
@@ -669,6 +750,7 @@ fn volume_to_bits(volume: f32) -> u32 {
 struct RoutedTrack {
     ring: Arc<AudioRing>,
     base_position_ms: u32,
+    actual_stream_info: PlaybackActualStreamInfo,
 }
 
 #[derive(Clone)]
@@ -676,6 +758,7 @@ struct PendingGaplessTrack {
     generation: u64,
     ring: Arc<AudioRing>,
     base_position_ms: u32,
+    actual_stream_info: PlaybackActualStreamInfo,
 }
 
 struct StreamRouterState {
@@ -689,12 +772,18 @@ struct StreamRouter {
 }
 
 impl StreamRouter {
-    fn new(current_ring: Arc<AudioRing>, base_position_ms: u32, volume: f32) -> Self {
+    fn new(
+        current_ring: Arc<AudioRing>,
+        base_position_ms: u32,
+        volume: f32,
+        actual_stream_info: PlaybackActualStreamInfo,
+    ) -> Self {
         Self {
             inner: Mutex::new(StreamRouterState {
                 current: RoutedTrack {
                     ring: current_ring,
                     base_position_ms,
+                    actual_stream_info,
                 },
                 pending: None,
             }),
@@ -710,6 +799,10 @@ impl StreamRouter {
         let current = self.current_track();
         let elapsed_ms = u32::try_from(current.ring.elapsed_ms()).unwrap_or(u32::MAX);
         current.base_position_ms.saturating_add(elapsed_ms)
+    }
+
+    fn current_stream_info(&self) -> PlaybackActualStreamInfo {
+        self.current_track().actual_stream_info
     }
 
     fn update_current_base_position(&self, base_position_ms: u32) {
@@ -744,6 +837,7 @@ impl StreamRouter {
             generation: summary.generation,
             ring: summary.ring,
             base_position_ms: summary.absolute_start_position_ms,
+            actual_stream_info: summary.actual_stream_info,
         });
         true
     }
@@ -757,6 +851,7 @@ impl StreamRouter {
         inner.current = RoutedTrack {
             ring: Arc::clone(&pending.ring),
             base_position_ms: pending.base_position_ms,
+            actual_stream_info: pending.actual_stream_info.clone(),
         };
         Some(pending)
     }
@@ -778,6 +873,7 @@ struct SessionCore {
     activation_gate: Option<Arc<PreparedActivationGate>>,
     channels: u16,
     sample_rate: u32,
+    actual_stream_info: PlaybackActualStreamInfo,
 }
 
 struct PreparedSession {
@@ -893,6 +989,14 @@ fn active_worker_main(
                     .as_ref()
                     .map(|s| Ok(s.stream_router.current_position_ms()))
                     .unwrap_or_else(|| Err("No stream is loaded for playback.".to_string()));
+                let _ = reply.send(result);
+            }
+
+            ActiveWorkerJob::CurrentStreamInfo { reply } => {
+                let result = session
+                    .as_ref()
+                    .map(|s| Ok(Some(s.stream_router.current_stream_info())))
+                    .unwrap_or_else(|| Ok(None));
                 let _ = reply.send(result);
             }
 
@@ -1080,6 +1184,7 @@ fn tear_down_core(core: SessionCore) {
 struct PumpInit {
     channels: u16,
     sample_rate: u32,
+    actual_stream_info: PlaybackActualStreamInfo,
     ring: Arc<AudioRing>,
     pump_cmd_tx: std::sync::mpsc::Sender<PumpCommand>,
 }
@@ -1158,9 +1263,18 @@ fn prepare_session(
     let (init_tx, init_rx) = std::sync::mpsc::channel::<Result<PumpInit, String>>();
 
     let activation_gate_for_pump = activation_gate.clone();
+    let download_buffer_for_pump = download_buffer.clone();
     let pump_handle = std::thread::Builder::new()
         .name("symphonia-pump".into())
-        .spawn(move || pump_entry(source, start_ms, init_tx, activation_gate_for_pump))
+        .spawn(move || {
+            pump_entry(
+                source,
+                start_ms,
+                init_tx,
+                activation_gate_for_pump,
+                download_buffer_for_pump,
+            )
+        })
         .map_err(|e| format!("Failed to spawn pump thread: {e}"))?;
 
     // Wait for the pump thread to finish initialisation.
@@ -1184,6 +1298,7 @@ fn prepare_session(
             activation_gate,
             channels: init.channels,
             sample_rate: init.sample_rate,
+            actual_stream_info: init.actual_stream_info,
         },
         absolute_start_position_ms: request.absolute_start_position_ms,
     })
@@ -1205,6 +1320,7 @@ fn activate_session(
         Arc::clone(&core.ring),
         absolute_start_position_ms,
         volume,
+        core.actual_stream_info.clone(),
     ));
     let cpal_stream = match build_cpal_stream(
         Arc::clone(&stream_router),
@@ -1317,8 +1433,9 @@ fn pump_entry(
     start_ms: u32,
     init_tx: std::sync::mpsc::Sender<Result<PumpInit, String>>,
     activation_gate: Option<Arc<PreparedActivationGate>>,
+    download_buffer: Option<Arc<SharedDownloadBuffer>>,
 ) {
-    let result = pump_init_and_run(source, start_ms, init_tx, activation_gate);
+    let result = pump_init_and_run(source, start_ms, init_tx, activation_gate, download_buffer);
     if let Err(e) = &result {
         log::error!("symphonia-pump: terminated with error: {e}");
     }
@@ -1329,12 +1446,13 @@ fn pump_init_and_run(
     start_ms: u32,
     init_tx: std::sync::mpsc::Sender<Result<PumpInit, String>>,
     activation_gate: Option<Arc<PreparedActivationGate>>,
+    download_buffer: Option<Arc<SharedDownloadBuffer>>,
 ) -> Result<(), String> {
-    use symphonia::core::codecs::DecoderOptions;
-    use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo};
+    use symphonia::core::codecs::audio::AudioDecoderOptions;
+    use symphonia::core::formats::probe::Hint;
+    use symphonia::core::formats::{FormatOptions, SeekMode, SeekTo, TrackType};
     use symphonia::core::io::MediaSourceStream;
     use symphonia::core::meta::MetadataOptions;
-    use symphonia::core::probe::Hint;
     use symphonia::core::units::Time;
 
     // 1. Create a MediaSourceStream from the provided source.
@@ -1343,15 +1461,12 @@ fn pump_init_and_run(
     let mss = MediaSourceStream::new(source, Default::default());
 
     // 2. Probe the format.
-    let probed = symphonia::default::get_probe()
-        .format(
+    let mut reader = symphonia::default::get_probe()
+        .probe(
             &Hint::new(),
             mss,
-            &FormatOptions {
-                enable_gapless: true,
-                ..FormatOptions::default()
-            },
-            &MetadataOptions::default(),
+            FormatOptions::default(),
+            MetadataOptions::default(),
         )
         .map_err(|e| {
             let msg = format!("Failed to probe audio format: {e}");
@@ -1359,28 +1474,40 @@ fn pump_init_and_run(
             msg
         })?;
 
-    let mut reader = probed.format;
+    if let Some(shared) = &download_buffer {
+        shared.expose_byte_len_after_probe();
+    }
 
     // 3. Find the first audio track.
-    let track = reader
-        .tracks()
-        .iter()
-        .find(|t| t.codec_params.codec != symphonia::core::codecs::CODEC_TYPE_NULL)
+    let track = reader.default_track(TrackType::Audio).ok_or_else(|| {
+        let msg = "No audio track found.".to_string();
+        let _ = init_tx.send(Err(msg.clone()));
+        msg
+    })?;
+
+    let track_id = track.id;
+    let audio_params = track
+        .codec_params
+        .as_ref()
+        .and_then(|params| params.audio())
+        .cloned()
         .ok_or_else(|| {
-            let msg = "No audio track found.".to_string();
+            let msg = "Audio codec parameters are unavailable.".to_string();
             let _ = init_tx.send(Err(msg.clone()));
             msg
         })?;
 
-    let track_id = track.id;
-    let codec_params = track.codec_params.clone();
-
-    let channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
-    let sample_rate = codec_params.sample_rate.unwrap_or(44100);
+    let channels = audio_params
+        .channels
+        .as_ref()
+        .map(|c| c.count() as u16)
+        .unwrap_or(2);
+    let sample_rate = audio_params.sample_rate.unwrap_or(44100);
+    let actual_stream_info = symphonia_actual_stream_info(&audio_params);
 
     // 4. Create the decoder.
-    let mut decoder = symphonia::default::get_codecs()
-        .make(&codec_params, &DecoderOptions::default())
+    let mut decoder = symphonia_codec_registry()
+        .make_audio_decoder(&audio_params, &AudioDecoderOptions::default())
         .map_err(|e| {
             let msg = format!("Failed to create decoder: {e}");
             let _ = init_tx.send(Err(msg.clone()));
@@ -1390,7 +1517,7 @@ fn pump_init_and_run(
     // 5. Seek if requested.
     if start_ms > 0 {
         let seek_to = SeekTo::Time {
-            time: Time::new(start_ms as u64 / 1000, (start_ms % 1000) as f64 / 1000.0),
+            time: Time::from_nanos_u64(u64::from(start_ms) * 1_000_000),
             track_id: Some(track_id),
         };
         reader.seek(SeekMode::Accurate, seek_to).map_err(|e| {
@@ -1408,6 +1535,7 @@ fn pump_init_and_run(
     let _ = init_tx.send(Ok(PumpInit {
         channels,
         sample_rate,
+        actual_stream_info,
         ring: Arc::clone(&ring),
         pump_cmd_tx: cmd_tx,
     }));
@@ -1427,7 +1555,7 @@ fn pump_init_and_run(
 
 fn pump_decode_loop(
     reader: &mut Box<dyn symphonia::core::formats::FormatReader>,
-    decoder: &mut Box<dyn symphonia::core::codecs::Decoder>,
+    decoder: &mut Box<dyn symphonia::core::codecs::audio::AudioDecoder>,
     track_id: u32,
     ring: &AudioRing,
     cmd_rx: &std::sync::mpsc::Receiver<PumpCommand>,
@@ -1435,9 +1563,8 @@ fn pump_decode_loop(
     sample_rate: u32,
     activation_gate: Option<Arc<PreparedActivationGate>>,
 ) -> Result<(), String> {
-    use symphonia::core::audio::SampleBuffer;
-
     let two_seconds = sample_rate as usize * channels as usize * 2;
+    let mut samples = Vec::<f32>::new();
 
     loop {
         // Check for cancel.
@@ -1488,10 +1615,8 @@ fn pump_decode_loop(
 
         // Decode the next packet.
         let packet = match reader.next_packet() {
-            Ok(p) => p,
-            Err(symphonia::core::errors::Error::IoError(ref e))
-                if e.kind() == std::io::ErrorKind::UnexpectedEof =>
-            {
+            Ok(Some(p)) => p,
+            Ok(None) => {
                 ring.finished.store(true, Ordering::Release);
                 log::info!("symphonia-pump: end of stream");
                 // After EOS, wait for either cancel or a seek command that
@@ -1499,21 +1624,35 @@ fn pump_decode_loop(
                 pump_wait_after_eos(ring, cmd_rx, reader, decoder, track_id)?;
                 return Ok(());
             }
+            Err(symphonia::core::errors::Error::ResetRequired) => {
+                ring.finished.store(true, Ordering::Release);
+                return Err(
+                    "Symphonia requested a decoder reset for a changed track list.".to_string(),
+                );
+            }
             Err(e) => {
                 ring.finished.store(true, Ordering::Release);
                 return Err(format!("Failed to read packet: {e}"));
             }
         };
 
-        if packet.track_id() != track_id {
+        if packet.track_id != track_id {
             continue;
         }
 
         let decoded = match decoder.decode(&packet) {
             Ok(d) => d,
+            Err(symphonia::core::errors::Error::IoError(e)) => {
+                log::warn!("symphonia-pump: decode IO error (skipping): {e}");
+                continue;
+            }
             Err(symphonia::core::errors::Error::DecodeError(msg)) => {
                 log::warn!("symphonia-pump: decode error (skipping): {msg}");
                 continue;
+            }
+            Err(symphonia::core::errors::Error::ResetRequired) => {
+                ring.finished.store(true, Ordering::Release);
+                return Err("Symphonia requested an audio decoder reset.".to_string());
             }
             Err(e) => {
                 ring.finished.store(true, Ordering::Release);
@@ -1522,18 +1661,13 @@ fn pump_decode_loop(
         };
 
         // Convert to interleaved f32.
-        let spec = *decoded.spec();
-        let num_frames = decoded.frames();
-        if num_frames == 0 {
+        let sample_count = decoded.samples_interleaved();
+        if sample_count == 0 {
             continue;
         }
-        let mut sample_buf = SampleBuffer::<f32>::new(num_frames as u64, spec);
-        sample_buf.copy_interleaved_ref(decoded);
-        let samples = sample_buf.samples();
-
-        if !samples.is_empty() {
-            ring.buf.lock().unwrap().extend(samples.iter());
-        }
+        samples.resize(sample_count, 0.0);
+        decoded.copy_to_slice_interleaved::<f32, _>(&mut samples);
+        ring.buf.lock().unwrap().extend(samples.iter().copied());
     }
 }
 
@@ -1543,7 +1677,7 @@ fn pump_wait_after_eos(
     ring: &AudioRing,
     cmd_rx: &std::sync::mpsc::Receiver<PumpCommand>,
     reader: &mut Box<dyn symphonia::core::formats::FormatReader>,
-    decoder: &mut Box<dyn symphonia::core::codecs::Decoder>,
+    decoder: &mut Box<dyn symphonia::core::codecs::audio::AudioDecoder>,
     track_id: u32,
 ) -> Result<(), String> {
     loop {
@@ -1585,7 +1719,7 @@ fn pump_wait_after_eos(
 
 fn symphonia_seek_inner(
     reader: &mut Box<dyn symphonia::core::formats::FormatReader>,
-    decoder: &mut Box<dyn symphonia::core::codecs::Decoder>,
+    decoder: &mut Box<dyn symphonia::core::codecs::audio::AudioDecoder>,
     track_id: u32,
     position_ms: u32,
 ) -> Result<(), String> {
@@ -1593,10 +1727,7 @@ fn symphonia_seek_inner(
     use symphonia::core::units::Time;
 
     let seek_to = SeekTo::Time {
-        time: Time::new(
-            position_ms as u64 / 1000,
-            (position_ms % 1000) as f64 / 1000.0,
-        ),
+        time: Time::from_nanos_u64(u64::from(position_ms) * 1_000_000),
         track_id: Some(track_id),
     };
     reader
@@ -1604,6 +1735,29 @@ fn symphonia_seek_inner(
         .map_err(|e| format!("Seek failed: {e}"))?;
     decoder.reset();
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn codec_registry_can_create_opus_decoder() {
+        use symphonia::core::audio::layouts;
+        use symphonia::core::codecs::audio::{
+            well_known::CODEC_ID_OPUS, AudioCodecParameters, AudioDecoderOptions,
+        };
+
+        let mut params = AudioCodecParameters::new();
+        params
+            .for_codec(CODEC_ID_OPUS)
+            .with_sample_rate(48_000)
+            .with_channels(layouts::CHANNEL_LAYOUT_STEREO);
+
+        symphonia_codec_registry()
+            .make_audio_decoder(&params, &AudioDecoderOptions::default())
+            .expect("Opus decoder should be registered for Ogg/Opus streams");
+    }
 }
 
 // ---------------------------------------------------------------------------

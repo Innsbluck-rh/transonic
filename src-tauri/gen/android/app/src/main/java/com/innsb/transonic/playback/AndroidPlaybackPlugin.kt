@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.annotation.Keep
 import androidx.core.content.ContextCompat
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
@@ -89,6 +90,35 @@ class SetVolumeArgs {
 
 @Keep
 data class CurrentPositionResponse(val positionMs: Long)
+
+@Keep
+data class CurrentStreamInfoResponse(
+  val available: Boolean,
+  val codec: String?,
+  val codecProfile: String?,
+  val sampleRate: Int?,
+  val channels: Int?,
+  val bitDepth: Int?,
+  val bitrate: Int?,
+  val sampleFormat: String?,
+  val mimeType: String?,
+) {
+  companion object {
+    fun unavailable(): CurrentStreamInfoResponse {
+      return CurrentStreamInfoResponse(
+        available = false,
+        codec = null,
+        codecProfile = null,
+        sampleRate = null,
+        channels = null,
+        bitDepth = null,
+        bitrate = null,
+        sampleFormat = null,
+        mimeType = null,
+      )
+    }
+  }
+}
 
 @Keep
 data class DeviceNameResponse(val deviceName: String)
@@ -320,6 +350,12 @@ internal object PlaybackControllerHost {
     return synchronized(this) { currentMediaState?.basePositionMs ?: 0 }
   }
 
+  fun currentStreamInfo(): CurrentStreamInfoResponse {
+    val existingController = synchronized(this) { controller }
+      ?: return CurrentStreamInfoResponse.unavailable()
+    return selectedAudioStreamInfo(existingController)
+  }
+
   fun releaseCurrentController() {
     releaseController(null)
   }
@@ -368,6 +404,69 @@ internal object PlaybackControllerHost {
       }
     controllerToRelease?.release()
   }
+}
+
+private fun positiveOrNull(value: Int): Int? {
+  return if (value > 0) value else null
+}
+
+private fun mimeCodecName(mimeType: String?): String? {
+  val normalized = mimeType?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return null
+  return normalized.substringAfterLast('/')
+}
+
+private fun pcmEncodingLabel(encoding: Int): String? {
+  return when (encoding) {
+    C.ENCODING_PCM_8BIT -> "pcm_u8"
+    C.ENCODING_PCM_16BIT -> "pcm_s16"
+    C.ENCODING_PCM_24BIT -> "pcm_s24"
+    C.ENCODING_PCM_32BIT -> "pcm_s32"
+    C.ENCODING_PCM_FLOAT -> "pcm_f32"
+    else -> null
+  }
+}
+
+private fun pcmEncodingBitDepth(encoding: Int): Int? {
+  return when (encoding) {
+    C.ENCODING_PCM_8BIT -> 8
+    C.ENCODING_PCM_16BIT -> 16
+    C.ENCODING_PCM_24BIT -> 24
+    C.ENCODING_PCM_32BIT,
+    C.ENCODING_PCM_FLOAT,
+    -> 32
+    else -> null
+  }
+}
+
+private fun selectedAudioStreamInfo(controller: MediaController): CurrentStreamInfoResponse {
+  controller.currentTracks.groups.forEach { group ->
+    if (group.type != C.TRACK_TYPE_AUDIO) {
+      return@forEach
+    }
+    for (trackIndex in 0 until group.length) {
+      if (!group.isTrackSelected(trackIndex)) {
+        continue
+      }
+      val format = group.getTrackFormat(trackIndex)
+      val sampleMimeType = format.sampleMimeType
+      val codecs = format.codecs?.trim()?.takeIf { it.isNotBlank() }
+      val averageBitrate = positiveOrNull(format.averageBitrate)
+      val peakBitrate = positiveOrNull(format.peakBitrate)
+      return CurrentStreamInfoResponse(
+        available = true,
+        codec = codecs ?: mimeCodecName(sampleMimeType),
+        codecProfile = null,
+        sampleRate = positiveOrNull(format.sampleRate),
+        channels = positiveOrNull(format.channelCount),
+        bitDepth = pcmEncodingBitDepth(format.pcmEncoding),
+        bitrate = averageBitrate ?: peakBitrate,
+        sampleFormat = pcmEncodingLabel(format.pcmEncoding),
+        mimeType = sampleMimeType,
+      )
+    }
+  }
+
+  return CurrentStreamInfoResponse.unavailable()
 }
 
 @TauriPlugin
@@ -643,6 +742,12 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
     }) {
       invoke.resolveObject(CurrentPositionResponse(0))
     }
+  }
+
+  @Command
+  @Keep
+  fun currentStreamInfo(invoke: Invoke) {
+    invoke.resolveObject(PlaybackControllerHost.currentStreamInfo())
   }
 
   @Command

@@ -10,8 +10,8 @@ use crate::{
     connection::{ConnectedServer, ConnectionApi},
     models::{
         ActiveSession, AppBootstrap, AppSettings, AuthInput, ConnectServerProfileRequest,
-        ConnectServerProfileResult, LastConnectionState, PlaybackCapabilities, RestoreStatus,
-        SettingsOrigin,
+        ConnectServerProfileResult, LastConnectionState, PlaybackCapabilities,
+        PlaybackTranscodingCodec, RestoreStatus, SettingsOrigin,
     },
     profiles::{
         load_profiles_file, metadata_path, save_profiles_file, server_url_components, ProfilesFile,
@@ -416,6 +416,7 @@ fn bootstrap_response(
         message,
         playback_capabilities: PlaybackCapabilities {
             gapless_playback: false,
+            transcoding_codecs: vec![PlaybackTranscodingCodec::Mp3],
         },
         settings: AppSettings::default(),
         settings_origin: SettingsOrigin::Default,

@@ -39,27 +39,13 @@ type Session struct {
 	CreatedAt         time.Time
 }
 
-type PlaybackSnapshot struct {
+type SharedPlaybackState struct {
 	UserKey           string          `json:"-"`
 	Seq               int64           `json:"seq"`
-	SourceDeviceID    string          `json:"sourceDeviceId"`
+	ActiveDeviceID    string          `json:"activeDeviceId,omitempty"`
 	State             json.RawMessage `json:"state"`
-	PlayingState      string          `json:"playingState,omitempty"`
-	CurrentSongID     string          `json:"currentSongId,omitempty"`
-	CurrentIndex      *int64          `json:"currentIndex,omitempty"`
-	CurrentPositionMs int64           `json:"currentPositionMs"`
 	UpdatedAt         time.Time       `json:"updatedAt"`
-}
-
-type Handoff struct {
-	HandoffID      string          `json:"handoffId"`
-	UserKey        string          `json:"-"`
-	SourceDeviceID string          `json:"sourceDeviceId"`
-	TargetDeviceID string          `json:"targetDeviceId"`
-	Status         string          `json:"status"`
-	Snapshot       json.RawMessage `json:"snapshot,omitempty"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	UpdatedAt      time.Time       `json:"updatedAt"`
+	UpdatedByDeviceID string          `json:"updatedByDeviceId,omitempty"`
 }
 
 func Open(ctx context.Context, dataDir string) (*Store, error) {
@@ -133,21 +119,13 @@ func (s *Store) Migrate(ctx context.Context) error {
 			return fmt.Errorf("migrate sqlite: %w", err)
 		}
 	}
-	if err := s.migratePlaybackSnapshots(ctx); err != nil {
+	if err := s.migrateSharedPlaybackStates(ctx); err != nil {
 		return err
 	}
 	finalStatements := []string{
-		`CREATE TABLE IF NOT EXISTS handoffs (
-			handoff_id TEXT PRIMARY KEY,
-			user_key TEXT NOT NULL,
-			source_device_id TEXT NOT NULL,
-			target_device_id TEXT NOT NULL,
-			status TEXT NOT NULL,
-			snapshot_json TEXT,
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL
-		)`,
-		`INSERT INTO meta (key, value) VALUES ('schema_version', '2')
+		`DROP TABLE IF EXISTS playback_snapshots`,
+		`DROP TABLE IF EXISTS handoffs`,
+		`INSERT INTO meta (key, value) VALUES ('schema_version', '3')
 			ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
 	}
 	for _, statement := range finalStatements {
@@ -158,82 +136,22 @@ func (s *Store) Migrate(ctx context.Context) error {
 	return nil
 }
 
-func (s *Store) migratePlaybackSnapshots(ctx context.Context) error {
-	const createTable = `CREATE TABLE IF NOT EXISTS playback_snapshots (
-		user_key TEXT NOT NULL,
-		source_device_id TEXT NOT NULL,
-		seq INTEGER NOT NULL,
-		state_json TEXT NOT NULL,
-		playing_state TEXT NOT NULL,
-		current_song_id TEXT NOT NULL,
-		current_index INTEGER,
-		current_position_ms INTEGER NOT NULL,
-		updated_at TEXT NOT NULL,
-		PRIMARY KEY (user_key, source_device_id)
-	)`
-
-	var existing int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'playback_snapshots'`).Scan(&existing); err != nil {
-		return fmt.Errorf("inspect playback snapshots table: %w", err)
-	}
-	if existing == 0 {
-		_, err := s.db.ExecContext(ctx, createTable)
-		if err != nil {
-			return fmt.Errorf("create playback snapshots table: %w", err)
-		}
-		return nil
-	}
-
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(playback_snapshots)`)
-	if err != nil {
-		return fmt.Errorf("inspect playback snapshots schema: %w", err)
-	}
-	defer rows.Close()
-	sourceDeviceIsPK := false
-	for rows.Next() {
-		var cid int
-		var name, columnType string
-		var notNull, pk int
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &pk); err != nil {
-			return err
-		}
-		if name == "source_device_id" && pk > 0 {
-			sourceDeviceIsPK = true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return err
-	}
-	if sourceDeviceIsPK {
-		return nil
-	}
-
+func (s *Store) migrateSharedPlaybackStates(ctx context.Context) error {
 	statements := []string{
-		`DROP TABLE IF EXISTS playback_snapshots_migrate`,
-		`CREATE TABLE playback_snapshots_migrate (
-			user_key TEXT NOT NULL,
-			source_device_id TEXT NOT NULL,
+		`CREATE TABLE IF NOT EXISTS shared_playback_states (
+			user_key TEXT PRIMARY KEY,
 			seq INTEGER NOT NULL,
+			active_device_id TEXT NOT NULL,
 			state_json TEXT NOT NULL,
-			playing_state TEXT NOT NULL,
-			current_song_id TEXT NOT NULL,
-			current_index INTEGER,
-			current_position_ms INTEGER NOT NULL,
 			updated_at TEXT NOT NULL,
-			PRIMARY KEY (user_key, source_device_id)
+			updated_by_device_id TEXT NOT NULL
 		)`,
-		`INSERT OR IGNORE INTO playback_snapshots_migrate (
-			user_key, source_device_id, seq, state_json, playing_state, current_song_id, current_index, current_position_ms, updated_at
-		)
-		SELECT user_key, source_device_id, seq, state_json, playing_state, current_song_id, current_index, current_position_ms, updated_at
-		FROM playback_snapshots`,
-		`DROP TABLE playback_snapshots`,
-		`ALTER TABLE playback_snapshots_migrate RENAME TO playback_snapshots`,
+		`DROP TABLE IF EXISTS playback_snapshots`,
+		`DROP TABLE IF EXISTS handoffs`,
 	}
 	for _, statement := range statements {
 		if _, err := s.db.ExecContext(ctx, statement); err != nil {
-			return fmt.Errorf("migrate playback snapshots table: %w", err)
+			return fmt.Errorf("migrate shared playback states: %w", err)
 		}
 	}
 	return nil
@@ -272,19 +190,8 @@ func (s *Store) UpsertDevice(ctx context.Context, device Device) error {
 }
 
 func (s *Store) ClearPresence(ctx context.Context) error {
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM devices`); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM playback_snapshots`); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	return tx.Commit()
+	_, err := s.db.ExecContext(ctx, `DELETE FROM devices`)
+	return err
 }
 
 func (s *Store) DeleteStaleDevices(ctx context.Context, userKey string, cutoff time.Time, keepDeviceIDs []string) error {
@@ -300,16 +207,6 @@ func (s *Store) DeleteStaleDevices(ctx context.Context, userKey string, cutoff t
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-		_ = tx.Rollback()
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `DELETE FROM playback_snapshots
-		WHERE user_key = ?
-		AND NOT EXISTS (
-			SELECT 1 FROM devices
-			WHERE devices.user_key = playback_snapshots.user_key
-			AND devices.device_id = playback_snapshots.source_device_id
-		)`, userKey); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
@@ -379,147 +276,45 @@ func (s *Store) DeleteExpiredSessions(ctx context.Context, now time.Time) error 
 	return err
 }
 
-func (s *Store) SavePlaybackSnapshot(ctx context.Context, snapshot PlaybackSnapshot) (bool, *PlaybackSnapshot, error) {
-	current, err := s.GetPlaybackSnapshot(ctx, snapshot.UserKey, snapshot.SourceDeviceID)
-	if err != nil {
-		return false, nil, err
+func (s *Store) SaveSharedPlaybackState(ctx context.Context, state SharedPlaybackState) error {
+	if state.UpdatedAt.IsZero() {
+		state.UpdatedAt = time.Now().UTC()
 	}
-	if current != nil && snapshot.Seq <= current.Seq {
-		return false, current, nil
-	}
-	if snapshot.UpdatedAt.IsZero() {
-		snapshot.UpdatedAt = time.Now().UTC()
-	}
-	var currentIndex any
-	if snapshot.CurrentIndex != nil {
-		currentIndex = *snapshot.CurrentIndex
-	}
-	_, err = s.db.ExecContext(ctx, `INSERT INTO playback_snapshots (
-		user_key, source_device_id, seq, state_json, playing_state, current_song_id, current_index, current_position_ms, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(user_key, source_device_id) DO UPDATE SET
+	_, err := s.db.ExecContext(ctx, `INSERT INTO shared_playback_states (
+		user_key, seq, active_device_id, state_json, updated_at, updated_by_device_id
+	) VALUES (?, ?, ?, ?, ?, ?)
+	ON CONFLICT(user_key) DO UPDATE SET
 		seq = excluded.seq,
+		active_device_id = excluded.active_device_id,
 		state_json = excluded.state_json,
-		playing_state = excluded.playing_state,
-		current_song_id = excluded.current_song_id,
-		current_index = excluded.current_index,
-		current_position_ms = excluded.current_position_ms,
-		updated_at = excluded.updated_at`,
-		snapshot.UserKey,
-		snapshot.SourceDeviceID,
-		snapshot.Seq,
-		string(snapshot.State),
-		snapshot.PlayingState,
-		snapshot.CurrentSongID,
-		currentIndex,
-		snapshot.CurrentPositionMs,
-		formatTime(snapshot.UpdatedAt),
+		updated_at = excluded.updated_at,
+		updated_by_device_id = excluded.updated_by_device_id`,
+		state.UserKey,
+		state.Seq,
+		state.ActiveDeviceID,
+		string(state.State),
+		formatTime(state.UpdatedAt),
+		state.UpdatedByDeviceID,
 	)
-	if err != nil {
-		return false, nil, err
-	}
-	return true, &snapshot, nil
+	return err
 }
 
-func (s *Store) GetPlaybackSnapshot(ctx context.Context, userKey, sourceDeviceID string) (*PlaybackSnapshot, error) {
-	var snapshot PlaybackSnapshot
+func (s *Store) GetSharedPlaybackState(ctx context.Context, userKey string) (*SharedPlaybackState, error) {
+	var state SharedPlaybackState
 	var stateJSON string
-	var currentIndex sql.NullInt64
 	var updatedAt string
-	err := s.db.QueryRowContext(ctx, `SELECT user_key, seq, source_device_id, state_json, playing_state, current_song_id, current_index, current_position_ms, updated_at
-		FROM playback_snapshots WHERE user_key = ? AND source_device_id = ?`, userKey, sourceDeviceID).
-		Scan(&snapshot.UserKey, &snapshot.Seq, &snapshot.SourceDeviceID, &stateJSON, &snapshot.PlayingState, &snapshot.CurrentSongID, &currentIndex, &snapshot.CurrentPositionMs, &updatedAt)
+	err := s.db.QueryRowContext(ctx, `SELECT user_key, seq, active_device_id, state_json, updated_at, updated_by_device_id
+		FROM shared_playback_states WHERE user_key = ?`, userKey).
+		Scan(&state.UserKey, &state.Seq, &state.ActiveDeviceID, &stateJSON, &updatedAt, &state.UpdatedByDeviceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	if currentIndex.Valid {
-		value := currentIndex.Int64
-		snapshot.CurrentIndex = &value
-	}
-	snapshot.State = json.RawMessage(stateJSON)
-	snapshot.UpdatedAt, _ = parseTime(updatedAt)
-	return &snapshot, nil
-}
-
-func (s *Store) ListPlaybackSnapshots(ctx context.Context, userKey string) ([]PlaybackSnapshot, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT user_key, seq, source_device_id, state_json, playing_state, current_song_id, current_index, current_position_ms, updated_at
-		FROM playback_snapshots WHERE user_key = ? ORDER BY source_device_id`, userKey)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var snapshots []PlaybackSnapshot
-	for rows.Next() {
-		var snapshot PlaybackSnapshot
-		var stateJSON string
-		var currentIndex sql.NullInt64
-		var updatedAt string
-		if err := rows.Scan(&snapshot.UserKey, &snapshot.Seq, &snapshot.SourceDeviceID, &stateJSON, &snapshot.PlayingState, &snapshot.CurrentSongID, &currentIndex, &snapshot.CurrentPositionMs, &updatedAt); err != nil {
-			return nil, err
-		}
-		if currentIndex.Valid {
-			value := currentIndex.Int64
-			snapshot.CurrentIndex = &value
-		}
-		snapshot.State = json.RawMessage(stateJSON)
-		snapshot.UpdatedAt, _ = parseTime(updatedAt)
-		snapshots = append(snapshots, snapshot)
-	}
-	return snapshots, rows.Err()
-}
-
-func (s *Store) UpsertHandoff(ctx context.Context, handoff Handoff) error {
-	if handoff.CreatedAt.IsZero() {
-		handoff.CreatedAt = time.Now().UTC()
-	}
-	if handoff.UpdatedAt.IsZero() {
-		handoff.UpdatedAt = handoff.CreatedAt
-	}
-	var snapshot any
-	if len(handoff.Snapshot) > 0 {
-		snapshot = string(handoff.Snapshot)
-	}
-	_, err := s.db.ExecContext(ctx, `INSERT INTO handoffs (
-		handoff_id, user_key, source_device_id, target_device_id, status, snapshot_json, created_at, updated_at
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(handoff_id) DO UPDATE SET
-		status = excluded.status,
-		snapshot_json = excluded.snapshot_json,
-		updated_at = excluded.updated_at`,
-		handoff.HandoffID,
-		handoff.UserKey,
-		handoff.SourceDeviceID,
-		handoff.TargetDeviceID,
-		handoff.Status,
-		snapshot,
-		formatTime(handoff.CreatedAt),
-		formatTime(handoff.UpdatedAt),
-	)
-	return err
-}
-
-func (s *Store) UpdateHandoffStatus(ctx context.Context, userKey, handoffID, status string, snapshot json.RawMessage) error {
-	var snapshotValue any
-	if len(snapshot) > 0 {
-		snapshotValue = string(snapshot)
-	}
-	result, err := s.db.ExecContext(ctx, `UPDATE handoffs SET status = ?, snapshot_json = COALESCE(?, snapshot_json), updated_at = ?
-		WHERE user_key = ? AND handoff_id = ?`, status, snapshotValue, formatTime(time.Now().UTC()), userKey, handoffID)
-	if err != nil {
-		return err
-	}
-	count, err := result.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if count == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
+	state.State = json.RawMessage(stateJSON)
+	state.UpdatedAt, _ = parseTime(updatedAt)
+	return &state, nil
 }
 
 func formatTime(t time.Time) string {

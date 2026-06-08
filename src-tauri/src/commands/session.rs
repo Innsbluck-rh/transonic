@@ -2,7 +2,8 @@ use tauri::{AppHandle, Manager, State};
 
 use crate::{
     models::{
-        AppBootstrap, ConnectServerProfileRequest, ConnectServerProfileResult, ProfileIdRequest,
+        ActiveSession, AppBootstrap, ConnectServerProfileRequest, ConnectServerProfileResult,
+        ConnectSettings, ProfileIdRequest,
     },
     playback_state::{load_playback_state_file, playback_state_path},
     ActiveSessionState, AppSettingsState, ArtistImageCacheState, CoverArtCacheState,
@@ -41,6 +42,27 @@ fn reset_playback_state(playback: &State<'_, PlaybackControllerState>, source: &
     let mut controller = playback.0.lock().unwrap();
     controller.reset();
     log::info!("{source}: reset playback state to idle");
+}
+
+fn defer_playback_state_restore(
+    playback: &State<'_, PlaybackControllerState>,
+    active_profile_id: &str,
+) {
+    let mut controller = playback.0.lock().unwrap();
+    controller.defer_state_restore(active_profile_id.to_string());
+    log::info!(
+        "defer_playback_state_restore: waiting for Connect shared playback for profile {active_profile_id}"
+    );
+}
+
+fn should_defer_bootstrap_playback_restore(
+    connect_settings: &ConnectSettings,
+    active_session: &ActiveSession,
+) -> bool {
+    crate::connect::should_defer_local_playback_restore_for_connect(
+        connect_settings,
+        &active_session.normalized_server_url,
+    )
 }
 
 fn restore_playback_state(
@@ -93,6 +115,7 @@ fn restore_playback_state(
         state_file.profile_id,
         state_file.queue,
         state_file.current_index,
+        state_file.play_next_queue_len,
         state_file.current_position_ms,
     );
     log::info!("restore_playback_state: restored playback state for profile {active_profile_id}");
@@ -127,7 +150,11 @@ pub async fn bootstrap_app_state(
     apply_playback_capabilities(&playback, &mut result)?;
     apply_settings_snapshot(&settings, &mut result)?;
     if let Some(ref active_session) = result.active_session {
-        restore_playback_state(&app, &playback, &active_session.profile_id);
+        if should_defer_bootstrap_playback_restore(&result.settings.connect, active_session) {
+            defer_playback_state_restore(&playback, &active_session.profile_id);
+        } else {
+            restore_playback_state(&app, &playback, &active_session.profile_id);
+        }
     } else {
         reset_playback_state(&playback, "bootstrap_app_state");
     }
@@ -178,4 +205,53 @@ pub fn delete_server_profile(
     }
     crate::connect::restart(&app);
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_defer_bootstrap_playback_restore;
+    use crate::models::{ActiveSession, AuthKind, CapabilityMatrix, ConnectSettings};
+
+    fn active_session() -> ActiveSession {
+        ActiveSession {
+            profile_id: "profile-1".to_string(),
+            normalized_server_url: "http://subsonic.example:4533".to_string(),
+            username: "demo".to_string(),
+            auth_kind: AuthKind::Password,
+            api_version: "1.16.1".to_string(),
+            server_type: None,
+            server_version: None,
+            capability_matrix: CapabilityMatrix::empty(),
+        }
+    }
+
+    #[test]
+    fn bootstrap_defers_playback_restore_when_connect_snapshot_is_expected() {
+        let settings = ConnectSettings {
+            enabled: true,
+            device_id: "device-1".to_string(),
+            allow_insecure_connect_server: true,
+            ..ConnectSettings::default()
+        };
+
+        assert!(should_defer_bootstrap_playback_restore(
+            &settings,
+            &active_session()
+        ));
+    }
+
+    #[test]
+    fn bootstrap_restores_local_playback_when_connect_is_disabled() {
+        let settings = ConnectSettings {
+            enabled: false,
+            device_id: "device-1".to_string(),
+            allow_insecure_connect_server: true,
+            ..ConnectSettings::default()
+        };
+
+        assert!(!should_defer_bootstrap_playback_restore(
+            &settings,
+            &active_session()
+        ));
+    }
 }

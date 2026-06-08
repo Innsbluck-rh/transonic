@@ -5,13 +5,11 @@ import { commands, type ArtistInfo2Response, type ArtistResponse } from '~/bindi
 import Heading3 from '~/components/common/Heading3';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
 import AlbumList from '~/components/common/list/album/AlbumList';
-import { AlbumItem } from '~/components/common/list/album/item/AlbumGridItem';
-import { type BrowseListItem } from '~/components/common/list/index/BrowseList';
 import LoadCircle from '~/components/common/LoadCircle';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { fetchCoverArtAssetUrl } from '~/features/albums/service';
 import { fetchArtistImageAssetUrl } from '~/features/artist/service';
-import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
+import { resolveAlbumRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { setAppearanceSetting, settingsStore } from '~/features/settings/service';
 import { sessionStore } from '~/stores/SessionStore';
@@ -25,24 +23,8 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
 
   const [artist, setArtist] = createSignal<ArtistResponse | null>(null);
   const [artistInfo, setArtistInfo] = createSignal<ArtistInfo2Response | null>(null);
-  const [isLoading, setIsLoading] = createSignal(true);
   const [error, setError] = createSignal<string | null>(null);
   let latestLoadId = 0;
-
-  const albums = createMemo<AlbumItem[]>(() => artist()?.albums ?? []);
-
-  const similarArtists = createMemo<BrowseListItem[]>(() =>
-    (artistInfo()?.similarArtists ?? []).map((similarArtist) => ({
-      id: similarArtist.id,
-      name: similarArtist.name,
-      href: resolveArtistRoute(similarArtist.id),
-    }))
-  );
-
-  const roleLabel = createMemo(() => {
-    const roles = artist()?.roles ?? [];
-    return roles.length > 0 ? roles.join(' / ') : null;
-  });
 
   const externalImageUrl = createMemo(
     () => artistInfo()?.largeImageUrl ?? artistInfo()?.mediumImageUrl ?? artistInfo()?.smallImageUrl ?? artist()?.artistImageUrl ?? null
@@ -80,7 +62,6 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
       setArtist(null);
       setArtistInfo(null);
       setError(null);
-      setIsLoading(false);
       return;
     }
 
@@ -89,11 +70,9 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
       setArtist(null);
       setArtistInfo(null);
       setError('Artist id is missing.');
-      setIsLoading(false);
       return;
     }
 
-    setIsLoading(true);
     setError(null);
     setFailedSrc(null);
 
@@ -135,10 +114,6 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
       setArtist(null);
       setArtistInfo(null);
       setError('Failed to load artist details.');
-    } finally {
-      if (loadId === latestLoadId) {
-        setIsLoading(false);
-      }
     }
   }
 
@@ -157,82 +132,80 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
     >
       <Show when={error()}>{(message) => <p class='px-1 text-sm text-red-500'>{message()}</p>}</Show>
 
-      <Show when={!isLoading()} fallback={<LoadCircle class='m-3 self-center justify-self-center' />}>
-        <Show when={artist()}>
-          {(artistValue) => (
-            <div class='flex flex-col'>
-              <div class='relative z-20 flex h-42 w-full flex-col'>
-                <div class='border-primary-border absolute inset-0 size-full border-b'>
-                  <Show
-                    when={effectiveArtistImageSrc()}
-                    fallback={<div class='bg-primary-surface flex size-full items-center justify-center text-xs'></div>}
-                  >
-                    {(src) => (
-                      <img
-                        class='size-full object-cover object-center'
-                        src={src()}
-                        onError={() => setFailedSrc(src())}
-                        loading='lazy'
-                        decoding='async'
-                      />
-                    )}
-                  </Show>
-                </div>
-                <div class='bg-primary-surface absolute inset-0 size-full opacity-75' />
-                <p class='archivo text-primary-text absolute bottom-0 left-0 m-3 w-full text-2xl font-black tracking-tighter'>{artistValue().name}</p>
-              </div>
+      <div class='flex flex-col'>
+        <div class='relative z-20 flex h-42 w-full flex-col'>
+          <div class='border-primary-border absolute inset-0 size-full border-b'>
+            <Show
+              when={effectiveArtistImageSrc()}
+              fallback={<div class='bg-primary-surface flex size-full items-center justify-center text-xs'></div>}
+            >
+              {(src) => (
+                <img class='size-full object-cover object-center' src={src()} onError={() => setFailedSrc(src())} loading='lazy' decoding='async' />
+              )}
+            </Show>
+          </div>
+          <div class='bg-primary-surface absolute inset-0 size-full opacity-75' />
+          <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
+            <Icon
+              icon='material-symbols:arrow-back'
+              class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl'
+              onClick={() => {
+                navigate(-1);
+              }}
+            />
+          </div>
+          <p class='archivo text-primary-text absolute bottom-0 left-0 m-3 w-full text-2xl font-black tracking-tighter'>{artist()?.name ?? ''}</p>
+        </div>
 
-              <div class='flex flex-col'>
-                <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
-                  <Heading3 class='text-secondary-text'>albums</Heading3>
-                  <div class='flex-1' />
-                  <div
-                    class='flex h-full items-center'
-                    onClick={() => {
-                      void setAppearanceSetting('albumDisplayMode', settingsStore.appearance.albumDisplayMode === 'grid' ? 'list' : 'grid');
-                    }}
-                  >
-                    <div class='px-0.8 my-auto flex h-fit min-w-13 items-end'>
-                      <Icon
-                        icon={settingsStore.appearance.albumDisplayMode === 'grid' ? 'pixelarticons:grid-2x2-2' : 'pixelarticons:bulletlist-sharp'}
-                        class='cursor-pointer text-[15px]'
-                      />
-                      <p class='archivo text-secondary-text px-1 text-center text-xs leading-none font-bold tracking-tight'>
-                        {settingsStore.appearance.albumDisplayMode === 'grid' ? 'Grid' : 'List'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                <Switch>
-                  <Match when={settingsStore.appearance.albumDisplayMode === 'grid'}>
-                    <div class='p-3'>
-                      <AlbumGrid
-                        albums={albums()}
-                        inline={true}
-                        noArtistName={true}
-                        emptyMessage='No ID3 albums returned for this artist.'
-                        onItemClick={(album) => {
-                          navigate(resolveAlbumRoute(album.id));
-                        }}
-                      />
-                    </div>
-                  </Match>
-                  <Match when={settingsStore.appearance.albumDisplayMode === 'list'}>
-                    <AlbumList
-                      albums={albums()}
-                      noArtistName={true}
-                      emptyMessage='No ID3 albums returned for this artist.'
-                      onItemClick={(album) => {
-                        navigate(resolveAlbumRoute(album.id));
-                      }}
-                    />
-                  </Match>
-                </Switch>
-              </div>
+        <div class='flex flex-col'>
+          <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
+            <Heading3 class='text-secondary-text'>albums</Heading3>
+            <div class='flex-1' />
+            <div
+              class='flex cursor-pointer items-center gap-0.5 px-0.5'
+              onClick={() => {
+                void setAppearanceSetting('albumDisplayMode', settingsStore.appearance.albumDisplayMode === 'grid' ? 'list' : 'grid');
+              }}
+            >
+              <p class='text-secondary-text px-1 text-center text-xs leading-0 font-bold tracking-tight'>
+                {settingsStore.appearance.albumDisplayMode === 'grid' ? 'Grid' : 'List'}
+              </p>
+              <Icon
+                icon={settingsStore.appearance.albumDisplayMode === 'grid' ? 'pixelarticons:grid-2x2-2' : 'pixelarticons:bulletlist-sharp'}
+                class='text-[13px]'
+              />
             </div>
-          )}
-        </Show>
-      </Show>
+          </div>
+          <Switch>
+            <Match when={!artist()}>
+              <LoadCircle class='m-3 self-center justify-self-center' />
+            </Match>
+            <Match when={artist() && settingsStore.appearance.albumDisplayMode === 'grid'}>
+              <div class='p-3'>
+                <AlbumGrid
+                  albums={artist()?.albums ?? []}
+                  inline={true}
+                  noArtistName={true}
+                  emptyMessage='No ID3 albums returned for this artist.'
+                  onItemClick={(album) => {
+                    navigate(resolveAlbumRoute(album.id));
+                  }}
+                />
+              </div>
+            </Match>
+            <Match when={artist() && settingsStore.appearance.albumDisplayMode === 'list'}>
+              <AlbumList
+                albums={artist()?.albums ?? []}
+                noArtistName={true}
+                emptyMessage='No ID3 albums returned for this artist.'
+                onItemClick={(album) => {
+                  navigate(resolveAlbumRoute(album.id));
+                }}
+              />
+            </Match>
+          </Switch>
+        </div>
+      </div>
     </div>
   );
 }

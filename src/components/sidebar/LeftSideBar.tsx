@@ -1,8 +1,8 @@
 import interact from 'interactjs';
 import { Component } from 'solid-js';
-import IndexContent from './IndexContent';
+import IndexContent from './index/IndexContent';
 
-const IndexSideBar: Component = () => {
+const LeftSideBar: Component = () => {
   interact('.index-sidebar').resizable({
     edges: { right: true },
     listeners: {
@@ -34,4 +34,4 @@ const IndexSideBar: Component = () => {
   );
 };
 
-export default IndexSideBar;
+export default LeftSideBar;

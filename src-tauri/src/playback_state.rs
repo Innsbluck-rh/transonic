@@ -18,6 +18,8 @@ pub struct PlaybackStateFile {
     pub profile_id: String,
     pub queue: Vec<SongResponse>,
     pub current_index: Option<u32>,
+    #[serde(default)]
+    pub play_next_queue_len: u32,
     pub current_position_ms: u32,
 }
 
@@ -137,6 +139,7 @@ mod tests {
             profile_id: "profile-1".to_string(),
             queue: vec![sample_song()],
             current_index: Some(0),
+            play_next_queue_len: 0,
             current_position_ms: 12345,
         };
 
@@ -149,6 +152,7 @@ mod tests {
         assert_eq!(loaded.queue[0].id, "song-1");
         assert_eq!(loaded.queue[0].title, "Test Song");
         assert_eq!(loaded.current_index, Some(0));
+        assert_eq!(loaded.play_next_queue_len, 0);
         assert_eq!(loaded.current_position_ms, 12345);
     }
 
@@ -171,6 +175,7 @@ mod tests {
             profile_id: "profile-1".to_string(),
             queue: vec![],
             current_index: None,
+            play_next_queue_len: 0,
             current_position_ms: 0,
         };
 

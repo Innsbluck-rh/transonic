@@ -3,6 +3,7 @@
 import { MetaProvider } from '@solidjs/meta';
 import { Navigate, Route, Router } from '@solidjs/router';
 import PlaybackErrorDialog from './components/common/dialog/PlaybackErrorDialog';
+import PlaybackStreamInfoDialog from './components/common/dialog/PlaybackStreamInfoDialog';
 import PCContextMenu from './components/menu/PCContextMenu';
 import SPBottomContextMenu from './components/menu/SPBottomContextMenu';
 import AppLayout from './layouts/AppLayout';
@@ -15,6 +16,7 @@ import AppError from './routes/error';
 import Home from './routes/home';
 import InitLoad from './routes/init_load';
 import InitLogin from './routes/init_login';
+import Search from './routes/search';
 import SettingsRoute from './routes/settings';
 import SPBrowseStack from './routes/sp/browseStack';
 import SPHome from './routes/sp/home';
@@ -35,6 +37,7 @@ export default function App() {
             <PCContextMenu />
             <SPBottomContextMenu />
             <PlaybackErrorDialog />
+            <PlaybackStreamInfoDialog />
           </div>
         </MetaProvider>
       )}
@@ -50,6 +53,7 @@ export default function App() {
             <Route path='/browse/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
             <Route path='/browse/artists/:id' component={BrowseArtist} />
             <Route path='/browse/album/:id' component={BrowseAlbum} />
+            <Route path='/search' component={Search} />
           </Route>
           <Route component={SPHomeLayout}>
             <Route path='/sp' component={SPHome} />
@@ -61,6 +65,7 @@ export default function App() {
               <Route path='/folders/:libraryId/:nodeId' component={BrowseFolderStructure} />
             </Route>
             <Route path='/sp/settings' component={SettingsRoute} />
+            <Route path='/sp/search' component={Search} />
           </Route>
         </Route>
         <Route path='/init_login' component={InitLogin} />

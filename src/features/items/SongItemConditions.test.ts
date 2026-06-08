@@ -12,9 +12,14 @@ function createPlaybackStatus(overrides: Partial<PlaybackStatus> = {}): Playback
     gaplessStatus: { state: 'idle', message: '' },
     queue: [],
     currentIndex: null,
+    playNextQueueLen: 0,
     currentPositionMs: 0,
     currentSongId: null,
     playbackError: null,
+    activeStreamInfo: null,
+    preparedStreamInfo: null,
+    lastStreamRequest: null,
+    actualStreamInfo: null,
     ...overrides,
   };
 }

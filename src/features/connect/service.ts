@@ -1,6 +1,6 @@
-import { commands, events, type AppSettings } from '~/bindings';
+import { commands, events, type AppSettings, type ConnectSharedPlaybackState } from '~/bindings';
 import { settingsStore } from '~/features/settings/service';
-import { setConnectStore } from '~/stores/ConnectStore';
+import { connectStore, setConnectStore } from '~/stores/ConnectStore';
 import { sessionStore } from '~/stores/SessionStore';
 
 interface VersionResponse {
@@ -10,12 +10,16 @@ interface VersionResponse {
 
 interface CapabilityResponse {
   presence: boolean;
-  playbackState: boolean;
-  handoff: boolean;
-  remoteControl: boolean;
+  sharedQueue: boolean;
+  sharedPlayback: boolean;
+  playbackTransfer: boolean;
 }
 
 let refreshGeneration = 0;
+
+function monotonicNowMs() {
+  return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
 
 export function splitUrlHostAndPort(rawUrl: string | null) {
   const trimmed = rawUrl?.trim();
@@ -119,6 +123,8 @@ export async function refreshConnectServerStatus() {
       version: null,
       protocolVersion: null,
       capabilities: null,
+      sharedPlayback: null,
+      sharedPlaybackReceivedAtMs: null,
     });
     return;
   }
@@ -166,6 +172,8 @@ export async function refreshConnectServerStatus() {
       version: null,
       protocolVersion: null,
       capabilities: null,
+      sharedPlayback: null,
+      sharedPlaybackReceivedAtMs: null,
     });
   }
 }
@@ -180,8 +188,10 @@ export async function refreshConnectRuntimeStatus() {
       deviceId: status.deviceId,
       seq: status.seq,
     });
-    if (!status.enabled) {
+    if (!status.connected) {
       setConnectStore('devices', []);
+      setConnectStore('sharedPlayback', null);
+      setConnectStore('sharedPlaybackReceivedAtMs', null);
     }
   } catch (error) {
     setConnectStore('runtime', {
@@ -192,18 +202,54 @@ export async function refreshConnectRuntimeStatus() {
       seq: 0,
     });
     setConnectStore('devices', []);
+    setConnectStore('sharedPlayback', null);
+    setConnectStore('sharedPlaybackReceivedAtMs', null);
   }
 }
 
 export async function refreshConnectDevices() {
-  const devices = await commands.connectGetDevicesWithPlayback();
+  const devices = await commands.connectGetDevices();
   setConnectStore('devices', devices);
 }
 
-export async function startConnectDevicesSync() {
-  const unlisten = await events.connectDevicesUpdated.listen((event) => {
+function applyConnectSharedPlayback(sharedPlayback: ConnectSharedPlaybackState | null) {
+  if (sharedPlayback === null) {
+    if (connectStore.runtime.connected && connectStore.sharedPlayback !== null) {
+      return;
+    }
+    setConnectStore('sharedPlayback', null);
+    setConnectStore('sharedPlaybackReceivedAtMs', null);
+    return;
+  }
+
+  if (connectStore.sharedPlayback && sharedPlayback.seq < connectStore.sharedPlayback.seq) {
+    return;
+  }
+
+  setConnectStore('sharedPlayback', sharedPlayback);
+  setConnectStore('sharedPlaybackReceivedAtMs', monotonicNowMs());
+}
+
+export async function refreshConnectSharedPlayback() {
+  applyConnectSharedPlayback(await commands.connectGetSharedPlayback());
+}
+
+export async function startConnectStateSync() {
+  const unlistenDevices = await events.connectDevicesUpdated.listen((event) => {
     setConnectStore('devices', event.payload.devices);
   });
-  await refreshConnectDevices();
-  return unlisten;
+  const unlistenSharedPlayback = await events.connectSharedPlaybackUpdated.listen((event) => {
+    applyConnectSharedPlayback(event.payload.sharedPlayback);
+  });
+  try {
+    await Promise.all([refreshConnectDevices(), refreshConnectSharedPlayback()]);
+  } catch (error) {
+    unlistenDevices();
+    unlistenSharedPlayback();
+    throw error;
+  }
+  return () => {
+    unlistenDevices();
+    unlistenSharedPlayback();
+  };
 }

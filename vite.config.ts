@@ -7,9 +7,9 @@ import webfontDownload from 'vite-plugin-webfont-dl';
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
-export default defineConfig(async () => ({
+export default defineConfig(async ({ mode }) => ({
   plugins: [
-    solid(),
+    solid({ hot: mode !== 'test' && process.env.VITEST !== 'true' }),
     tailwindcss(),
     webfontDownload([
       'https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:ital,wght@0,100..900;1,100..900&family=Public+Sans:ital,wght@0,100..900;1,100..900&display=block',

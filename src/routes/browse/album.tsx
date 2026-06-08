@@ -91,9 +91,19 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
 
   return (
     <div class='home-surface-root w-full gap-0 p-0'>
-      <div class='bg-primary-surface relative z-10 flex w-full flex-col items-center px-3.5 pt-7 pb-0 lg:flex-row lg:pt-4 lg:pb-4'>
+      <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
+        <Icon
+          icon='material-symbols:arrow-back'
+          class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl'
+          onClick={() => {
+            navigate(-1);
+          }}
+        />
+      </div>
+
+      <div class='bg-primary-surface relative z-10 flex w-full flex-col items-center px-3.5 pb-2 lg:flex-row lg:pb-4'>
         <div
-          class='group border-secondary-border pointer-events-auto relative z-10 h-auto border shadow-xl'
+          class='group border-secondary-border pointer-events-auto relative z-10 h-auto border shadow-lg'
           onClick={() => {
             const albumId = album()?.id;
             if (albumId) playAlbum(albumId);
@@ -116,8 +126,8 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           />
         </div>
 
-        <div class='mt-6 flex w-full flex-col items-start lg:mt-4 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
-          <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo text-2xl font-black tracking-tighter lg:mb-1 lg:text-3xl' />
+        <div class='mt-6 flex w-full flex-col items-start lg:mt-0 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
+          <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo w-full text-2xl font-black tracking-tighter lg:mb-1 lg:text-3xl' />
           <MarqueeParagraph
             onClick={() => {
               const artistId = album()?.artistId;
@@ -130,8 +140,8 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
             <p class='archivo text-secondary-text mt-1.5 text-[12px]'>{infoText()}</p>
           </Show>
 
-          <Show when={!isSP()} fallback={<div class='mt-4' />}>
-            <div class='mt-3 mb-3 flex flex-row gap-2 lg:mt-auto'>
+          <Show when={!isSP()} fallback={<div class='mt-2' />}>
+            <div class='mt-auto mb-2 flex flex-row gap-2'>
               <button
                 class='button-borderless flex items-center gap-1.5'
                 onClick={() => {

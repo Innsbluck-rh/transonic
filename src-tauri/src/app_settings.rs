@@ -7,8 +7,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::models::{
-    normalize_volume, AppSettings, AppearanceSettings, ConnectSettings, PlaybackSettings,
-    SettingsOrigin,
+    normalize_transcoding_bitrate_limit, normalize_volume, AppSettings, AppearanceSettings,
+    ConnectSettings, PlaybackSettings, SettingsOrigin,
 };
 
 const APP_SETTINGS_FILENAME: &str = "app-settings.json";
@@ -138,6 +138,8 @@ fn save_app_settings_file(path: &Path, settings: &AppSettings) -> Result<(), Str
 
 fn normalize_app_settings(mut settings: AppSettings) -> AppSettings {
     settings.playback.volume = normalize_volume(settings.playback.volume);
+    settings.playback.transcoding_bitrate_limit =
+        normalize_transcoding_bitrate_limit(settings.playback.transcoding_bitrate_limit);
     settings
 }
 
@@ -150,7 +152,9 @@ mod tests {
     use tempfile::tempdir;
 
     use super::{app_settings_path, AppSettingsStore};
-    use crate::models::{AlbumDisplayMode, AppSettings};
+    use crate::models::{
+        AlbumDisplayMode, AppSettings, PlaybackStreamMode, PlaybackTranscodingCodec,
+    };
 
     #[test]
     fn missing_settings_file_uses_defaults() {
@@ -171,6 +175,10 @@ mod tests {
         settings.appearance.album_display_mode = AlbumDisplayMode::List;
         settings.playback.gapless_playback_enabled = true;
         settings.playback.volume = 0.42;
+        settings.playback.stream_mode = PlaybackStreamMode::Transcoding;
+        settings.playback.transcoding_bitrate_limit = 192;
+        settings.playback.use_custom_transcoding_codec = true;
+        settings.playback.transcoding_codec = PlaybackTranscodingCodec::Opus;
 
         store.replace(settings.clone()).unwrap();
 
@@ -194,6 +202,19 @@ mod tests {
     }
 
     #[test]
+    fn settings_store_normalizes_zero_transcoding_bitrate_limit_when_replacing() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        let mut store = AppSettingsStore::load(path).unwrap();
+        let mut settings = AppSettings::default();
+        settings.playback.transcoding_bitrate_limit = 0;
+
+        let stored = store.replace(settings).unwrap();
+
+        assert_eq!(stored.playback.transcoding_bitrate_limit, 320);
+    }
+
+    #[test]
     fn playback_volume_defaults_and_clamps_when_loading_settings() {
         let dir = tempdir().unwrap();
         let path = app_settings_path(dir.path());
@@ -206,6 +227,73 @@ mod tests {
         let store = AppSettingsStore::load(path).unwrap();
         let (settings, origin) = store.snapshot();
         assert_eq!(settings.playback.volume, 1.0);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn playback_stream_mode_and_transcoding_bitrate_limit_load_settings() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"streamMode\": \"transcoding\",\n    \"transcodingBitrateLimit\": 256\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert_eq!(
+            settings.playback.stream_mode,
+            PlaybackStreamMode::Transcoding
+        );
+        assert_eq!(settings.playback.transcoding_bitrate_limit, 256);
+        assert!(!settings.playback.use_custom_transcoding_codec);
+        assert_eq!(
+            settings.playback.transcoding_codec,
+            PlaybackTranscodingCodec::Auto
+        );
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn playback_custom_transcoding_codec_loads_settings() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"useCustomTranscodingCodec\": true,\n    \"transcodingCodec\": \"opus\"\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert!(settings.playback.use_custom_transcoding_codec);
+        assert_eq!(
+            settings.playback.transcoding_codec,
+            PlaybackTranscodingCodec::Opus
+        );
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn missing_playback_stream_settings_use_defaults() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"gaplessPlaybackEnabled\": true\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert_eq!(settings.playback.stream_mode, PlaybackStreamMode::Raw);
+        assert_eq!(settings.playback.transcoding_bitrate_limit, 320);
+        assert!(!settings.playback.use_custom_transcoding_codec);
+        assert_eq!(
+            settings.playback.transcoding_codec,
+            PlaybackTranscodingCodec::Auto
+        );
         assert_eq!(origin, crate::models::SettingsOrigin::Stored);
     }
 

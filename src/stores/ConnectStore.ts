@@ -1,5 +1,5 @@
 import { createStore } from 'solid-js/store';
-import type { ConnectDeviceWithPlayback } from '~/bindings';
+import type { ConnectDevicePresence, ConnectSharedPlaybackState } from '~/bindings';
 
 export type ConnectServerStatus = 'disabled' | 'checking' | 'available' | 'unavailable';
 
@@ -10,9 +10,9 @@ interface ConnectStore {
   protocolVersion: number | null;
   capabilities: {
     presence: boolean;
-    playbackState: boolean;
-    handoff: boolean;
-    remoteControl: boolean;
+    sharedQueue: boolean;
+    sharedPlayback: boolean;
+    playbackTransfer: boolean;
   } | null;
   runtime: {
     enabled: boolean;
@@ -21,7 +21,9 @@ interface ConnectStore {
     deviceId: string | null;
     seq: number;
   };
-  devices: ConnectDeviceWithPlayback[];
+  devices: ConnectDevicePresence[];
+  sharedPlayback: ConnectSharedPlaybackState | null;
+  sharedPlaybackReceivedAtMs: number | null;
 }
 
 export const [connectStore, setConnectStore] = createStore<ConnectStore>({
@@ -38,4 +40,6 @@ export const [connectStore, setConnectStore] = createStore<ConnectStore>({
     seq: 0,
   },
   devices: [],
+  sharedPlayback: null,
+  sharedPlaybackReceivedAtMs: null,
 });

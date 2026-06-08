@@ -5,7 +5,6 @@ import { resolveSongItemConditions, songItemConditionAttrs } from '~/features/it
 import { buildSongMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { usePlayback } from '~/features/playback/usePlayback';
-import { playbackStore } from '~/stores/PlaybackStore';
 import { formatCompactDuration } from '~/utils/duration';
 
 interface SongListProps {
@@ -14,7 +13,7 @@ interface SongListProps {
 }
 
 const SongList: Component<SongListProps> = (props) => {
-  const { insertAfterCurrent, appendToQueue } = usePlayback();
+  const { insertAfterCurrent, appendToQueue, status: playbackStatus } = usePlayback();
 
   return (
     <div class='flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto'>
@@ -41,7 +40,7 @@ const SongList: Component<SongListProps> = (props) => {
           };
           const conditions = () =>
             resolveSongItemConditions({
-              playbackStatus: playbackStore.status,
+              playbackStatus: playbackStatus(),
               songId: song.id,
             });
 
@@ -61,7 +60,7 @@ const SongList: Component<SongListProps> = (props) => {
                 </Show>
               </div>
 
-              <p class='song-item-title min-w-0 flex-1 truncate text-sm' title={song.title}>
+              <p class='song-item-title text-md min-w-0 flex-1 truncate' title={song.title}>
                 {song.title}
               </p>
 

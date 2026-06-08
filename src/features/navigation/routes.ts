@@ -17,6 +17,10 @@ export function resolveHomeRoute(target?: RouteTarget) {
   return resolveRouteTarget(target) === 'sp' ? '/sp' : '/home';
 }
 
+export function resolveSearchRoute(target?: RouteTarget) {
+  return resolveRouteTarget(target) === 'sp' ? '/sp/search' : '/search';
+}
+
 export function resolveSettingsRoute(target?: RouteTarget) {
   return resolveRouteTarget(target) === 'sp' ? '/sp/settings' : '/settings';
 }

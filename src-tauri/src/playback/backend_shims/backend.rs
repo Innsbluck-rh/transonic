@@ -1,6 +1,8 @@
 use opensubsonic_client::PreparedBinaryRequest;
 
-use crate::models::PlaybackCapabilities;
+use crate::models::{
+    PlaybackActualStreamInfo, PlaybackCapabilities, PlaybackStreamMode, PlaybackTranscodingCodec,
+};
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -54,7 +56,16 @@ pub trait PlaybackBackend: Send {
     fn capabilities(&self) -> PlaybackCapabilities {
         PlaybackCapabilities {
             gapless_playback: false,
+            transcoding_codecs: vec![PlaybackTranscodingCodec::Mp3],
         }
+    }
+
+    fn should_estimate_stream_content_length(
+        &self,
+        _stream_mode: PlaybackStreamMode,
+        _raw_stream: bool,
+    ) -> bool {
+        true
     }
 
     fn plan_load(
@@ -79,6 +90,9 @@ pub trait PlaybackBackend: Send {
     }
     fn seek(&mut self, position_ms: u32) -> Result<PlaybackSeekAction, String>;
     fn current_position_ms(&self) -> Result<u32, String>;
+    fn current_stream_info(&self) -> Result<Option<PlaybackActualStreamInfo>, String> {
+        Ok(None)
+    }
     fn set_volume(&mut self, volume: f32) -> Result<(), String>;
     fn pause(&mut self) -> Result<(), String>;
     fn resume(&mut self) -> Result<(), String>;

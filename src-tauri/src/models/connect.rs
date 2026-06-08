@@ -25,7 +25,7 @@ pub struct ConnectDevicePresence {
     pub online: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectPlaybackState {
     pub playing_state: PlayingState,
@@ -33,6 +33,8 @@ pub struct ConnectPlaybackState {
     pub queue: Vec<SongResponse>,
     #[serde(default)]
     pub current_index: Option<u32>,
+    #[serde(default)]
+    pub play_next_queue_len: u32,
     #[serde(default)]
     pub current_position_ms: u32,
     #[serde(default)]
@@ -45,43 +47,38 @@ impl From<PlaybackStatus> for ConnectPlaybackState {
             playing_state: status.playing_state,
             queue: status.queue,
             current_index: status.current_index,
+            play_next_queue_len: status.play_next_queue_len,
             current_position_ms: status.current_position_ms,
             current_song_id: status.current_song_id,
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct ConnectPlaybackDeviceState {
+pub struct ConnectSharedPlaybackState {
     pub seq: u32,
-    pub source_device_id: String,
+    pub active_device_id: Option<String>,
     pub state: ConnectPlaybackState,
-    pub position_ms: u32,
     pub updated_at: String,
+    pub updated_by_device_id: Option<String>,
+    pub update_reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct ConnectDeviceWithPlayback {
-    pub device: ConnectDevicePresence,
-    pub playback: Option<ConnectPlaybackDeviceState>,
-}
-
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectPlaybackTakeoverRequest {
-    pub source_device_id: String,
-}
-
-#[derive(Debug, Clone, Deserialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectRemotePlaybackRequest {
+pub struct ConnectTransferPlaybackRequest {
     pub target_device_id: String,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type, Event)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectDevicesUpdated {
-    pub devices: Vec<ConnectDeviceWithPlayback>,
+    pub devices: Vec<ConnectDevicePresence>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectSharedPlaybackUpdated {
+    pub shared_playback: ConnectSharedPlaybackState,
 }

@@ -12,6 +12,7 @@ const DEFAULT_SESSION_STORE: SessionStore = {
   activeSession: null,
   playbackCapabilities: {
     gaplessPlayback: false,
+    transcodingCodecs: ['mp3'],
   },
 };
 

@@ -1,5 +1,6 @@
-import { commands, events, PlaybackStatus } from '~/bindings';
+import { commands, events, type PlaybackStatus } from '~/bindings';
 import { playbackStore, setPlaybackStore } from '~/stores/PlaybackStore';
+import { mergePlaybackStatusWithSharedPlayback } from './sharedPlaybackStatus';
 
 type PlaybackCommandResult = { status: 'ok' } | { status: 'error'; error: string };
 
@@ -76,6 +77,9 @@ export async function startPlaybackStateSync() {
   const unlistenStatus = await events.playbackStatus.listen((event) => {
     applyAuthoritativeState(event.payload);
   });
+  const unlistenSharedPlayback = await events.connectSharedPlaybackUpdated.listen((event) => {
+    applyAuthoritativeState(mergePlaybackStatusWithSharedPlayback(playbackStore.status, event.payload.sharedPlayback));
+  });
 
   const refreshPlaybackState = async () => {
     const startedAtGeneration = stateGeneration;
@@ -117,6 +121,7 @@ export async function startPlaybackStateSync() {
       requestPlaybackStateRefresh = undefined;
     }
     unlistenStatus();
+    unlistenSharedPlayback();
   };
 }
 

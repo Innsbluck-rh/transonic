@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "",
   "type": "module",
+  "license": "MIT",
   "scripts": {
     "start": "vite",
     "predev": "pnpm bindings:export",
@@ -25,7 +26,6 @@
     "bindings:export": "cargo run --manifest-path src-tauri/Cargo.toml --bin export-bindings",
     "bindings:check": "cargo run --manifest-path src-tauri/Cargo.toml --bin check-bindings"
   },
-  "license": "MIT",
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",
     "@iconify-icon/solid": "^3.0.3",
@@ -39,7 +39,8 @@
     "interactjs": "^1.10.27",
     "jsdom": "^29.1.0",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "solid-js": "^1.9.12"
+    "solid-js": "^1.9.12",
+    "tauri-plugin-app-events-api": "~0.2.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",

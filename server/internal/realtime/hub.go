@@ -19,18 +19,13 @@ const (
 	TypePresenceHeartbeat = "presence.heartbeat"
 	TypePresenceUpdated   = "presence.updated"
 
-	TypePlaybackPublish  = "playback.state.publish"
-	TypePlaybackSnapshot = "playback.state.snapshot"
-	TypePlaybackUpdated  = "playback.state.updated"
+	TypePlaybackCommandRequest = "playback.command.request"
+	TypePlaybackReport         = "playback.report"
 
-	TypeHandoffRequest  = "handoff.request"
-	TypeHandoffAccept   = "handoff.accept"
-	TypeHandoffReject   = "handoff.reject"
-	TypeHandoffComplete = "handoff.complete"
-
-	TypeRemoteCommand = "remote.command"
-	TypeRemoteAck     = "remote.ack"
-	TypeRemoteError   = "remote.error"
+	TypePlaybackSharedSnapshot = "playback.shared.snapshot"
+	TypePlaybackSharedUpdated  = "playback.shared.updated"
+	TypePlaybackApply          = "playback.apply"
+	TypePlaybackCommandError   = "playback.command.error"
 )
 
 type Envelope struct {
@@ -51,14 +46,32 @@ type Hub struct {
 	store           *store.Store
 	presenceTimeout time.Duration
 
-	mu           sync.Mutex
-	clients      map[string]map[string]*Client
-	remoteRoutes map[string]remoteRoute
+	mu      sync.Mutex
+	clients map[string]map[string]*Client
 }
 
-type remoteRoute struct {
-	UserKey        string
-	SourceDeviceID string
+type playbackStateDoc struct {
+	PlayingState      string            `json:"playingState"`
+	Queue             []json.RawMessage `json:"queue"`
+	CurrentIndex      *int64            `json:"currentIndex"`
+	PlayNextQueueLen  int64             `json:"playNextQueueLen"`
+	CurrentPositionMs int64             `json:"currentPositionMs"`
+	CurrentSongID     *string           `json:"currentSongId"`
+}
+
+type playbackCommandPayload struct {
+	CommandID      string            `json:"commandId,omitempty"`
+	BaseSeq        *int64            `json:"baseSeq,omitempty"`
+	Op             string            `json:"op"`
+	Queue          []json.RawMessage `json:"queue,omitempty"`
+	Items          []json.RawMessage `json:"items,omitempty"`
+	CurrentIndex   *int64            `json:"currentIndex,omitempty"`
+	AutoPlay       bool              `json:"autoPlay,omitempty"`
+	Index          *int64            `json:"index,omitempty"`
+	FromIndex      *int64            `json:"fromIndex,omitempty"`
+	ToIndex        *int64            `json:"toIndex,omitempty"`
+	PositionMs     *int64            `json:"positionMs,omitempty"`
+	TargetDeviceID string            `json:"targetDeviceId,omitempty"`
 }
 
 func NewHub(store *store.Store, presenceTimeout time.Duration) *Hub {
@@ -66,7 +79,6 @@ func NewHub(store *store.Store, presenceTimeout time.Duration) *Hub {
 		store:           store,
 		presenceTimeout: presenceTimeout,
 		clients:         make(map[string]map[string]*Client),
-		remoteRoutes:    make(map[string]remoteRoute),
 	}
 }
 
@@ -84,8 +96,9 @@ func (h *Hub) Register(ctx context.Context, session store.Session) (*Client, err
 
 	_ = h.touchDevice(ctx, session)
 	h.broadcastPresence(ctx, session.UserKey)
-	if snapshots, err := h.store.ListPlaybackSnapshots(ctx, session.UserKey); err == nil && len(snapshots) > 0 {
-		h.send(client, TypePlaybackSnapshot, "", snapshotsPayload(snapshots))
+	shared, err := h.sharedOrDefault(ctx, session.UserKey)
+	if err == nil {
+		h.send(client, TypePlaybackSharedSnapshot, "", sharedPayload(shared, "snapshot"))
 	}
 	return client, nil
 }
@@ -100,12 +113,14 @@ func (h *Hub) Unregister(ctx context.Context, client *Client) {
 	}
 	close(client.Send)
 	h.mu.Unlock()
+
+	h.freezeActiveDeviceIfOffline(ctx, client.Session)
 	h.broadcastPresence(ctx, client.Session.UserKey)
 }
 
 func (h *Hub) Handle(ctx context.Context, client *Client, inbound Envelope) {
 	if inbound.ProtocolVersion != 0 && inbound.ProtocolVersion != version.ProtocolVersion {
-		h.sendError(client, inbound.ID, "protocol version is not supported")
+		h.sendCommandError(client, inbound.ID, "", "protocol version is not supported")
 		return
 	}
 
@@ -113,22 +128,12 @@ func (h *Hub) Handle(ctx context.Context, client *Client, inbound Envelope) {
 	case TypePresenceHello, TypePresenceHeartbeat:
 		_ = h.touchDevice(ctx, client.Session)
 		h.broadcastPresence(ctx, client.Session.UserKey)
-	case TypePlaybackPublish:
-		h.handlePlaybackPublish(ctx, client, inbound)
-	case TypeHandoffRequest:
-		h.handleHandoffRequest(ctx, client, inbound)
-	case TypeHandoffAccept:
-		h.handleHandoffDecision(ctx, client, inbound, "accepted", TypeHandoffAccept)
-	case TypeHandoffReject:
-		h.handleHandoffDecision(ctx, client, inbound, "rejected", TypeHandoffReject)
-	case TypeHandoffComplete:
-		h.handleHandoffComplete(ctx, client, inbound)
-	case TypeRemoteCommand:
-		h.handleRemoteCommand(client, inbound)
-	case TypeRemoteAck, TypeRemoteError:
-		h.handleRemoteResult(client, inbound)
+	case TypePlaybackCommandRequest:
+		h.handlePlaybackCommandRequest(ctx, client, inbound)
+	case TypePlaybackReport:
+		h.handlePlaybackReport(ctx, client, inbound)
 	default:
-		h.sendError(client, inbound.ID, fmt.Sprintf("unsupported message type %q", inbound.Type))
+		h.sendCommandError(client, inbound.ID, "", fmt.Sprintf("unsupported message type %q", inbound.Type))
 	}
 }
 
@@ -156,177 +161,10 @@ func (h *Hub) touchDevice(ctx context.Context, session store.Session) error {
 	return h.store.UpsertDevice(ctx, device)
 }
 
-func (h *Hub) handlePlaybackPublish(ctx context.Context, client *Client, inbound Envelope) {
-	var publish struct {
-		Seq       int64           `json:"seq"`
-		State     json.RawMessage `json:"state"`
-		UpdatedAt *time.Time      `json:"updatedAt,omitempty"`
-	}
-	if err := json.Unmarshal(inbound.Payload, &publish); err != nil || publish.Seq <= 0 || len(publish.State) == 0 {
-		h.sendError(client, inbound.ID, "playback.state.publish requires seq and state")
-		return
-	}
-	probe, err := probePlaybackState(publish.State)
-	if err != nil {
-		h.sendError(client, inbound.ID, err.Error())
-		return
-	}
-	updatedAt := time.Now().UTC()
-	if publish.UpdatedAt != nil {
-		updatedAt = publish.UpdatedAt.UTC()
-	}
-	snapshot := store.PlaybackSnapshot{
-		UserKey:           client.Session.UserKey,
-		Seq:               publish.Seq,
-		SourceDeviceID:    client.Session.DeviceID,
-		State:             publish.State,
-		PlayingState:      probe.PlayingState,
-		CurrentSongID:     probe.CurrentSongID,
-		CurrentIndex:      probe.CurrentIndex,
-		CurrentPositionMs: probe.CurrentPositionMs,
-		UpdatedAt:         updatedAt,
-	}
-	accepted, current, err := h.store.SavePlaybackSnapshot(ctx, snapshot)
-	if err != nil {
-		h.sendError(client, inbound.ID, "failed to save playback snapshot")
-		return
-	}
-	if !accepted {
-		h.send(client, TypePlaybackSnapshot, inbound.ID, snapshotPayload(current))
-		return
-	}
-	h.broadcast(client.Session.UserKey, TypePlaybackUpdated, inbound.ID, snapshotPayload(&snapshot))
-}
-
-type playbackStateProbe struct {
-	PlayingState      string
-	CurrentSongID     string
-	CurrentIndex      *int64
-	CurrentPositionMs int64
-}
-
-func probePlaybackState(raw json.RawMessage) (playbackStateProbe, error) {
-	var state struct {
-		PlayingState      string `json:"playingState"`
-		CurrentSongID     string `json:"currentSongId"`
-		CurrentIndex      *int64 `json:"currentIndex"`
-		CurrentPositionMs int64  `json:"currentPositionMs"`
-	}
-	if err := json.Unmarshal(raw, &state); err != nil {
-		return playbackStateProbe{}, errors.New("state must be a JSON object compatible with PlaybackStatus")
-	}
-	if state.PlayingState == "" {
-		return playbackStateProbe{}, errors.New("state.playingState is required")
-	}
-	if state.CurrentPositionMs < 0 {
-		return playbackStateProbe{}, errors.New("state.currentPositionMs must not be negative")
-	}
-	return playbackStateProbe{
-		PlayingState:      state.PlayingState,
-		CurrentSongID:     state.CurrentSongID,
-		CurrentIndex:      state.CurrentIndex,
-		CurrentPositionMs: state.CurrentPositionMs,
-	}, nil
-}
-
-func (h *Hub) handleHandoffRequest(ctx context.Context, client *Client, inbound Envelope) {
-	var request struct {
-		HandoffID      string `json:"handoffId,omitempty"`
-		SourceDeviceID string `json:"sourceDeviceId"`
-		TargetDeviceID string `json:"targetDeviceId,omitempty"`
-	}
-	if err := json.Unmarshal(inbound.Payload, &request); err != nil || request.SourceDeviceID == "" {
-		h.sendError(client, inbound.ID, "handoff.request requires sourceDeviceId")
-		return
-	}
-	if request.TargetDeviceID == "" {
-		request.TargetDeviceID = client.Session.DeviceID
-	}
-	if request.TargetDeviceID != client.Session.DeviceID {
-		h.sendError(client, inbound.ID, "handoff target must be the requesting device")
-		return
-	}
-	if request.HandoffID == "" {
-		request.HandoffID = randomID()
-	}
-	snapshot, _ := h.store.GetPlaybackSnapshot(ctx, client.Session.UserKey, request.SourceDeviceID)
-	payloadBytes := mustJSON(map[string]any{
-		"handoffId":      request.HandoffID,
-		"sourceDeviceId": request.SourceDeviceID,
-		"targetDeviceId": request.TargetDeviceID,
-		"snapshot":       snapshot,
-	})
-	_ = h.store.UpsertHandoff(ctx, store.Handoff{
-		HandoffID:      request.HandoffID,
-		UserKey:        client.Session.UserKey,
-		SourceDeviceID: request.SourceDeviceID,
-		TargetDeviceID: request.TargetDeviceID,
-		Status:         "requested",
-		Snapshot:       payloadBytes,
-	})
-
-	if h.sendToDevice(client.Session.UserKey, request.SourceDeviceID, TypeHandoffRequest, inbound.ID, payloadBytes) {
-		return
-	}
-	_ = h.store.UpdateHandoffStatus(ctx, client.Session.UserKey, request.HandoffID, "completed_offline", payloadBytes)
-	h.send(client, TypeHandoffComplete, inbound.ID, mustJSON(map[string]any{
-		"handoffId":    request.HandoffID,
-		"sourceOnline": false,
-		"snapshot":     snapshot,
-	}))
-}
-
-func (h *Hub) handleHandoffDecision(ctx context.Context, client *Client, inbound Envelope, status string, outboundType string) {
-	var decision struct {
-		HandoffID      string          `json:"handoffId"`
-		TargetDeviceID string          `json:"targetDeviceId"`
-		Snapshot       json.RawMessage `json:"snapshot,omitempty"`
-		Reason         string          `json:"reason,omitempty"`
-	}
-	if err := json.Unmarshal(inbound.Payload, &decision); err != nil || decision.HandoffID == "" || decision.TargetDeviceID == "" {
-		h.sendError(client, inbound.ID, "handoff decision requires handoffId and targetDeviceId")
-		return
-	}
-	_ = h.store.UpdateHandoffStatus(ctx, client.Session.UserKey, decision.HandoffID, status, decision.Snapshot)
-	h.sendToDevice(client.Session.UserKey, decision.TargetDeviceID, outboundType, inbound.ID, mustJSON(map[string]any{
-		"handoffId":      decision.HandoffID,
-		"sourceDeviceId": client.Session.DeviceID,
-		"targetDeviceId": decision.TargetDeviceID,
-		"snapshot":       jsonOrNil(decision.Snapshot),
-		"reason":         decision.Reason,
-	}))
-}
-
-func (h *Hub) handleHandoffComplete(ctx context.Context, client *Client, inbound Envelope) {
-	var complete struct {
-		HandoffID      string `json:"handoffId"`
-		SourceDeviceID string `json:"sourceDeviceId"`
-	}
-	if err := json.Unmarshal(inbound.Payload, &complete); err != nil || complete.HandoffID == "" {
-		h.sendError(client, inbound.ID, "handoff.complete requires handoffId")
-		return
-	}
-	_ = h.store.UpdateHandoffStatus(ctx, client.Session.UserKey, complete.HandoffID, "completed", nil)
-	if complete.SourceDeviceID != "" {
-		h.sendToDevice(client.Session.UserKey, complete.SourceDeviceID, TypeRemoteCommand, inbound.ID, mustJSON(map[string]any{
-			"commandId":      "handoff-" + complete.HandoffID,
-			"sourceDeviceId": client.Session.DeviceID,
-			"targetDeviceId": complete.SourceDeviceID,
-			"command":        "pause",
-			"reason":         "handoff.complete",
-		}))
-	}
-}
-
-func (h *Hub) handleRemoteCommand(client *Client, inbound Envelope) {
-	var command struct {
-		CommandID      string          `json:"commandId,omitempty"`
-		TargetDeviceID string          `json:"targetDeviceId"`
-		Command        string          `json:"command"`
-		Args           json.RawMessage `json:"args,omitempty"`
-	}
-	if err := json.Unmarshal(inbound.Payload, &command); err != nil || command.TargetDeviceID == "" || command.Command == "" {
-		h.sendError(client, inbound.ID, "remote.command requires targetDeviceId and command")
+func (h *Hub) handlePlaybackCommandRequest(ctx context.Context, client *Client, inbound Envelope) {
+	var command playbackCommandPayload
+	if err := json.Unmarshal(inbound.Payload, &command); err != nil || command.Op == "" {
+		h.sendCommandError(client, inbound.ID, "", "playback.command.request requires op")
 		return
 	}
 	if command.CommandID == "" {
@@ -335,43 +173,733 @@ func (h *Hub) handleRemoteCommand(client *Client, inbound Envelope) {
 	if command.CommandID == "" {
 		command.CommandID = randomID()
 	}
-	h.mu.Lock()
-	h.remoteRoutes[command.CommandID] = remoteRoute{UserKey: client.Session.UserKey, SourceDeviceID: client.Session.DeviceID}
-	h.mu.Unlock()
-	ok := h.sendToDevice(client.Session.UserKey, command.TargetDeviceID, TypeRemoteCommand, inbound.ID, mustJSON(map[string]any{
-		"commandId":      command.CommandID,
-		"sourceDeviceId": client.Session.DeviceID,
-		"targetDeviceId": command.TargetDeviceID,
-		"command":        command.Command,
-		"args":           jsonOrNil(command.Args),
-	}))
-	if !ok {
-		h.send(client, TypeRemoteError, inbound.ID, mustJSON(map[string]any{
-			"commandId": command.CommandID,
-			"message":   "target device is offline",
-		}))
+
+	current, err := h.sharedOrDefault(ctx, client.Session.UserKey)
+	if err != nil {
+		h.sendCommandError(client, inbound.ID, command.CommandID, "failed to load shared playback state")
+		return
+	}
+	if command.BaseSeq != nil && *command.BaseSeq != current.Seq {
+		h.sendCommandError(client, inbound.ID, command.CommandID, "shared playback state is stale")
+		h.send(client, TypePlaybackSharedSnapshot, inbound.ID, sharedPayload(current, "stale"))
+		return
+	}
+
+	switch command.Op {
+	case "setQueue", "insertAfterCurrent", "appendToQueue", "moveQueueIndex", "removeQueueIndex", "clearQueue":
+		next, err := reduceQueueCommand(current, command, client.Session.DeviceID)
+		if err != nil {
+			h.sendCommandError(client, inbound.ID, command.CommandID, err.Error())
+			return
+		}
+		if err := h.saveAndBroadcast(ctx, client.Session.UserKey, next, client.Session.DeviceID, "command"); err != nil {
+			h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save shared playback state")
+			return
+		}
+		if command.Op == "setQueue" && command.AutoPlay {
+			h.applyToActiveDevice(client, inbound.ID, command.CommandID, next.ActiveDeviceID, "play", nil)
+		}
+	case "transferPlayback":
+		next, err := h.reduceTransferCommand(ctx, client, current, command)
+		if err != nil {
+			h.sendCommandError(client, inbound.ID, command.CommandID, err.Error())
+			return
+		}
+		if err := h.saveAndBroadcast(ctx, client.Session.UserKey, next, client.Session.DeviceID, "transfer"); err != nil {
+			h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save shared playback state")
+		}
+	case "playQueueIndex":
+		next, err := reducePlayQueueIndexCommand(current, command, client.Session.DeviceID)
+		if err != nil {
+			h.sendCommandError(client, inbound.ID, command.CommandID, err.Error())
+			return
+		}
+		if err := h.saveAndBroadcast(ctx, client.Session.UserKey, next, client.Session.DeviceID, "command"); err != nil {
+			h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save shared playback state")
+			return
+		}
+		h.applyToActiveDevice(client, inbound.ID, command.CommandID, next.ActiveDeviceID, "play", nil)
+	case "play", "pause", "stop", "seek", "next", "prev":
+		next := *current
+		if next.ActiveDeviceID == "" {
+			next.ActiveDeviceID = client.Session.DeviceID
+			next.Seq++
+			next.UpdatedAt = time.Now().UTC()
+			next.UpdatedByDeviceID = client.Session.DeviceID
+			if err := h.store.SaveSharedPlaybackState(ctx, next); err != nil {
+				h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save active playback device")
+				return
+			}
+			h.broadcast(client.Session.UserKey, TypePlaybackSharedUpdated, inbound.ID, sharedPayload(&next, "command"))
+		}
+		args := playbackApplyArgs(command)
+		h.applyToActiveDevice(client, inbound.ID, command.CommandID, next.ActiveDeviceID, command.Op, args)
+	default:
+		h.sendCommandError(client, inbound.ID, command.CommandID, fmt.Sprintf("unsupported playback op %q", command.Op))
 	}
 }
 
-func (h *Hub) handleRemoteResult(client *Client, inbound Envelope) {
-	var result struct {
-		CommandID string `json:"commandId"`
-		Message   string `json:"message,omitempty"`
+func (h *Hub) handlePlaybackReport(ctx context.Context, client *Client, inbound Envelope) {
+	var report struct {
+		CommandID string          `json:"commandId,omitempty"`
+		BaseSeq   *int64          `json:"baseSeq,omitempty"`
+		State     json.RawMessage `json:"state"`
 	}
-	if err := json.Unmarshal(inbound.Payload, &result); err != nil || result.CommandID == "" {
-		h.sendError(client, inbound.ID, "remote result requires commandId")
+	if err := json.Unmarshal(inbound.Payload, &report); err != nil || len(report.State) == 0 {
+		h.sendCommandError(client, inbound.ID, report.CommandID, "playback.report requires state")
 		return
 	}
-	h.mu.Lock()
-	route, ok := h.remoteRoutes[result.CommandID]
-	if ok {
-		delete(h.remoteRoutes, result.CommandID)
-	}
-	h.mu.Unlock()
-	if !ok || route.UserKey != client.Session.UserKey {
+
+	current, err := h.sharedOrDefault(ctx, client.Session.UserKey)
+	if err != nil {
+		h.sendCommandError(client, inbound.ID, report.CommandID, "failed to load shared playback state")
 		return
 	}
-	h.sendToDevice(client.Session.UserKey, route.SourceDeviceID, inbound.Type, inbound.ID, inbound.Payload)
+	if current.ActiveDeviceID != "" && current.ActiveDeviceID != client.Session.DeviceID {
+		h.sendCommandError(client, inbound.ID, report.CommandID, "only the active device can report playback state")
+		return
+	}
+
+	currentState, err := decodePlaybackState(current.State)
+	if err != nil {
+		h.sendCommandError(client, inbound.ID, report.CommandID, err.Error())
+		return
+	}
+	reportState, err := decodePlaybackState(report.State)
+	if err != nil {
+		h.sendCommandError(client, inbound.ID, report.CommandID, err.Error())
+		return
+	}
+	nextState, changed := mergePlaybackReportState(currentState, reportState)
+	if !changed {
+		return
+	}
+	raw, err := encodePlaybackState(nextState)
+	if err != nil {
+		h.sendCommandError(client, inbound.ID, report.CommandID, err.Error())
+		return
+	}
+	next := store.SharedPlaybackState{
+		UserKey:           client.Session.UserKey,
+		Seq:               current.Seq,
+		ActiveDeviceID:    current.ActiveDeviceID,
+		State:             raw,
+		UpdatedAt:         time.Now().UTC(),
+		UpdatedByDeviceID: client.Session.DeviceID,
+	}
+	if next.ActiveDeviceID == "" {
+		next.ActiveDeviceID = client.Session.DeviceID
+	}
+	if err := h.saveAndBroadcast(ctx, client.Session.UserKey, &next, client.Session.DeviceID, "report"); err != nil {
+		h.sendCommandError(client, inbound.ID, report.CommandID, "failed to save shared playback state")
+	}
+}
+
+func mergePlaybackReportState(currentState playbackStateDoc, reportState playbackStateDoc) (playbackStateDoc, bool) {
+	reportIndex := compatibleReportIndex(currentState.Queue, reportState.CurrentIndex, reportState.CurrentSongID)
+	if reportIndex == nil {
+		return currentState, false
+	}
+	next := currentState
+	previousCurrentIndex := cloneInt64Ptr(next.CurrentIndex)
+	previousPlayNextQueueLen := next.PlayNextQueueLen
+	next.PlayingState = reportState.PlayingState
+	next.CurrentIndex = reportIndex
+	next.PlayNextQueueLen = adjustedPlayNextQueueLenForCurrentChange(
+		len(next.Queue),
+		previousCurrentIndex,
+		previousPlayNextQueueLen,
+		reportIndex,
+	)
+	next.CurrentSongID = songIDAt(next.Queue, *reportIndex)
+	next.CurrentPositionMs = reportState.CurrentPositionMs
+	return next, true
+}
+
+func compatibleReportIndex(queue []json.RawMessage, reportIndex *int64, reportSongID *string) *int64 {
+	if len(queue) == 0 {
+		return nil
+	}
+	if reportIndex != nil && *reportIndex >= 0 && *reportIndex < int64(len(queue)) {
+		expectedSongID := songIDAt(queue, *reportIndex)
+		if expectedSongID == nil || (reportSongID != nil && *reportSongID == *expectedSongID) {
+			index := *reportIndex
+			return &index
+		}
+	}
+	if reportSongID == nil {
+		return nil
+	}
+	for index := range queue {
+		expectedSongID := songIDAt(queue, int64(index))
+		if expectedSongID != nil && *expectedSongID == *reportSongID {
+			compatibleIndex := int64(index)
+			return &compatibleIndex
+		}
+	}
+	return nil
+}
+
+func (h *Hub) reduceTransferCommand(ctx context.Context, client *Client, current *store.SharedPlaybackState, command playbackCommandPayload) (*store.SharedPlaybackState, error) {
+	if command.TargetDeviceID == "" {
+		return nil, errors.New("transferPlayback requires targetDeviceId")
+	}
+	if !h.isDeviceOnline(client.Session.UserKey, command.TargetDeviceID) {
+		return nil, errors.New("target device is offline")
+	}
+	state, err := decodePlaybackState(current.State)
+	if err != nil {
+		return nil, err
+	}
+	if current.ActiveDeviceID == "" {
+		current.ActiveDeviceID = client.Session.DeviceID
+	} else if current.ActiveDeviceID == command.TargetDeviceID {
+		return nil, errors.New("target device is already active")
+	}
+	if len(state.Queue) == 0 {
+		return nil, errors.New("playback queue is empty")
+	}
+	state.CurrentPositionMs = estimatedPosition(current, state)
+	raw, err := encodePlaybackState(state)
+	if err != nil {
+		return nil, err
+	}
+	return &store.SharedPlaybackState{
+		UserKey:           client.Session.UserKey,
+		Seq:               current.Seq + 1,
+		ActiveDeviceID:    command.TargetDeviceID,
+		State:             raw,
+		UpdatedAt:         time.Now().UTC(),
+		UpdatedByDeviceID: client.Session.DeviceID,
+	}, nil
+}
+
+func reduceQueueCommand(current *store.SharedPlaybackState, command playbackCommandPayload, fallbackActiveDeviceID string) (*store.SharedPlaybackState, error) {
+	state, err := decodePlaybackState(current.State)
+	if err != nil {
+		return nil, err
+	}
+	switch command.Op {
+	case "setQueue":
+		state.Queue = cloneRawMessages(command.Queue)
+		state.PlayNextQueueLen = 0
+		if len(state.Queue) == 0 {
+			state.CurrentIndex = nil
+		} else if command.CurrentIndex != nil {
+			state.CurrentIndex = command.CurrentIndex
+		} else {
+			zero := int64(0)
+			state.CurrentIndex = &zero
+		}
+		state.CurrentPositionMs = 0
+		state.PlayingState = stoppedOrIdle(state.Queue)
+	case "insertAfterCurrent":
+		if len(command.Items) == 0 {
+			return current, nil
+		}
+		insertAt := playNextEndIndex(state)
+		nextQueue := make([]json.RawMessage, 0, len(state.Queue)+len(command.Items))
+		nextQueue = append(nextQueue, state.Queue[:insertAt]...)
+		nextQueue = append(nextQueue, cloneRawMessages(command.Items)...)
+		nextQueue = append(nextQueue, state.Queue[insertAt:]...)
+		state.Queue = nextQueue
+		state.PlayNextQueueLen += int64(len(command.Items))
+		if state.CurrentIndex == nil {
+			zero := int64(0)
+			state.CurrentIndex = &zero
+			state.CurrentPositionMs = 0
+			state.PlayingState = stoppedOrIdle(state.Queue)
+		}
+		clampPlayNextQueueLen(&state)
+	case "appendToQueue":
+		if len(command.Items) == 0 {
+			return current, nil
+		}
+		state.Queue = append(state.Queue, cloneRawMessages(command.Items)...)
+		if state.CurrentIndex == nil {
+			zero := int64(0)
+			state.CurrentIndex = &zero
+			state.PlayNextQueueLen = 0
+			state.CurrentPositionMs = 0
+			state.PlayingState = stoppedOrIdle(state.Queue)
+		}
+	case "moveQueueIndex":
+		if command.FromIndex == nil || command.ToIndex == nil {
+			return nil, errors.New("moveQueueIndex requires fromIndex and toIndex")
+		}
+		if err := moveQueueIndex(&state, *command.FromIndex, *command.ToIndex); err != nil {
+			return nil, err
+		}
+	case "removeQueueIndex":
+		if command.Index == nil {
+			return nil, errors.New("removeQueueIndex requires index")
+		}
+		if err := removeQueueIndex(&state, *command.Index); err != nil {
+			return nil, err
+		}
+	case "clearQueue":
+		state = emptyPlaybackState()
+	}
+	if err := normalizePlaybackState(&state); err != nil {
+		return nil, err
+	}
+	raw, err := encodePlaybackState(state)
+	if err != nil {
+		return nil, err
+	}
+	activeDeviceID := current.ActiveDeviceID
+	if activeDeviceID == "" && len(state.Queue) > 0 {
+		activeDeviceID = fallbackActiveDeviceID
+	}
+	return &store.SharedPlaybackState{
+		UserKey:           current.UserKey,
+		Seq:               current.Seq + 1,
+		ActiveDeviceID:    activeDeviceID,
+		State:             raw,
+		UpdatedAt:         time.Now().UTC(),
+		UpdatedByDeviceID: fallbackActiveDeviceID,
+	}, nil
+}
+
+func reducePlayQueueIndexCommand(current *store.SharedPlaybackState, command playbackCommandPayload, fallbackActiveDeviceID string) (*store.SharedPlaybackState, error) {
+	if command.Index == nil {
+		return nil, errors.New("playQueueIndex requires index")
+	}
+	state, err := decodePlaybackState(current.State)
+	if err != nil {
+		return nil, err
+	}
+	index := *command.Index
+	if index < 0 || index >= int64(len(state.Queue)) {
+		return nil, errors.New("playback queue index is out of range")
+	}
+	previousCurrentIndex := cloneInt64Ptr(state.CurrentIndex)
+	previousPlayNextQueueLen := state.PlayNextQueueLen
+	state.CurrentIndex = &index
+	state.PlayNextQueueLen = adjustedPlayNextQueueLenForCurrentChange(
+		len(state.Queue),
+		previousCurrentIndex,
+		previousPlayNextQueueLen,
+		&index,
+	)
+	state.CurrentPositionMs = 0
+	state.PlayingState = stoppedOrIdle(state.Queue)
+	if err := normalizePlaybackState(&state); err != nil {
+		return nil, err
+	}
+	raw, err := encodePlaybackState(state)
+	if err != nil {
+		return nil, err
+	}
+	activeDeviceID := current.ActiveDeviceID
+	if activeDeviceID == "" {
+		activeDeviceID = fallbackActiveDeviceID
+	}
+	return &store.SharedPlaybackState{
+		UserKey:           current.UserKey,
+		Seq:               current.Seq + 1,
+		ActiveDeviceID:    activeDeviceID,
+		State:             raw,
+		UpdatedAt:         time.Now().UTC(),
+		UpdatedByDeviceID: fallbackActiveDeviceID,
+	}, nil
+}
+
+func moveQueueIndex(state *playbackStateDoc, fromIndex, toIndex int64) error {
+	if fromIndex < 0 || toIndex < 0 || fromIndex >= int64(len(state.Queue)) || toIndex >= int64(len(state.Queue)) {
+		return errors.New("playback queue index is out of range")
+	}
+	if fromIndex == toIndex {
+		return nil
+	}
+	previousCurrentIndex := cloneInt64Ptr(state.CurrentIndex)
+	previousPlayNextQueueLen := state.PlayNextQueueLen
+	entry := state.Queue[fromIndex]
+	state.Queue = append(state.Queue[:fromIndex], state.Queue[fromIndex+1:]...)
+	state.Queue = append(state.Queue[:toIndex], append([]json.RawMessage{entry}, state.Queue[toIndex:]...)...)
+
+	if state.CurrentIndex != nil {
+		current := *state.CurrentIndex
+		switch {
+		case current == fromIndex:
+			current = toIndex
+		case fromIndex < current && toIndex >= current:
+			current--
+		case fromIndex > current && toIndex <= current:
+			current++
+		}
+		state.CurrentIndex = &current
+	}
+	if int64PtrEqual(previousCurrentIndex, state.CurrentIndex) {
+		state.PlayNextQueueLen = clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, previousPlayNextQueueLen)
+	} else {
+		state.PlayNextQueueLen = adjustedPlayNextQueueLenForCurrentChange(
+			len(state.Queue),
+			previousCurrentIndex,
+			previousPlayNextQueueLen,
+			state.CurrentIndex,
+		)
+	}
+	return nil
+}
+
+func removeQueueIndex(state *playbackStateDoc, index int64) error {
+	if index < 0 || index >= int64(len(state.Queue)) {
+		return errors.New("playback queue index is out of range")
+	}
+	previousCurrentIndex := cloneInt64Ptr(state.CurrentIndex)
+	previousPlayNextQueueLen := state.PlayNextQueueLen
+	removingCurrent := state.CurrentIndex != nil && *state.CurrentIndex == index
+	wasInPlayNextQueue := isPlayNextQueueIndex(len(state.Queue), previousCurrentIndex, previousPlayNextQueueLen, index)
+	state.Queue = append(state.Queue[:index], state.Queue[index+1:]...)
+	if len(state.Queue) == 0 {
+		state.CurrentIndex = nil
+		state.PlayNextQueueLen = 0
+		state.CurrentPositionMs = 0
+		state.PlayingState = "idle"
+		return nil
+	}
+	if state.CurrentIndex != nil {
+		current := *state.CurrentIndex
+		switch {
+		case current > index:
+			current--
+		case current == index && current >= int64(len(state.Queue)):
+			current = int64(len(state.Queue) - 1)
+		}
+		state.CurrentIndex = &current
+		if current == index {
+			state.CurrentPositionMs = 0
+		}
+	}
+	nextPlayNextQueueLen := previousPlayNextQueueLen
+	if removingCurrent && nextPlayNextQueueLen > 0 {
+		nextPlayNextQueueLen--
+	} else if wasInPlayNextQueue && nextPlayNextQueueLen > 0 {
+		nextPlayNextQueueLen--
+	}
+	state.PlayNextQueueLen = clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, nextPlayNextQueueLen)
+	return nil
+}
+
+func (h *Hub) saveAndBroadcast(ctx context.Context, userKey string, state *store.SharedPlaybackState, updatedByDeviceID, reason string) error {
+	if state.UserKey == "" {
+		state.UserKey = userKey
+	}
+	if state.UpdatedAt.IsZero() {
+		state.UpdatedAt = time.Now().UTC()
+	}
+	if state.UpdatedByDeviceID == "" {
+		state.UpdatedByDeviceID = updatedByDeviceID
+	}
+	if err := h.store.SaveSharedPlaybackState(ctx, *state); err != nil {
+		return err
+	}
+	h.broadcast(userKey, TypePlaybackSharedUpdated, "", sharedPayload(state, reason))
+	return nil
+}
+
+func (h *Hub) applyToActiveDevice(client *Client, replyTo, commandID, activeDeviceID, op string, args map[string]any) {
+	if activeDeviceID == "" {
+		h.sendCommandError(client, replyTo, commandID, "active device is unavailable")
+		return
+	}
+	if !h.sendToDevice(client.Session.UserKey, activeDeviceID, TypePlaybackApply, replyTo, mustJSON(map[string]any{
+		"commandId": commandID,
+		"op":        op,
+		"args":      args,
+	})) {
+		h.sendCommandError(client, replyTo, commandID, "active device is offline")
+	}
+}
+
+func playbackApplyArgs(command playbackCommandPayload) map[string]any {
+	args := map[string]any{}
+	if command.PositionMs != nil {
+		args["positionMs"] = *command.PositionMs
+	}
+	if command.Index != nil {
+		args["index"] = *command.Index
+	}
+	return args
+}
+
+func (h *Hub) freezeActiveDeviceIfOffline(ctx context.Context, session store.Session) {
+	if h.isDeviceOnline(session.UserKey, session.DeviceID) {
+		return
+	}
+	current, err := h.sharedOrDefault(ctx, session.UserKey)
+	if err != nil || current.ActiveDeviceID != session.DeviceID {
+		return
+	}
+	state, err := decodePlaybackState(current.State)
+	if err != nil {
+		return
+	}
+	if state.PlayingState == "playing" {
+		state.CurrentPositionMs = estimatedPosition(current, state)
+	}
+	state.PlayingState = stoppedOrIdle(state.Queue)
+	raw, err := encodePlaybackState(state)
+	if err != nil {
+		return
+	}
+	next := store.SharedPlaybackState{
+		UserKey:           session.UserKey,
+		Seq:               current.Seq + 1,
+		ActiveDeviceID:    "",
+		State:             raw,
+		UpdatedAt:         time.Now().UTC(),
+		UpdatedByDeviceID: session.DeviceID,
+	}
+	_ = h.saveAndBroadcast(ctx, session.UserKey, &next, session.DeviceID, "activeOffline")
+}
+
+func (h *Hub) sharedOrDefault(ctx context.Context, userKey string) (*store.SharedPlaybackState, error) {
+	current, err := h.store.GetSharedPlaybackState(ctx, userKey)
+	if err != nil {
+		return nil, err
+	}
+	if current != nil {
+		return current, nil
+	}
+	state, err := encodePlaybackState(emptyPlaybackState())
+	if err != nil {
+		return nil, err
+	}
+	return &store.SharedPlaybackState{
+		UserKey:   userKey,
+		Seq:       0,
+		State:     state,
+		UpdatedAt: time.Now().UTC(),
+	}, nil
+}
+
+func decodePlaybackState(raw json.RawMessage) (playbackStateDoc, error) {
+	var state playbackStateDoc
+	if len(raw) == 0 {
+		return emptyPlaybackState(), nil
+	}
+	if err := json.Unmarshal(raw, &state); err != nil {
+		return playbackStateDoc{}, errors.New("state must be a JSON object compatible with PlaybackStatus")
+	}
+	if state.PlayingState == "" {
+		state.PlayingState = "idle"
+	}
+	if state.Queue == nil {
+		state.Queue = []json.RawMessage{}
+	}
+	if err := normalizePlaybackState(&state); err != nil {
+		return playbackStateDoc{}, err
+	}
+	return state, nil
+}
+
+func normalizePlaybackState(state *playbackStateDoc) error {
+	if state.CurrentPositionMs < 0 {
+		return errors.New("state.currentPositionMs must not be negative")
+	}
+	if state.PlayNextQueueLen < 0 {
+		return errors.New("state.playNextQueueLen must not be negative")
+	}
+	if len(state.Queue) == 0 {
+		state.CurrentIndex = nil
+		state.CurrentSongID = nil
+		state.PlayNextQueueLen = 0
+		state.CurrentPositionMs = 0
+		if state.PlayingState == "" || state.PlayingState == "stopped" || state.PlayingState == "paused" || state.PlayingState == "playing" {
+			state.PlayingState = "idle"
+		}
+		return nil
+	}
+	if state.CurrentIndex != nil {
+		if *state.CurrentIndex < 0 || *state.CurrentIndex >= int64(len(state.Queue)) {
+			return errors.New("state.currentIndex is out of range")
+		}
+		songID := songIDAt(state.Queue, *state.CurrentIndex)
+		state.CurrentSongID = songID
+	} else {
+		state.CurrentSongID = nil
+	}
+	clampPlayNextQueueLen(state)
+	if state.PlayingState == "" || state.PlayingState == "idle" {
+		state.PlayingState = "stopped"
+	}
+	return nil
+}
+
+func encodePlaybackState(state playbackStateDoc) (json.RawMessage, error) {
+	if state.Queue == nil {
+		state.Queue = []json.RawMessage{}
+	}
+	if err := normalizePlaybackState(&state); err != nil {
+		return nil, err
+	}
+	raw, err := json.Marshal(state)
+	return json.RawMessage(raw), err
+}
+
+func emptyPlaybackState() playbackStateDoc {
+	return playbackStateDoc{
+		PlayingState:      "idle",
+		Queue:             []json.RawMessage{},
+		CurrentPositionMs: 0,
+	}
+}
+
+func stoppedOrIdle(queue []json.RawMessage) string {
+	if len(queue) == 0 {
+		return "idle"
+	}
+	return "stopped"
+}
+
+func songIDAt(queue []json.RawMessage, index int64) *string {
+	if index < 0 || index >= int64(len(queue)) {
+		return nil
+	}
+	var entry struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(queue[index], &entry); err != nil || entry.ID == "" {
+		return nil
+	}
+	return &entry.ID
+}
+
+func playNextStartIndex(queueLen int, currentIndex *int64) int {
+	if currentIndex == nil {
+		return 0
+	}
+	start := *currentIndex + 1
+	if start < 0 {
+		return 0
+	}
+	if start > int64(queueLen) {
+		return queueLen
+	}
+	return int(start)
+}
+
+func clampedPlayNextQueueLen(queueLen int, currentIndex *int64, playNextQueueLen int64) int64 {
+	if playNextQueueLen <= 0 {
+		return 0
+	}
+	start := playNextStartIndex(queueLen, currentIndex)
+	maxLen := int64(queueLen - start)
+	if playNextQueueLen > maxLen {
+		return maxLen
+	}
+	return playNextQueueLen
+}
+
+func playNextEndIndex(state playbackStateDoc) int {
+	start := playNextStartIndex(len(state.Queue), state.CurrentIndex)
+	end := start + int(clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, state.PlayNextQueueLen))
+	if end > len(state.Queue) {
+		return len(state.Queue)
+	}
+	return end
+}
+
+func clampPlayNextQueueLen(state *playbackStateDoc) {
+	state.PlayNextQueueLen = clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, state.PlayNextQueueLen)
+}
+
+func isPlayNextQueueIndex(queueLen int, currentIndex *int64, playNextQueueLen int64, queueIndex int64) bool {
+	if queueIndex < 0 {
+		return false
+	}
+	start := int64(playNextStartIndex(queueLen, currentIndex))
+	end := start + clampedPlayNextQueueLen(queueLen, currentIndex, playNextQueueLen)
+	return queueIndex >= start && queueIndex < end
+}
+
+func adjustedPlayNextQueueLenForCurrentChange(queueLen int, previousCurrentIndex *int64, previousPlayNextQueueLen int64, nextCurrentIndex *int64) int64 {
+	if previousPlayNextQueueLen <= 0 {
+		return 0
+	}
+	if int64PtrEqual(previousCurrentIndex, nextCurrentIndex) {
+		return clampedPlayNextQueueLen(queueLen, nextCurrentIndex, previousPlayNextQueueLen)
+	}
+	previousStart := int64(playNextStartIndex(queueLen, previousCurrentIndex))
+	previousEnd := previousStart + clampedPlayNextQueueLen(queueLen, previousCurrentIndex, previousPlayNextQueueLen)
+	if nextCurrentIndex == nil || *nextCurrentIndex < previousStart || *nextCurrentIndex >= previousEnd {
+		return 0
+	}
+	return previousEnd - *nextCurrentIndex - 1
+}
+
+func cloneInt64Ptr(value *int64) *int64 {
+	if value == nil {
+		return nil
+	}
+	cloned := *value
+	return &cloned
+}
+
+func int64PtrEqual(a *int64, b *int64) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return *a == *b
+}
+
+func cloneRawMessages(items []json.RawMessage) []json.RawMessage {
+	if len(items) == 0 {
+		return []json.RawMessage{}
+	}
+	clone := make([]json.RawMessage, len(items))
+	for i := range items {
+		clone[i] = append(json.RawMessage(nil), items[i]...)
+	}
+	return clone
+}
+
+func sharedPayload(shared *store.SharedPlaybackState, reason string) json.RawMessage {
+	if shared == nil {
+		return mustJSON(map[string]any{
+			"seq":            0,
+			"activeDeviceId": nil,
+			"state":          emptyPlaybackState(),
+			"updateReason":   reason,
+		})
+	}
+	state, err := decodePlaybackState(shared.State)
+	if err == nil {
+		state.CurrentPositionMs = estimatedPosition(shared, state)
+	}
+	var stateValue any = json.RawMessage(shared.State)
+	if err == nil {
+		stateValue = state
+	}
+	var activeDeviceID any
+	if shared.ActiveDeviceID != "" {
+		activeDeviceID = shared.ActiveDeviceID
+	}
+	var updatedByDeviceID any
+	if shared.UpdatedByDeviceID != "" {
+		updatedByDeviceID = shared.UpdatedByDeviceID
+	}
+	return mustJSON(map[string]any{
+		"seq":               shared.Seq,
+		"activeDeviceId":    activeDeviceID,
+		"state":             stateValue,
+		"updatedAt":         shared.UpdatedAt,
+		"updatedByDeviceId": updatedByDeviceID,
+		"updateReason":      reason,
+	})
+}
+
+func estimatedPosition(shared *store.SharedPlaybackState, state playbackStateDoc) int64 {
+	if state.PlayingState != "playing" {
+		return state.CurrentPositionMs
+	}
+	elapsed := time.Since(shared.UpdatedAt).Milliseconds()
+	if elapsed < 0 {
+		elapsed = 0
+	}
+	return state.CurrentPositionMs + elapsed
 }
 
 func (h *Hub) broadcastPresence(ctx context.Context, userKey string) {
@@ -401,6 +929,12 @@ func (h *Hub) onlineDeviceIDs(userKey string) []string {
 		ids = append(ids, deviceID)
 	}
 	return ids
+}
+
+func (h *Hub) isDeviceOnline(userKey, deviceID string) bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.clients[userKey][deviceID] != nil
 }
 
 func (h *Hub) broadcast(userKey, typ, replyTo string, payload json.RawMessage) {
@@ -441,56 +975,17 @@ func (h *Hub) send(client *Client, typ, replyTo string, payload json.RawMessage)
 	}
 }
 
-func (h *Hub) sendError(client *Client, replyTo, message string) {
-	h.send(client, TypeRemoteError, replyTo, mustJSON(map[string]any{"message": message}))
-}
-
-func snapshotPayload(snapshot *store.PlaybackSnapshot) json.RawMessage {
-	if snapshot == nil {
-		return mustJSON(map[string]any{"snapshot": nil})
-	}
-	return mustJSON(map[string]any{
-		"seq":            snapshot.Seq,
-		"sourceDeviceId": snapshot.SourceDeviceID,
-		"state":          json.RawMessage(snapshot.State),
-		"playingState":   snapshot.PlayingState,
-		"currentSongId":  snapshot.CurrentSongID,
-		"currentIndex":   snapshot.CurrentIndex,
-		"positionMs":     estimatedPosition(*snapshot),
-		"updatedAt":      snapshot.UpdatedAt,
-	})
-}
-
-func snapshotsPayload(snapshots []store.PlaybackSnapshot) json.RawMessage {
-	payloads := make([]json.RawMessage, 0, len(snapshots))
-	for i := range snapshots {
-		payloads = append(payloads, snapshotPayload(&snapshots[i]))
-	}
-	return mustJSON(map[string]any{"snapshots": payloads})
-}
-
-func estimatedPosition(snapshot store.PlaybackSnapshot) int64 {
-	if snapshot.PlayingState != "playing" {
-		return snapshot.CurrentPositionMs
-	}
-	elapsed := time.Since(snapshot.UpdatedAt).Milliseconds()
-	if elapsed < 0 {
-		elapsed = 0
-	}
-	return snapshot.CurrentPositionMs + elapsed
+func (h *Hub) sendCommandError(client *Client, replyTo, commandID, message string) {
+	h.send(client, TypePlaybackCommandError, replyTo, mustJSON(map[string]any{
+		"commandId": commandID,
+		"message":   message,
+	}))
 }
 
 func mustJSON(value any) json.RawMessage {
 	raw, err := json.Marshal(value)
 	if err != nil {
 		return json.RawMessage(`{"error":"json marshal failed"}`)
-	}
-	return raw
-}
-
-func jsonOrNil(raw json.RawMessage) any {
-	if len(raw) == 0 {
-		return nil
 	}
 	return raw
 }

@@ -21,7 +21,7 @@ func TestMigrateCreatesSchema(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if version != "2" {
+	if version != "3" {
 		t.Fatalf("unexpected schema version %s", version)
 	}
 }
@@ -61,7 +61,7 @@ func TestSessionStoresOnlyTokenHash(t *testing.T) {
 	}
 }
 
-func TestPlaybackSnapshotRejectsStaleSeq(t *testing.T) {
+func TestSharedPlaybackStatePersistsByUser(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenMemory(ctx)
 	if err != nil {
@@ -69,49 +69,34 @@ func TestPlaybackSnapshotRejectsStaleSeq(t *testing.T) {
 	}
 	defer store.Close()
 
-	first := PlaybackSnapshot{
-		UserKey:        "user",
-		Seq:            2,
-		SourceDeviceID: "device-a",
-		State:          json.RawMessage(`{"playingState":"playing"}`),
-		PlayingState:   "playing",
-		UpdatedAt:      time.Now(),
+	first := SharedPlaybackState{
+		UserKey:           "user",
+		Seq:               1,
+		ActiveDeviceID:    "device-a",
+		State:             json.RawMessage(`{"playingState":"playing","queue":[],"currentIndex":null,"currentPositionMs":10,"currentSongId":null}`),
+		UpdatedAt:         time.Now(),
+		UpdatedByDeviceID: "device-a",
 	}
-	accepted, _, err := store.SavePlaybackSnapshot(ctx, first)
-	if err != nil || !accepted {
-		t.Fatalf("expected first snapshot accepted, accepted=%v err=%v", accepted, err)
+	if err := store.SaveSharedPlaybackState(ctx, first); err != nil {
+		t.Fatal(err)
 	}
-
-	stale := first
-	stale.Seq = 1
-	accepted, current, err := store.SavePlaybackSnapshot(ctx, stale)
+	second := first
+	second.Seq = 2
+	second.ActiveDeviceID = "device-b"
+	second.UpdatedByDeviceID = "device-b"
+	if err := store.SaveSharedPlaybackState(ctx, second); err != nil {
+		t.Fatal(err)
+	}
+	current, err := store.GetSharedPlaybackState(ctx, "user")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if accepted {
-		t.Fatal("stale snapshot was accepted")
-	}
-	if current == nil || current.Seq != 2 || current.SourceDeviceID != "device-a" {
-		t.Fatalf("unexpected current snapshot: %#v", current)
-	}
-
-	secondDevice := first
-	secondDevice.SourceDeviceID = "device-b"
-	secondDevice.Seq = 1
-	accepted, _, err = store.SavePlaybackSnapshot(ctx, secondDevice)
-	if err != nil || !accepted {
-		t.Fatalf("expected second device snapshot accepted, accepted=%v err=%v", accepted, err)
-	}
-	snapshots, err := store.ListPlaybackSnapshots(ctx, "user")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(snapshots) != 2 {
-		t.Fatalf("expected two device snapshots, got %d", len(snapshots))
+	if current == nil || current.Seq != 2 || current.ActiveDeviceID != "device-b" {
+		t.Fatalf("unexpected shared playback state: %#v", current)
 	}
 }
 
-func TestClearPresenceDeletesDevicesAndPlaybackSnapshots(t *testing.T) {
+func TestClearPresenceDeletesDevicesButPreservesSharedPlayback(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenMemory(ctx)
 	if err != nil {
@@ -128,14 +113,14 @@ func TestClearPresenceDeletesDevicesAndPlaybackSnapshots(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if accepted, _, err := store.SavePlaybackSnapshot(ctx, PlaybackSnapshot{
-		UserKey:        "user",
-		Seq:            1,
-		SourceDeviceID: "device",
-		State:          json.RawMessage(`{"playingState":"playing"}`),
-		PlayingState:   "playing",
-	}); err != nil || !accepted {
-		t.Fatalf("expected snapshot accepted, accepted=%v err=%v", accepted, err)
+	if err := store.SaveSharedPlaybackState(ctx, SharedPlaybackState{
+		UserKey:           "user",
+		Seq:               1,
+		ActiveDeviceID:    "device",
+		State:             json.RawMessage(`{"playingState":"playing","queue":[],"currentIndex":null,"currentPositionMs":10,"currentSongId":null}`),
+		UpdatedByDeviceID: "device",
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := store.ClearPresence(ctx); err != nil {
@@ -148,16 +133,16 @@ func TestClearPresenceDeletesDevicesAndPlaybackSnapshots(t *testing.T) {
 	if len(devices) != 0 {
 		t.Fatalf("expected devices cleared, got %d", len(devices))
 	}
-	snapshots, err := store.ListPlaybackSnapshots(ctx, "user")
+	shared, err := store.GetSharedPlaybackState(ctx, "user")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(snapshots) != 0 {
-		t.Fatalf("expected playback snapshots cleared, got %d", len(snapshots))
+	if shared == nil || shared.Seq != 1 {
+		t.Fatalf("expected shared playback preserved, got %#v", shared)
 	}
 }
 
-func TestDeleteStaleDevicesRemovesPlaybackSnapshotsButKeepsOnlineDevices(t *testing.T) {
+func TestDeleteStaleDevicesKeepsSharedPlaybackState(t *testing.T) {
 	ctx := context.Background()
 	store, err := OpenMemory(ctx)
 	if err != nil {
@@ -174,15 +159,15 @@ func TestDeleteStaleDevicesRemovesPlaybackSnapshotsButKeepsOnlineDevices(t *test
 		if err := store.UpsertDevice(ctx, device); err != nil {
 			t.Fatal(err)
 		}
-		if accepted, _, err := store.SavePlaybackSnapshot(ctx, PlaybackSnapshot{
-			UserKey:        device.UserKey,
-			Seq:            1,
-			SourceDeviceID: device.DeviceID,
-			State:          json.RawMessage(`{"playingState":"playing"}`),
-			PlayingState:   "playing",
-		}); err != nil || !accepted {
-			t.Fatalf("expected snapshot accepted for %s, accepted=%v err=%v", device.DeviceID, accepted, err)
-		}
+	}
+	if err := store.SaveSharedPlaybackState(ctx, SharedPlaybackState{
+		UserKey:           "user",
+		Seq:               1,
+		ActiveDeviceID:    "offline-old",
+		State:             json.RawMessage(`{"playingState":"playing","queue":[],"currentIndex":null,"currentPositionMs":10,"currentSongId":null}`),
+		UpdatedByDeviceID: "offline-old",
+	}); err != nil {
+		t.Fatal(err)
 	}
 
 	if err := store.DeleteStaleDevices(ctx, "user", time.Now().Add(-time.Minute), []string{"online-old"}); err != nil {
@@ -199,15 +184,11 @@ func TestDeleteStaleDevicesRemovesPlaybackSnapshotsButKeepsOnlineDevices(t *test
 	if gotDevices["offline-old"] || !gotDevices["online-old"] || !gotDevices["fresh"] {
 		t.Fatalf("unexpected devices after cleanup: %#v", gotDevices)
 	}
-	snapshots, err := store.ListPlaybackSnapshots(ctx, "user")
+	shared, err := store.GetSharedPlaybackState(ctx, "user")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotSnapshots := map[string]bool{}
-	for _, snapshot := range snapshots {
-		gotSnapshots[snapshot.SourceDeviceID] = true
-	}
-	if gotSnapshots["offline-old"] || !gotSnapshots["online-old"] || !gotSnapshots["fresh"] {
-		t.Fatalf("unexpected snapshots after cleanup: %#v", gotSnapshots)
+	if shared == nil || shared.ActiveDeviceID != "offline-old" {
+		t.Fatalf("expected shared playback state preserved, got %#v", shared)
 	}
 }

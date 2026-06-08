@@ -1,7 +1,6 @@
 use std::{
-    collections::BTreeMap,
     sync::{Arc, Mutex},
-    time::{Duration, SystemTime, UNIX_EPOCH},
+    time::Duration,
 };
 
 use futures_util::{SinkExt, StreamExt};
@@ -22,15 +21,19 @@ use tokio_tungstenite::{
 use crate::{
     commands::{common::service, playback::active_runtime_parts},
     models::{
-        AuthInput, ConnectDevicePresence, ConnectDeviceWithPlayback, ConnectDevicesUpdated,
-        ConnectPlaybackDeviceState, ConnectPlaybackState, ConnectRuntimeStatus, ConnectSettings,
-        PlaybackStatus,
+        AuthInput, ConnectDevicePresence, ConnectDevicesUpdated, ConnectPlaybackState,
+        ConnectRuntimeStatus, ConnectSettings, ConnectSharedPlaybackState,
+        ConnectSharedPlaybackUpdated, PlaybackStatus,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
 };
 
-const CONNECT_PROTOCOL_VERSION: u32 = 1;
+const CONNECT_PROTOCOL_VERSION: u32 = 2;
+const TYPE_PLAYBACK_SHARED_SNAPSHOT: &str = "playback.shared.snapshot";
+const TYPE_PLAYBACK_SHARED_UPDATED: &str = "playback.shared.updated";
+const UPDATE_REASON_SNAPSHOT: &str = "snapshot";
+const UPDATE_REASON_ACTIVE_OFFLINE: &str = "activeOffline";
 
 #[derive(Clone)]
 pub(crate) struct ConnectState(pub Arc<ConnectRuntime>);
@@ -52,13 +55,16 @@ struct ConnectRuntimeInner {
     status: ConnectRuntimeStatus,
     sender: Option<mpsc::UnboundedSender<ConnectOutbound>>,
     device_id: Option<String>,
-    last_status: Option<ConnectPlaybackState>,
     devices: Vec<ConnectDevicePresence>,
-    playback_by_device: BTreeMap<String, ConnectPlaybackDeviceState>,
+    shared_playback: Option<ConnectSharedPlaybackState>,
+    applying_shared_seq: Option<u32>,
 }
 
 enum ConnectOutbound {
-    PlaybackState(ConnectPlaybackState),
+    PlaybackReport {
+        base_seq: u32,
+        state: ConnectPlaybackState,
+    },
     Envelope(ConnectOutboundEnvelope),
 }
 
@@ -66,6 +72,50 @@ struct ConnectOutboundEnvelope {
     id: Option<String>,
     message_type: &'static str,
     payload: serde_json::Value,
+}
+
+struct SharedPlaybackUpdate {
+    shared: ConnectSharedPlaybackState,
+    should_apply: bool,
+    allow_preserve_active_track: bool,
+}
+
+fn should_apply_shared_playback_to_backend(
+    message_type: &str,
+    shared: &ConnectSharedPlaybackState,
+    runtime_should_apply: bool,
+    is_active_device: bool,
+    should_preserve_active_snapshot: bool,
+) -> bool {
+    if !runtime_should_apply {
+        return false;
+    }
+
+    if shared.update_reason.as_deref() == Some(UPDATE_REASON_ACTIVE_OFFLINE) {
+        return false;
+    }
+
+    let is_snapshot = message_type == TYPE_PLAYBACK_SHARED_SNAPSHOT
+        || shared.update_reason.as_deref() == Some(UPDATE_REASON_SNAPSHOT);
+    if is_snapshot && is_active_device && should_preserve_active_snapshot {
+        return false;
+    }
+
+    true
+}
+
+pub(crate) fn should_defer_local_playback_restore_for_connect(
+    settings: &ConnectSettings,
+    subsonic_server_url: &str,
+) -> bool {
+    if !settings.enabled || settings.device_id.trim().is_empty() {
+        return false;
+    }
+
+    resolve_connect_server_url(settings, Some(subsonic_server_url))
+        .ok()
+        .flatten()
+        .is_some()
 }
 
 impl Default for ConnectRuntimeStatus {
@@ -86,8 +136,12 @@ impl ConnectRuntime {
         let mut inner = self.inner.lock().unwrap();
         inner.generation = inner.generation.wrapping_add(1);
         inner.sender = None;
+        inner.device_id = None;
+        inner.devices.clear();
+        inner.shared_playback = None;
         inner.status.connected = false;
         inner.status.message = Some("connect: restarting".to_string());
+        inner.status.device_id = None;
         inner.generation
     }
 
@@ -103,7 +157,7 @@ impl ConnectRuntime {
         inner.sender = None;
         inner.device_id = None;
         inner.devices.clear();
-        inner.playback_by_device.clear();
+        inner.shared_playback = None;
         let seq = inner.status.seq;
         inner.status = ConnectRuntimeStatus::default();
         inner.status.seq = seq;
@@ -117,7 +171,7 @@ impl ConnectRuntime {
         inner.sender = None;
         inner.device_id = None;
         inner.devices.clear();
-        inner.playback_by_device.clear();
+        inner.shared_playback = None;
         inner.status.enabled = server_url.is_some();
         inner.status.connected = false;
         inner.status.server_url = server_url;
@@ -131,260 +185,224 @@ impl ConnectRuntime {
         device_id: String,
         sender: mpsc::UnboundedSender<ConnectOutbound>,
     ) {
-        let cached_status = {
-            let mut inner = self.inner.lock().unwrap();
-            if inner.generation != generation {
-                return;
-            }
-            inner.sender = Some(sender.clone());
-            inner.device_id = Some(device_id.clone());
-            inner.status.enabled = true;
-            inner.status.connected = true;
-            inner.status.server_url = Some(server_url);
-            inner.status.device_id = Some(device_id);
-            inner.status.message = Some("connect: websocket connected".to_string());
-            inner.last_status.clone()
-        };
-        if let Some(status) = cached_status {
-            let _ = sender.send(ConnectOutbound::PlaybackState(status));
-        }
-    }
-
-    fn next_seq(&self, generation: u64) -> Option<u32> {
         let mut inner = self.inner.lock().unwrap();
         if inner.generation != generation {
-            return None;
+            return;
         }
-        let seq = inner.status.seq.saturating_add(1);
-        inner.status.seq = seq;
-        Some(seq)
-    }
-
-    fn publish_status(&self, status: PlaybackStatus) {
-        let state = ConnectPlaybackState::from(status);
-        let sender = {
-            let mut inner = self.inner.lock().unwrap();
-            inner.last_status = Some(state.clone());
-            inner.sender.clone()
-        };
-        if let Some(sender) = sender {
-            let _ = sender.send(ConnectOutbound::PlaybackState(state));
-        }
-    }
-
-    pub(crate) fn request_handoff(&self, source_device_id: String) -> Result<(), String> {
-        self.send_envelope(
-            None,
-            "handoff.request",
-            serde_json::json!({ "sourceDeviceId": source_device_id }),
-        )
-    }
-
-    pub(crate) fn pause_remote_device(&self, target_device_id: String) -> Result<(), String> {
-        self.send_envelope(
-            None,
-            "remote.command",
-            serde_json::json!({
-                "targetDeviceId": target_device_id,
-                "command": "pause",
-            }),
-        )
-    }
-
-    fn send_handoff_accept(
-        &self,
-        generation: u64,
-        handoff_id: String,
-        target_device_id: String,
-        snapshot: ConnectPlaybackDeviceState,
-    ) -> Result<(), String> {
-        self.send_envelope(
-            Some(generation),
-            "handoff.accept",
-            serde_json::json!({
-                "handoffId": handoff_id,
-                "targetDeviceId": target_device_id,
-                "snapshot": snapshot,
-            }),
-        )
-    }
-
-    fn send_handoff_reject(
-        &self,
-        generation: u64,
-        handoff_id: String,
-        target_device_id: String,
-        reason: String,
-    ) -> Result<(), String> {
-        self.send_envelope(
-            Some(generation),
-            "handoff.reject",
-            serde_json::json!({
-                "handoffId": handoff_id,
-                "targetDeviceId": target_device_id,
-                "reason": reason,
-            }),
-        )
-    }
-
-    fn send_handoff_complete(
-        &self,
-        generation: u64,
-        handoff_id: String,
-        source_device_id: String,
-    ) -> Result<(), String> {
-        self.send_envelope(
-            Some(generation),
-            "handoff.complete",
-            serde_json::json!({
-                "handoffId": handoff_id,
-                "sourceDeviceId": source_device_id,
-            }),
-        )
-    }
-
-    fn send_remote_ack(&self, generation: u64, command_id: String) -> Result<(), String> {
-        self.send_envelope(
-            Some(generation),
-            "remote.ack",
-            serde_json::json!({ "commandId": command_id }),
-        )
-    }
-
-    fn send_remote_error(
-        &self,
-        generation: u64,
-        command_id: String,
-        message: String,
-    ) -> Result<(), String> {
-        self.send_envelope(
-            Some(generation),
-            "remote.error",
-            serde_json::json!({
-                "commandId": command_id,
-                "message": message,
-            }),
-        )
-    }
-
-    fn send_envelope(
-        &self,
-        generation: Option<u64>,
-        message_type: &'static str,
-        payload: serde_json::Value,
-    ) -> Result<(), String> {
-        let sender = {
-            let inner = self.inner.lock().unwrap();
-            if generation.is_some_and(|expected| inner.generation != expected) {
-                return Err("connect: runtime restarted".to_string());
-            }
-            inner.sender.clone()
-        }
-        .ok_or_else(|| "connect: websocket is not connected".to_string())?;
-
-        sender
-            .send(ConnectOutbound::Envelope(ConnectOutboundEnvelope {
-                id: Some(connect_message_id(message_type)),
-                message_type,
-                payload,
-            }))
-            .map_err(|_| "connect: websocket writer is not available".to_string())
-    }
-
-    fn snapshot_for_state(
-        &self,
-        state: ConnectPlaybackState,
-    ) -> Result<ConnectPlaybackDeviceState, String> {
-        let inner = self.inner.lock().unwrap();
-        let device_id = inner
-            .device_id
-            .clone()
-            .ok_or_else(|| "connect: device id is unavailable".to_string())?;
-        Ok(ConnectPlaybackDeviceState {
-            seq: inner.status.seq.saturating_add(1),
-            source_device_id: device_id,
-            position_ms: state.current_position_ms,
-            updated_at: connect_timestamp(),
-            state,
-        })
-    }
-
-    pub(crate) fn status(&self) -> ConnectRuntimeStatus {
-        self.inner.lock().unwrap().status.clone()
-    }
-
-    pub(crate) fn devices_with_playback(&self) -> Vec<ConnectDeviceWithPlayback> {
-        let inner = self.inner.lock().unwrap();
-        inner.devices_with_playback()
+        inner.sender = Some(sender);
+        inner.device_id = Some(device_id.clone());
+        inner.status.enabled = true;
+        inner.status.connected = true;
+        inner.status.server_url = Some(server_url);
+        inner.status.device_id = Some(device_id);
+        inner.status.message = Some("connect: websocket connected".to_string());
     }
 
     fn set_devices(
         &self,
         generation: u64,
         devices: Vec<ConnectDevicePresence>,
-    ) -> Option<Vec<ConnectDeviceWithPlayback>> {
+    ) -> Option<Vec<ConnectDevicePresence>> {
         let mut inner = self.inner.lock().unwrap();
         if inner.generation != generation {
             return None;
         }
         inner.devices = devices;
-        Some(inner.devices_with_playback())
+        Some(inner.devices.clone())
     }
 
-    fn upsert_playback(
+    fn set_shared_playback(
         &self,
         generation: u64,
-        snapshot: ConnectPlaybackDeviceState,
-        republish_after_own_snapshot: bool,
-    ) -> Option<Vec<ConnectDeviceWithPlayback>> {
-        let (devices, republish) = {
-            let mut inner = self.inner.lock().unwrap();
-            if inner.generation != generation {
-                return None;
-            }
-            let is_own_snapshot = inner
-                .device_id
-                .as_deref()
-                .is_some_and(|device_id| device_id == snapshot.source_device_id);
-            let snapshot_seq = snapshot.seq;
-            let current = inner
-                .playback_by_device
-                .get(&snapshot.source_device_id)
-                .map(|state| state.seq)
-                .unwrap_or(0);
-            if snapshot_seq >= current {
-                inner
-                    .playback_by_device
-                    .insert(snapshot.source_device_id.clone(), snapshot);
-            }
-            let own_seq_advanced = is_own_snapshot && snapshot_seq >= inner.status.seq;
-            if own_seq_advanced {
-                inner.status.seq = snapshot_seq;
-            }
-            let republish = if republish_after_own_snapshot && own_seq_advanced {
-                inner.sender.clone().zip(inner.last_status.clone())
-            } else {
-                None
-            };
-            (inner.devices_with_playback(), republish)
-        };
-        if let Some((sender, status)) = republish {
-            let _ = sender.send(ConnectOutbound::PlaybackState(status));
+        shared: ConnectSharedPlaybackState,
+    ) -> Option<SharedPlaybackUpdate> {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.generation != generation {
+            return None;
         }
-        Some(devices)
+        if inner
+            .shared_playback
+            .as_ref()
+            .is_some_and(|current| shared.seq < current.seq)
+        {
+            return None;
+        }
+        inner.status.seq = shared.seq;
+        let device_id = inner.device_id.clone();
+        let was_active_device = device_id.as_ref().is_some_and(|device_id| {
+            inner
+                .shared_playback
+                .as_ref()
+                .and_then(|current| current.active_device_id.as_deref())
+                == Some(device_id.as_str())
+        });
+        let is_active_device = device_id.as_ref().is_some_and(|device_id| {
+            shared.active_device_id.as_deref() == Some(device_id.as_str())
+        });
+        let should_skip_own_report = device_id.as_ref().is_some_and(|device_id| {
+            shared.active_device_id.as_deref() == Some(device_id.as_str())
+                && shared.updated_by_device_id.as_deref() == Some(device_id.as_str())
+                && shared.update_reason.as_deref() == Some("report")
+        });
+        inner.shared_playback = Some(shared.clone());
+        Some(SharedPlaybackUpdate {
+            shared,
+            should_apply: !should_skip_own_report,
+            allow_preserve_active_track: was_active_device && is_active_device,
+        })
     }
-}
 
-impl ConnectRuntimeInner {
-    fn devices_with_playback(&self) -> Vec<ConnectDeviceWithPlayback> {
-        self.devices
-            .iter()
-            .cloned()
-            .map(|device| {
-                let playback = self.playback_by_device.get(&device.device_id).cloned();
-                ConnectDeviceWithPlayback { device, playback }
+    fn begin_apply_shared(&self, generation: u64, seq: u32) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.generation != generation {
+            return false;
+        }
+        inner.applying_shared_seq = Some(seq);
+        true
+    }
+
+    fn end_apply_shared(&self, seq: u32) {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.applying_shared_seq == Some(seq) {
+            inner.applying_shared_seq = None;
+        }
+    }
+
+    pub(crate) fn publish_status(&self, status: PlaybackStatus) {
+        let outbound = {
+            let inner = self.inner.lock().unwrap();
+            if !inner.status.connected || inner.applying_shared_seq.is_some() {
+                return;
+            }
+            let Some(shared) = inner.shared_playback.as_ref() else {
+                return;
+            };
+            let Some(device_id) = inner.device_id.as_deref() else {
+                return;
+            };
+            if shared.active_device_id.as_deref() != Some(device_id) {
+                return;
+            }
+            inner.sender.clone().map(|sender| {
+                (
+                    sender,
+                    ConnectOutbound::PlaybackReport {
+                        base_seq: shared.seq,
+                        state: ConnectPlaybackState::from(status),
+                    },
+                )
             })
-            .collect()
+        };
+        if let Some((sender, outbound)) = outbound {
+            let _ = sender.send(outbound);
+        }
+    }
+
+    pub(crate) fn request_transfer_playback(&self, target_device_id: String) -> Result<(), String> {
+        let target_device_id = target_device_id.trim().to_string();
+        {
+            let inner = self.inner.lock().unwrap();
+            Self::validate_transfer_playback_target(&inner, &target_device_id)?;
+        }
+
+        if !self.send_playback_command(
+            "transferPlayback",
+            serde_json::json!({ "targetDeviceId": target_device_id }),
+        )? {
+            return Err("connect: websocket is not connected".to_string());
+        }
+        Ok(())
+    }
+
+    pub(crate) fn send_playback_command(
+        &self,
+        op: &'static str,
+        payload: serde_json::Value,
+    ) -> Result<bool, String> {
+        let (sender, base_seq) = {
+            let inner = self.inner.lock().unwrap();
+            if !inner.status.connected {
+                return Ok(false);
+            }
+            let sender = inner
+                .sender
+                .clone()
+                .ok_or_else(|| "connect: websocket is not connected".to_string())?;
+            let base_seq = inner
+                .shared_playback
+                .as_ref()
+                .map(|shared| shared.seq)
+                .unwrap_or(0);
+            (sender, base_seq)
+        };
+
+        let mut command = match payload {
+            serde_json::Value::Object(map) => map,
+            _ => serde_json::Map::new(),
+        };
+        command.insert(
+            "commandId".to_string(),
+            serde_json::json!(connect_message_id(op)),
+        );
+        command.insert("baseSeq".to_string(), serde_json::json!(base_seq));
+        command.insert("op".to_string(), serde_json::json!(op));
+        sender
+            .send(ConnectOutbound::Envelope(ConnectOutboundEnvelope {
+                id: command
+                    .get("commandId")
+                    .and_then(|value| value.as_str())
+                    .map(ToOwned::to_owned),
+                message_type: "playback.command.request",
+                payload: serde_json::Value::Object(command),
+            }))
+            .map_err(|_| "connect: websocket writer is not available".to_string())?;
+        Ok(true)
+    }
+
+    pub(crate) fn status(&self) -> ConnectRuntimeStatus {
+        self.inner.lock().unwrap().status.clone()
+    }
+
+    pub(crate) fn devices(&self) -> Vec<ConnectDevicePresence> {
+        self.inner.lock().unwrap().devices.clone()
+    }
+
+    pub(crate) fn shared_playback(&self) -> Option<ConnectSharedPlaybackState> {
+        self.inner.lock().unwrap().shared_playback.clone()
+    }
+
+    fn device_id(&self) -> Option<String> {
+        self.inner.lock().unwrap().device_id.clone()
+    }
+
+    fn validate_transfer_playback_target(
+        inner: &ConnectRuntimeInner,
+        target_device_id: &str,
+    ) -> Result<(), String> {
+        if target_device_id.is_empty() {
+            return Err("connect: transfer target device is unavailable".to_string());
+        }
+        if !inner.status.connected {
+            return Err("connect: websocket is not connected".to_string());
+        }
+        if !inner
+            .devices
+            .iter()
+            .any(|device| device.device_id == target_device_id && device.online)
+        {
+            return Err("connect: target device is offline".to_string());
+        }
+        let shared = inner
+            .shared_playback
+            .as_ref()
+            .ok_or_else(|| "connect: shared playback state is unavailable".to_string())?;
+        if shared.active_device_id.as_deref() == Some(target_device_id) {
+            return Err("connect: target device is already active".to_string());
+        }
+        if shared.state.queue.is_empty() {
+            return Err("connect: playback queue is empty".to_string());
+        }
+        Ok(())
     }
 }
 
@@ -452,13 +470,11 @@ async fn run_connect_once(
 ) -> Result<ConnectRunResult, String> {
     let settings = {
         let settings_state = app.state::<AppSettingsState>();
-        let settings = settings_state
+        let guard = settings_state
             .0
             .lock()
-            .map_err(|_| "connect: settings state unavailable".to_string())?
-            .snapshot()
-            .0;
-        settings
+            .map_err(|_| "connect: settings state unavailable".to_string())?;
+        guard.snapshot().0
     };
 
     if !settings.connect.enabled {
@@ -532,25 +548,19 @@ async fn run_connect_once(
 
     loop {
         tokio::select! {
-            Some(outbound) = receiver.recv() => {
+            outbound = receiver.recv() => {
                 match outbound {
-                    ConnectOutbound::PlaybackState(state) => {
-                        let Some(seq) = runtime.next_seq(generation) else {
-                            return Ok(ConnectRunResult::Restart);
-                        };
+                    Some(ConnectOutbound::PlaybackReport { base_seq, state }) => {
                         let envelope = ConnectEnvelope {
-                            id: Some(format!("playback-{seq}")),
-                            message_type: "playback.state.publish",
+                            id: Some(connect_message_id("playback-report")),
+                            message_type: "playback.report",
                             protocol_version: CONNECT_PROTOCOL_VERSION,
                             device_id: &login_response.device_id,
-                            payload: PlaybackPublishPayload {
-                                seq,
-                                state,
-                            },
+                            payload: PlaybackReportPayload { base_seq, state },
                         };
                         write_json_message(&mut write, &envelope).await?;
                     }
-                    ConnectOutbound::Envelope(outbound) => {
+                    Some(ConnectOutbound::Envelope(outbound)) => {
                         let envelope = ConnectEnvelope {
                             id: outbound.id,
                             message_type: outbound.message_type,
@@ -560,6 +570,7 @@ async fn run_connect_once(
                         };
                         write_json_message(&mut write, &envelope).await?;
                     }
+                    None => return Ok(ConnectRunResult::Restart),
                 }
             }
             _ = heartbeat.tick() => {
@@ -575,7 +586,7 @@ async fn run_connect_once(
             incoming = read.next() => {
                 match incoming {
                     Some(Ok(message)) => {
-                        handle_incoming_message(app, runtime.as_ref(), generation, message).await?;
+                        handle_incoming_message(app, runtime.clone(), generation, message).await?;
                     }
                     Some(Err(error)) => return Err(format!("connect: websocket read failed: {error}")),
                     None => return Ok(ConnectRunResult::Restart),
@@ -601,7 +612,7 @@ where
 
 async fn handle_incoming_message(
     app: &tauri::AppHandle,
-    runtime: &ConnectRuntime,
+    runtime: Arc<ConnectRuntime>,
     generation: u64,
     message: Message,
 ) -> Result<(), String> {
@@ -631,204 +642,76 @@ async fn handle_incoming_message(
                 emit_devices_updated(app, devices);
             }
         }
-        "playback.state.snapshot" => {
-            for snapshot in playback_snapshots_from_payload(payload)? {
-                if let Some(devices) = runtime.upsert_playback(generation, snapshot, true) {
-                    emit_devices_updated(app, devices);
+        TYPE_PLAYBACK_SHARED_SNAPSHOT | TYPE_PLAYBACK_SHARED_UPDATED => {
+            let message_type = envelope.message_type.as_str();
+            let shared: ConnectSharedPlaybackState = serde_json::from_value(payload)
+                .map_err(|error| format!("connect: shared playback decode failed: {error}"))?;
+            if let Some(update) = runtime.set_shared_playback(generation, shared) {
+                emit_shared_playback_updated(app, update.shared.clone());
+                let is_active_device = runtime.device_id().as_deref().is_some_and(|device_id| {
+                    update.shared.active_device_id.as_deref() == Some(device_id)
+                });
+                let should_preserve_active_snapshot =
+                    is_active_device && should_preserve_active_connect_snapshot(app);
+                if should_apply_shared_playback_to_backend(
+                    message_type,
+                    &update.shared,
+                    update.should_apply,
+                    is_active_device,
+                    should_preserve_active_snapshot,
+                ) {
+                    if let Err(error) = apply_shared_playback_state(
+                        app.clone(),
+                        runtime.clone(),
+                        generation,
+                        update.shared,
+                        update.allow_preserve_active_track,
+                    )
+                    .await
+                    {
+                        log::warn!("connect: shared playback apply failed: {error}");
+                    }
                 }
             }
         }
-        "playback.state.updated" => {
-            let snapshot: ConnectPlaybackDeviceState = serde_json::from_value(payload)
-                .map_err(|error| format!("connect: playback update decode failed: {error}"))?;
-            if let Some(devices) = runtime.upsert_playback(generation, snapshot, false) {
-                emit_devices_updated(app, devices);
+        "playback.apply" => {
+            let payload: PlaybackApplyPayload = serde_json::from_value(payload)
+                .map_err(|error| format!("connect: playback apply decode failed: {error}"))?;
+            if let Err(error) = execute_playback_apply(app.clone(), payload).await {
+                log::warn!("connect: playback apply failed: {error}");
             }
         }
-        "handoff.request" => {
-            handle_handoff_request(app.clone(), runtime, generation, payload).await?;
-        }
-        "handoff.accept" => {
-            handle_handoff_accept(app.clone(), runtime, generation, payload).await?;
-        }
-        "handoff.reject" => {
-            let payload: HandoffRejectPayload = serde_json::from_value(payload)
-                .map_err(|error| format!("connect: handoff reject decode failed: {error}"))?;
+        "playback.command.error" => {
+            let payload: PlaybackCommandErrorPayload = serde_json::from_value(payload)
+                .map_err(|error| format!("connect: command error decode failed: {error}"))?;
             log::warn!(
-                "connect: handoff rejected handoff_id={} reason={}",
-                payload.handoff_id,
-                payload.reason.unwrap_or_default()
+                "connect: command failed command_id={} message={}",
+                payload.command_id.unwrap_or_default(),
+                payload.message
             );
         }
-        "handoff.complete" => {
-            handle_handoff_complete(app.clone(), payload).await?;
-        }
-        "remote.command" => {
-            handle_remote_command(app.clone(), runtime, generation, payload).await?;
-        }
-        "remote.error" => {
-            let payload: RemoteErrorPayload = serde_json::from_value(payload)
-                .map_err(|error| format!("connect: remote error decode failed: {error}"))?;
-            log::warn!(
-                "connect: remote command failed command_id={} message={}",
-                payload.command_id,
-                payload.message.unwrap_or_default()
-            );
-        }
-        "remote.ack" => {}
         _ => {}
     }
 
     Ok(())
 }
 
-async fn handle_handoff_request(
+async fn apply_shared_playback_state(
     app: tauri::AppHandle,
-    runtime: &ConnectRuntime,
+    runtime: Arc<ConnectRuntime>,
     generation: u64,
-    payload: serde_json::Value,
+    shared: ConnectSharedPlaybackState,
+    allow_preserve_active_track: bool,
 ) -> Result<(), String> {
-    let payload: HandoffRequestPayload = serde_json::from_value(payload)
-        .map_err(|error| format!("connect: handoff request decode failed: {error}"))?;
-
-    let status = match current_playback_status(app).await {
-        Ok(status) => status,
-        Err(error) => {
-            let _ = runtime.send_handoff_reject(
-                generation,
-                payload.handoff_id,
-                payload.target_device_id,
-                error,
-            );
-            return Ok(());
-        }
-    };
-
-    let snapshot = runtime.snapshot_for_state(ConnectPlaybackState::from(status))?;
-    runtime.send_handoff_accept(
-        generation,
-        payload.handoff_id,
-        payload.target_device_id,
-        snapshot,
-    )?;
-    Ok(())
-}
-
-async fn handle_handoff_accept(
-    app: tauri::AppHandle,
-    runtime: &ConnectRuntime,
-    generation: u64,
-    payload: serde_json::Value,
-) -> Result<(), String> {
-    let payload: HandoffAcceptPayload = serde_json::from_value(payload)
-        .map_err(|error| format!("connect: handoff accept decode failed: {error}"))?;
-
-    if let Some(snapshot) = payload.snapshot {
-        let snapshot = decode_handoff_snapshot(snapshot)?;
-        apply_takeover_snapshot(app, snapshot).await?;
+    let device_id = runtime
+        .device_id()
+        .ok_or_else(|| "connect: device id is unavailable".to_string())?;
+    let is_active = shared.active_device_id.as_deref() == Some(device_id.as_str());
+    if !runtime.begin_apply_shared(generation, shared.seq) {
+        return Ok(());
     }
-
-    runtime.send_handoff_complete(generation, payload.handoff_id, payload.source_device_id)?;
-    Ok(())
-}
-
-async fn handle_handoff_complete(
-    app: tauri::AppHandle,
-    payload: serde_json::Value,
-) -> Result<(), String> {
-    let payload: HandoffCompletePayload = serde_json::from_value(payload)
-        .map_err(|error| format!("connect: handoff complete decode failed: {error}"))?;
-    if let Some(snapshot) = payload.snapshot {
-        let snapshot = decode_handoff_snapshot(snapshot)?;
-        apply_takeover_snapshot(app, snapshot).await?;
-    }
-    Ok(())
-}
-
-async fn handle_remote_command(
-    app: tauri::AppHandle,
-    runtime: &ConnectRuntime,
-    generation: u64,
-    payload: serde_json::Value,
-) -> Result<(), String> {
-    let payload: RemoteCommandPayload = serde_json::from_value(payload)
-        .map_err(|error| format!("connect: remote command decode failed: {error}"))?;
-
-    match execute_remote_playback_command(app, &payload.command).await {
-        Ok(()) => runtime.send_remote_ack(generation, payload.command_id)?,
-        Err(error) => runtime.send_remote_error(generation, payload.command_id, error)?,
-    }
-    Ok(())
-}
-
-async fn current_playback_status(app: tauri::AppHandle) -> Result<PlaybackStatus, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let sessions = app.state::<ActiveSessionState>();
-        let cover_art_cache = app.state::<CoverArtCacheState>();
-        let playback = app.state::<PlaybackControllerState>();
-        let context_parts = active_runtime_parts(&app, &sessions);
-        let mut controller = playback
-            .0
-            .lock()
-            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-
-        match context_parts {
-            Ok((ref client, ref capability_matrix, ref profile_id)) => {
-                let runtime_context = PlaybackRuntimeContext {
-                    client,
-                    capability_matrix,
-                    cover_art_cache: Some(&cover_art_cache.0),
-                    profile_id: Some(profile_id.as_str()),
-                };
-                controller.synced_state_with_context(Some(&runtime_context))
-            }
-            Err(_) => controller.synced_state(),
-        }
-    })
-    .await
-    .map_err(|error| format!("connect: playback status task failed: {error}"))?
-}
-
-async fn apply_takeover_snapshot(
-    app: tauri::AppHandle,
-    snapshot: ConnectPlaybackDeviceState,
-) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let sessions = app.state::<ActiveSessionState>();
-        let cover_art_cache = app.state::<CoverArtCacheState>();
-        let playback = app.state::<PlaybackControllerState>();
-        let (active_client, active_capability_matrix, active_profile_id) =
-            active_runtime_parts(&app, &sessions)?;
-
-        let mut state = snapshot.state;
-        let current_index = takeover_current_index(&state)
-            .ok_or_else(|| "connect: source playback queue is empty".to_string())?;
-        let queue = std::mem::take(&mut state.queue);
-        let runtime_context = PlaybackRuntimeContext {
-            client: &active_client,
-            capability_matrix: &active_capability_matrix,
-            cover_art_cache: Some(&cover_art_cache.0),
-            profile_id: Some(&active_profile_id),
-        };
-
-        let mut controller = playback
-            .0
-            .lock()
-            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-        controller.set_queue(queue, Some(current_index))?;
-        controller.set_position(snapshot.position_ms)?;
-        controller.play(&runtime_context).map(|_| ())
-    })
-    .await
-    .map_err(|error| format!("connect: takeover task failed: {error}"))?
-}
-
-async fn execute_remote_playback_command(
-    app: tauri::AppHandle,
-    command: &str,
-) -> Result<(), String> {
-    let command = command.to_string();
-    tauri::async_runtime::spawn_blocking(move || {
+    let seq = shared.seq;
+    let result = tauri::async_runtime::spawn_blocking(move || {
         let sessions = app.state::<ActiveSessionState>();
         let cover_art_cache = app.state::<CoverArtCacheState>();
         let playback = app.state::<PlaybackControllerState>();
@@ -848,100 +731,119 @@ async fn execute_remote_playback_command(
             .lock()
             .map_err(|_| "The playback controller state is unavailable.".to_string())?;
 
-        match (command.as_str(), runtime_context.as_ref()) {
-            ("pause", Some((client, capability_matrix, profile_id, cover_art_cache))) => {
-                let runtime_context = PlaybackRuntimeContext {
-                    client,
-                    capability_matrix,
-                    cover_art_cache: Some(cover_art_cache),
-                    profile_id: Some(profile_id),
-                };
-                controller
-                    .pause_with_context(Some(&runtime_context))
-                    .map(|_| ())
-            }
-            ("pause", None) => controller.pause().map(|_| ()),
-            ("stop", Some((client, capability_matrix, profile_id, cover_art_cache))) => {
-                let runtime_context = PlaybackRuntimeContext {
-                    client,
-                    capability_matrix,
-                    cover_art_cache: Some(cover_art_cache),
-                    profile_id: Some(profile_id),
-                };
-                controller
-                    .stop_with_context(Some(&runtime_context))
-                    .map(|_| ())
-            }
-            ("stop", None) => controller.stop().map(|_| ()),
-            _ => Err(format!("connect: unsupported remote command {command:?}")),
+        if let Some((active_client, active_capability_matrix, active_profile_id, cover_art_cache)) =
+            runtime_context.as_ref()
+        {
+            let context = PlaybackRuntimeContext {
+                client: active_client,
+                capability_matrix: active_capability_matrix,
+                cover_art_cache: Some(cover_art_cache),
+                profile_id: Some(active_profile_id),
+            };
+            controller.apply_connect_shared_state(
+                Some(&context),
+                shared.state,
+                is_active,
+                allow_preserve_active_track,
+            )
+        } else {
+            controller.apply_connect_shared_state(
+                None,
+                shared.state,
+                is_active,
+                allow_preserve_active_track,
+            )
         }
     })
     .await
-    .map_err(|error| format!("connect: remote command task failed: {error}"))?
+    .map_err(|error| format!("connect: apply shared playback task failed: {error}"));
+    runtime.end_apply_shared(seq);
+    let result = result?;
+    result.map(|_| ())
 }
 
-fn takeover_current_index(state: &ConnectPlaybackState) -> Option<u32> {
-    if state.queue.is_empty() {
-        return None;
-    }
-    if let Some(index) = state.current_index {
-        if (index as usize) < state.queue.len() {
-            return Some(index);
+fn should_preserve_active_connect_snapshot(app: &tauri::AppHandle) -> bool {
+    let Some(active_profile_id) = app
+        .state::<ActiveSessionState>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|session| session.as_ref().map(|session| session.profile_id.clone()))
+    else {
+        return false;
+    };
+
+    app.state::<PlaybackControllerState>()
+        .0
+        .lock()
+        .ok()
+        .is_some_and(|controller| {
+            controller.can_preserve_active_connect_snapshot_for_profile(&active_profile_id)
+        })
+}
+
+async fn execute_playback_apply(
+    app: tauri::AppHandle,
+    payload: PlaybackApplyPayload,
+) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let sessions = app.state::<ActiveSessionState>();
+        let cover_art_cache = app.state::<CoverArtCacheState>();
+        let playback = app.state::<PlaybackControllerState>();
+        let (active_client, active_capability_matrix, active_profile_id) =
+            active_runtime_parts(&app, &sessions)?;
+        let runtime_context = PlaybackRuntimeContext {
+            client: &active_client,
+            capability_matrix: &active_capability_matrix,
+            cover_art_cache: Some(&cover_art_cache.0),
+            profile_id: Some(&active_profile_id),
+        };
+
+        let mut controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+
+        match payload.op.as_str() {
+            "play" => controller.play(&runtime_context).map(|_| ()),
+            "pause" => controller
+                .pause_with_context(Some(&runtime_context))
+                .map(|_| ()),
+            "stop" => controller
+                .stop_with_context(Some(&runtime_context))
+                .map(|_| ()),
+            "seek" => {
+                let position_ms = payload
+                    .args
+                    .as_ref()
+                    .and_then(|args| args.position_ms)
+                    .ok_or_else(|| "connect: seek requires positionMs".to_string())?;
+                controller.seek(&runtime_context, position_ms).map(|_| ())
+            }
+            "next" => controller.next(&runtime_context).map(|_| ()),
+            "prev" => controller.prev(&runtime_context).map(|_| ()),
+            _ => Err(format!(
+                "connect: unsupported playback apply op {:?}",
+                payload.op
+            )),
         }
-    }
-    if let Some(current_song_id) = state.current_song_id.as_deref() {
-        if let Some(index) = state
-            .queue
-            .iter()
-            .position(|song| song.id == current_song_id)
-            .and_then(|index| u32::try_from(index).ok())
-        {
-            return Some(index);
-        }
-    }
-    Some(0)
+    })
+    .await
+    .map_err(|error| format!("connect: playback apply task failed: {error}"))?
 }
 
-fn decode_handoff_snapshot(value: serde_json::Value) -> Result<ConnectPlaybackDeviceState, String> {
-    match serde_json::from_value::<ConnectPlaybackDeviceState>(value.clone()) {
-        Ok(snapshot) => Ok(snapshot),
-        Err(_) => {
-            let snapshot: StoredPlaybackSnapshotPayload = serde_json::from_value(value)
-                .map_err(|error| format!("connect: handoff snapshot decode failed: {error}"))?;
-            Ok(ConnectPlaybackDeviceState {
-                seq: snapshot.seq,
-                source_device_id: snapshot.source_device_id,
-                position_ms: snapshot.current_position_ms,
-                updated_at: snapshot.updated_at,
-                state: snapshot.state,
-            })
-        }
-    }
-}
-
-fn playback_snapshots_from_payload(
-    payload: serde_json::Value,
-) -> Result<Vec<ConnectPlaybackDeviceState>, String> {
-    if payload.get("snapshots").is_some() {
-        let payload: PlaybackSnapshotsPayload = serde_json::from_value(payload)
-            .map_err(|error| format!("connect: playback snapshots decode failed: {error}"))?;
-        return Ok(payload.snapshots);
-    }
-
-    if payload.get("snapshot").is_some() {
-        let payload: PlaybackSnapshotWrapper = serde_json::from_value(payload)
-            .map_err(|error| format!("connect: playback snapshot decode failed: {error}"))?;
-        return Ok(payload.snapshot.into_iter().collect());
-    }
-
-    let snapshot: ConnectPlaybackDeviceState = serde_json::from_value(payload)
-        .map_err(|error| format!("connect: playback snapshot decode failed: {error}"))?;
-    Ok(vec![snapshot])
-}
-
-fn emit_devices_updated(app: &tauri::AppHandle, devices: Vec<ConnectDeviceWithPlayback>) {
+fn emit_devices_updated(app: &tauri::AppHandle, devices: Vec<ConnectDevicePresence>) {
     if let Err(error) = (ConnectDevicesUpdated { devices }).emit(app) {
         log::warn!("connect: failed to emit devices update: {error}");
+    }
+}
+
+fn emit_shared_playback_updated(
+    app: &tauri::AppHandle,
+    shared_playback: ConnectSharedPlaybackState,
+) {
+    if let Err(error) = (ConnectSharedPlaybackUpdated { shared_playback }).emit(app) {
+        log::warn!("connect: failed to emit shared playback update: {error}");
     }
 }
 
@@ -983,8 +885,9 @@ struct ConnectEnvelope<'a, T> {
 }
 
 #[derive(Debug, Serialize)]
-struct PlaybackPublishPayload {
-    seq: u32,
+#[serde(rename_all = "camelCase")]
+struct PlaybackReportPayload {
+    base_seq: u32,
     state: ConnectPlaybackState,
 }
 
@@ -1001,65 +904,25 @@ struct PresenceUpdatedPayload {
 }
 
 #[derive(Debug, Deserialize)]
-struct PlaybackSnapshotsPayload {
-    snapshots: Vec<ConnectPlaybackDeviceState>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PlaybackSnapshotWrapper {
-    snapshot: Option<ConnectPlaybackDeviceState>,
+#[serde(rename_all = "camelCase")]
+struct PlaybackApplyPayload {
+    #[allow(dead_code)]
+    command_id: Option<String>,
+    op: String,
+    args: Option<PlaybackApplyArgs>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct HandoffRequestPayload {
-    handoff_id: String,
-    target_device_id: String,
+struct PlaybackApplyArgs {
+    position_ms: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct HandoffAcceptPayload {
-    handoff_id: String,
-    source_device_id: String,
-    snapshot: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct HandoffRejectPayload {
-    handoff_id: String,
-    reason: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct HandoffCompletePayload {
-    snapshot: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct StoredPlaybackSnapshotPayload {
-    seq: u32,
-    source_device_id: String,
-    state: ConnectPlaybackState,
-    current_position_ms: u32,
-    updated_at: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RemoteCommandPayload {
-    command_id: String,
-    command: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RemoteErrorPayload {
-    command_id: String,
-    message: Option<String>,
+struct PlaybackCommandErrorPayload {
+    command_id: Option<String>,
+    message: String,
 }
 
 async fn login_connect_server(
@@ -1191,6 +1054,217 @@ fn websocket_url(connect_server_url: &str) -> Result<Url, String> {
     Ok(parsed)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::{PlayingState, SongResponse};
+
+    fn shared_playback(update_reason: Option<&str>) -> ConnectSharedPlaybackState {
+        ConnectSharedPlaybackState {
+            seq: 1,
+            active_device_id: Some("device".to_string()),
+            state: ConnectPlaybackState {
+                playing_state: PlayingState::Stopped,
+                queue: Vec::new(),
+                current_index: None,
+                play_next_queue_len: 0,
+                current_position_ms: 0,
+                current_song_id: None,
+            },
+            updated_at: "2026-05-25T00:00:00Z".to_string(),
+            updated_by_device_id: Some("device".to_string()),
+            update_reason: update_reason.map(ToOwned::to_owned),
+        }
+    }
+
+    fn song(id: &str) -> SongResponse {
+        SongResponse {
+            id: id.to_string(),
+            parent_id: None,
+            path: None,
+            title: id.to_string(),
+            album: None,
+            album_id: None,
+            artist: None,
+            artist_id: None,
+            cover_art_id: None,
+            display_cover_art_id: None,
+            track: None,
+            disc_number: None,
+            year: None,
+            duration: None,
+            size: None,
+            content_type: None,
+            suffix: None,
+            bit_rate: None,
+            genre: None,
+            created: None,
+            starred: None,
+            is_directory: false,
+            media_type: None,
+        }
+    }
+
+    fn transfer_validation_inner(active_device_id: Option<&str>) -> ConnectRuntimeInner {
+        let mut shared = shared_playback(Some("snapshot"));
+        shared.active_device_id = active_device_id.map(ToOwned::to_owned);
+        shared.state.queue = vec![song("song-a")];
+        ConnectRuntimeInner {
+            status: ConnectRuntimeStatus {
+                enabled: true,
+                connected: true,
+                ..ConnectRuntimeStatus::default()
+            },
+            devices: vec![ConnectDevicePresence {
+                device_id: "target".to_string(),
+                display_name: "Target".to_string(),
+                platform: "test".to_string(),
+                app_version: "0.0.0".to_string(),
+                last_seen_at: "2026-05-25T00:00:00Z".to_string(),
+                online: true,
+            }],
+            shared_playback: Some(shared),
+            ..ConnectRuntimeInner::default()
+        }
+    }
+
+    #[test]
+    fn active_shared_snapshot_is_not_applied_to_backend() {
+        let shared = shared_playback(Some(UPDATE_REASON_SNAPSHOT));
+
+        assert!(!should_apply_shared_playback_to_backend(
+            TYPE_PLAYBACK_SHARED_SNAPSHOT,
+            &shared,
+            true,
+            true,
+            true,
+        ));
+    }
+
+    #[test]
+    fn active_shared_snapshot_is_applied_when_backend_is_uninitialized() {
+        let shared = shared_playback(Some(UPDATE_REASON_SNAPSHOT));
+
+        assert!(should_apply_shared_playback_to_backend(
+            TYPE_PLAYBACK_SHARED_SNAPSHOT,
+            &shared,
+            true,
+            true,
+            false,
+        ));
+    }
+
+    #[test]
+    fn non_active_shared_snapshot_is_applied_to_backend() {
+        let shared = shared_playback(Some(UPDATE_REASON_SNAPSHOT));
+
+        assert!(should_apply_shared_playback_to_backend(
+            TYPE_PLAYBACK_SHARED_SNAPSHOT,
+            &shared,
+            true,
+            false,
+            false,
+        ));
+    }
+
+    #[test]
+    fn active_offline_update_is_not_applied_to_backend() {
+        let shared = shared_playback(Some(UPDATE_REASON_ACTIVE_OFFLINE));
+
+        assert!(!should_apply_shared_playback_to_backend(
+            TYPE_PLAYBACK_SHARED_UPDATED,
+            &shared,
+            true,
+            true,
+            false,
+        ));
+    }
+
+    #[test]
+    fn normal_shared_update_is_applied_when_runtime_allows() {
+        let shared = shared_playback(Some("command"));
+
+        assert!(should_apply_shared_playback_to_backend(
+            TYPE_PLAYBACK_SHARED_UPDATED,
+            &shared,
+            true,
+            true,
+            true,
+        ));
+    }
+
+    #[test]
+    fn transfer_shared_update_is_applied_when_runtime_allows() {
+        let shared = shared_playback(Some("transfer"));
+
+        assert!(should_apply_shared_playback_to_backend(
+            TYPE_PLAYBACK_SHARED_UPDATED,
+            &shared,
+            true,
+            true,
+            true,
+        ));
+    }
+
+    #[test]
+    fn runtime_skip_still_prevents_backend_apply() {
+        let shared = shared_playback(Some("report"));
+
+        assert!(!should_apply_shared_playback_to_backend(
+            TYPE_PLAYBACK_SHARED_UPDATED,
+            &shared,
+            false,
+            true,
+            false,
+        ));
+    }
+
+    #[test]
+    fn transfer_validation_allows_missing_active_device() {
+        let inner = transfer_validation_inner(None);
+
+        assert!(ConnectRuntime::validate_transfer_playback_target(&inner, "target").is_ok());
+    }
+
+    #[test]
+    fn transfer_validation_still_rejects_current_active_device() {
+        let inner = transfer_validation_inner(Some("target"));
+
+        assert_eq!(
+            ConnectRuntime::validate_transfer_playback_target(&inner, "target"),
+            Err("connect: target device is already active".to_string()),
+        );
+    }
+
+    #[test]
+    fn connect_restore_deferral_requires_enabled_connect_device_and_url() {
+        let mut settings = ConnectSettings {
+            enabled: true,
+            device_id: "device-1".to_string(),
+            allow_insecure_connect_server: true,
+            ..ConnectSettings::default()
+        };
+
+        assert!(should_defer_local_playback_restore_for_connect(
+            &settings,
+            "http://subsonic.example:4533"
+        ));
+
+        settings.enabled = false;
+        assert!(!should_defer_local_playback_restore_for_connect(
+            &settings,
+            "http://subsonic.example:4533"
+        ));
+
+        settings.enabled = true;
+        settings.device_id.clear();
+        assert!(!should_defer_local_playback_restore_for_connect(
+            &settings,
+            "http://subsonic.example:4533"
+        ));
+    }
+}
+
 fn current_connect_server_url(app: &tauri::AppHandle) -> Option<String> {
     let settings = app
         .state::<AppSettingsState>()
@@ -1220,11 +1294,4 @@ fn connect_message_id(message_type: &str) -> String {
         message_type.replace('.', "-"),
         uuid::Uuid::new_v4()
     )
-}
-
-fn connect_timestamp() -> String {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis().to_string())
-        .unwrap_or_else(|_| "0".to_string())
 }

@@ -7,7 +7,7 @@ import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 
 const QueueSideBar: Component = () => {
-  const { queue, currentEntry, currentIndex, playSongs } = usePlayback();
+  const { queue, currentEntry, currentIndex, clearQueue } = usePlayback();
   const { setScrollContainerRef, setItemRef } = useQueueAutoScroll({
     currentIndex,
     currentEntryId: () => currentEntry()?.id ?? null,
@@ -50,9 +50,7 @@ const QueueSideBar: Component = () => {
           class='cursor-pointer text-[13px]'
           title='Clear Queue'
           onClick={() => {
-            // clear queue
-            // TODO: replace with clearQueue command?
-            playSongs([], 0);
+            clearQueue();
           }}
         />
       </div>

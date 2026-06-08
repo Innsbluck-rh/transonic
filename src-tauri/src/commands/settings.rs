@@ -2,7 +2,7 @@ use tauri::{AppHandle, State};
 
 use crate::{
     commands::playback::active_runtime_parts,
-    models::{AppSettings, SettingsUpdateRequest},
+    models::{effective_transcoding_codec, AppSettings, SettingsUpdateRequest},
     playback::PlaybackRuntimeContext,
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
 };
@@ -34,6 +34,54 @@ pub fn settings_update(
         let updated = guard.replace(payload.settings)?;
         (previous, updated)
     };
+
+    let previous_transcoding_codec = effective_transcoding_codec(
+        previous_settings.playback.use_custom_transcoding_codec,
+        previous_settings.playback.transcoding_codec,
+    );
+    let updated_transcoding_codec = effective_transcoding_codec(
+        updated_settings.playback.use_custom_transcoding_codec,
+        updated_settings.playback.transcoding_codec,
+    );
+
+    if previous_settings.playback.stream_mode != updated_settings.playback.stream_mode
+        || previous_settings.playback.transcoding_bitrate_limit
+            != updated_settings.playback.transcoding_bitrate_limit
+        || previous_transcoding_codec != updated_transcoding_codec
+    {
+        let mut controller = playback
+            .0
+            .lock()
+            .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+
+        let update_result = if let Ok((client, capability_matrix, profile_id)) =
+            active_runtime_parts(&app, &sessions)
+        {
+            let runtime_context = PlaybackRuntimeContext {
+                client: &client,
+                capability_matrix: &capability_matrix,
+                cover_art_cache: Some(&cover_art_cache.0),
+                profile_id: Some(&profile_id),
+            };
+            controller.set_stream_settings(
+                updated_settings.playback.stream_mode,
+                updated_settings.playback.transcoding_bitrate_limit,
+                updated_transcoding_codec,
+                Some(&runtime_context),
+            )
+        } else {
+            controller.set_stream_settings(
+                updated_settings.playback.stream_mode,
+                updated_settings.playback.transcoding_bitrate_limit,
+                updated_transcoding_codec,
+                None,
+            )
+        };
+
+        if let Err(error) = update_result {
+            log::warn!("settings_update: failed to refresh stream settings: {error}");
+        }
+    }
 
     if previous_settings.playback.gapless_playback_enabled
         != updated_settings.playback.gapless_playback_enabled

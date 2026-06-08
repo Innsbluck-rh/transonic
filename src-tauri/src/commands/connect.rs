@@ -3,8 +3,8 @@ use tauri::{AppHandle, Manager};
 use crate::{
     connect::ConnectState,
     models::{
-        ConnectDeviceWithPlayback, ConnectPlaybackTakeoverRequest, ConnectRemotePlaybackRequest,
-        ConnectRuntimeStatus,
+        ConnectDevicePresence, ConnectRuntimeStatus, ConnectSharedPlaybackState,
+        ConnectTransferPlaybackRequest,
     },
 };
 
@@ -16,28 +16,23 @@ pub fn connect_get_runtime_status(app: AppHandle) -> ConnectRuntimeStatus {
 
 #[tauri::command]
 #[specta::specta]
-pub fn connect_get_devices_with_playback(app: AppHandle) -> Vec<ConnectDeviceWithPlayback> {
-    app.state::<ConnectState>().0.devices_with_playback()
+pub fn connect_get_devices(app: AppHandle) -> Vec<ConnectDevicePresence> {
+    app.state::<ConnectState>().0.devices()
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn connect_takeover_playback(
-    app: AppHandle,
-    payload: ConnectPlaybackTakeoverRequest,
-) -> Result<(), String> {
-    app.state::<ConnectState>()
-        .0
-        .request_handoff(payload.source_device_id)
+pub fn connect_get_shared_playback(app: AppHandle) -> Option<ConnectSharedPlaybackState> {
+    app.state::<ConnectState>().0.shared_playback()
 }
 
 #[tauri::command]
 #[specta::specta]
-pub fn connect_pause_device_playback(
+pub fn connect_transfer_playback(
     app: AppHandle,
-    payload: ConnectRemotePlaybackRequest,
+    payload: ConnectTransferPlaybackRequest,
 ) -> Result<(), String> {
     app.state::<ConnectState>()
         .0
-        .pause_remote_device(payload.target_device_id)
+        .request_transfer_playback(payload.target_device_id)
 }

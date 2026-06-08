@@ -1,15 +1,27 @@
 import { onBackButtonPress } from '@tauri-apps/api/app';
 import { platform } from '@tauri-apps/plugin-os';
 import { Component, createEffect, createMemo, createSignal, JSX, on, onCleanup, onMount, Show } from 'solid-js';
-import SPPlayerBar from '~/components/sp/SPPlayerBar';
+import SPPlayerBar from '~/components/sp/player/SPPlayerBar';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { setSPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import SPPlayer from './SPPlayer';
-import { playerBarRequest } from './SPPlayerBarController';
 
-export { closePlayerBar, openPlayerBar } from './SPPlayerBarController';
+export interface PlayerBarRequest {
+  expanded: boolean;
+  immediate: boolean;
+}
+
+export const [playerBarRequest, setPlayerBarRequest] = createSignal<PlayerBarRequest | null>(null);
+
+export function openPlayerBar(immediate = false) {
+  setPlayerBarRequest({ expanded: true, immediate });
+}
+
+export function closePlayerBar(immediate = false) {
+  setPlayerBarRequest({ expanded: false, immediate });
+}
 
 interface SPExpandablePlayerBarProps {
   topOffsetPx?: number;

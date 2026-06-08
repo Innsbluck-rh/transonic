@@ -5,10 +5,6 @@ pub use backend::{
 };
 
 #[cfg(target_os = "windows")]
-#[allow(dead_code)]
-mod windows_rodio;
-
-#[cfg(target_os = "windows")]
 mod windows_symphonia;
 
 #[cfg(target_os = "windows")]

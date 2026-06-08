@@ -5,7 +5,6 @@ import AlbumHorizontalList from '~/components/common/list/album/AlbumHorizontalL
 import RouteHeader from '~/components/common/RouteHeader';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
-import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 
 type HomeAlbumSection = {
@@ -22,7 +21,6 @@ const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> 
 
 function Home() {
   const navigate = useSPNavigate();
-  const { playAlbum, insertAfterCurrent, appendToQueue } = usePlayback();
   const [albumSections, setAlbumSections] = createSignal<HomeAlbumSection[]>([]);
   const [isLoadingAlbums, setIsLoadingAlbums] = createSignal(false);
   const [albumError, setAlbumError] = createSignal<string | null>(null);

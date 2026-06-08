@@ -112,11 +112,11 @@ func (s *Server) version(w http.ResponseWriter, r *http.Request) {
 func (s *Server) capabilities(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"presence":                 true,
-		"playbackState":            true,
-		"handoff":                  true,
-		"remoteControl":            true,
+		"sharedQueue":              true,
+		"sharedPlayback":           true,
+		"playbackTransfer":         true,
 		"protocolVersion":          version.ProtocolVersion,
-		"minClientProtocolVersion": 1,
+		"minClientProtocolVersion": version.ProtocolVersion,
 	})
 }
 

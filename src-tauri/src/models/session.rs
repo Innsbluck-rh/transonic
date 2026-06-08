@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     auth::{AuthInput, AuthKind},
-    settings::{AppSettings, SettingsOrigin},
+    settings::{AppSettings, PlaybackTranscodingCodec, SettingsOrigin},
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
@@ -118,6 +118,7 @@ pub struct ActiveSession {
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackCapabilities {
     pub gapless_playback: bool,
+    pub transcoding_codecs: Vec<PlaybackTranscodingCodec>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

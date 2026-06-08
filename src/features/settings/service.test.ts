@@ -21,6 +21,10 @@ describe('settings service', () => {
       playback: {
         gaplessPlaybackEnabled: false,
         volume: 1,
+        streamMode: 'raw',
+        transcodingBitrateLimit: 320,
+        useCustomTranscodingCodec: false,
+        transcodingCodec: 'auto',
       },
       connect: {
         enabled: false,
@@ -50,6 +54,19 @@ describe('settings service', () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledWith('write failed');
     expect(settingsStore.playback.gaplessPlaybackEnabled).toBe(false);
+  });
+
+  it('rolls back optimistic playback stream setting changes when persistence fails', async () => {
+    settingsUpdate.mockResolvedValue({
+      status: 'error',
+      error: 'write failed',
+    });
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await setPlaybackSetting('streamMode', 'transcoding');
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('write failed');
+    expect(settingsStore.playback.streamMode).toBe('raw');
   });
 
   it('rolls back optimistic appearance setting changes when persistence fails', async () => {

@@ -41,6 +41,8 @@ func run(args []string, out io.Writer) error {
 	case "help", "-h", "--help":
 		printUsage(out)
 		return nil
+	case "install":
+		return runInstall(args[1:], out)
 	case "serve":
 		fs := flag.NewFlagSet("serve", flag.ExitOnError)
 		fs.SetOutput(out)
@@ -88,6 +90,8 @@ func run(args []string, out io.Writer) error {
 			return migrateStatus(*configPath)
 		}
 		return fmt.Errorf("unknown migrate command %q\n\n%s", args[1], migrateUsage())
+	case "service":
+		return runService(args[1:], out)
 	default:
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], usage())
 	}
@@ -102,20 +106,24 @@ func usage() string {
 
 Usage:
   transonic-server help
+  transonic-server install [options]
   transonic-server serve [--config path]
   transonic-server config <command>
   transonic-server migrate <command>
+  transonic-server service <command>
 
 Commands:
+  install                Install/update the Linux systemd service.
   serve                  Start the HTTP/WebSocket server.
   config print-default   Print a default JSON config.
   config generate-secret Print a random session signing secret.
   migrate status         Print the database schema version.
+  service install        Install/update the Linux systemd service.
+  service uninstall      Remove the Linux systemd service unit.
+  service status         Print systemctl status.
 
 Common first setup:
-  transonic-server config print-default > transonic.config.json
-  transonic-server config generate-secret
-  transonic-server serve --config transonic.config.json
+  sudo ./transonic-server-linux-amd64 install --open-firewall
 
 If serve logs "using ephemeral session signing secret", set
 "sessionSigningSecret" in the config to a non-placeholder secret.

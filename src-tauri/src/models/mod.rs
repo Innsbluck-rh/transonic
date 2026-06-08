@@ -6,6 +6,7 @@ mod browse;
 mod connect;
 mod cover_art;
 mod playback;
+mod search;
 mod session;
 mod settings;
 
@@ -29,20 +30,22 @@ pub use browse::{
 };
 #[allow(unused_imports)]
 pub use connect::{
-    ConnectDevicePresence, ConnectDeviceWithPlayback, ConnectDevicesUpdated,
-    ConnectPlaybackDeviceState, ConnectPlaybackState, ConnectPlaybackTakeoverRequest,
-    ConnectRemotePlaybackRequest, ConnectRuntimeStatus,
+    ConnectDevicePresence, ConnectDevicesUpdated, ConnectPlaybackState, ConnectRuntimeStatus,
+    ConnectSharedPlaybackState, ConnectSharedPlaybackUpdated, ConnectTransferPlaybackRequest,
 };
 #[allow(unused_imports)]
 pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
 #[allow(unused_imports)]
 pub use playback::{
-    GaplessState, GaplessStatus, InterruptReason, MediaNotificationTap,
+    GaplessState, GaplessStatus, InterruptReason, MediaNotificationTap, PlaybackActualStreamInfo,
     PlaybackAppendToQueueRequest, PlaybackError, PlaybackInsertAfterCurrentRequest,
     PlaybackMoveQueueIndexRequest, PlaybackPlayQueueIndexRequest, PlaybackRemoveQueueIndexRequest,
     PlaybackSeekRequest, PlaybackSetPositionRequest, PlaybackSetQueueRequest,
-    PlaybackSetVolumeRequest, PlaybackStatus, PlayingState, QueueSource,
+    PlaybackSetVolumeRequest, PlaybackStatus, PlaybackStreamInfo, PlaybackStreamRequestKind,
+    PlayingState, QueueSource,
 };
+#[allow(unused_imports)]
+pub use search::{SearchRequest, SearchResponse};
 #[allow(unused_imports)]
 pub use session::{
     ActiveSession, AppBootstrap, CapabilityMatrix, ConnectServerProfileRequest,
@@ -51,6 +54,7 @@ pub use session::{
 };
 #[allow(unused_imports)]
 pub use settings::{
-    normalize_volume, AlbumDisplayMode, AppSettings, AppearanceSettings, ConnectSettings,
-    PlaybackSettings, SettingsOrigin, SettingsUpdateRequest,
+    effective_transcoding_codec, normalize_transcoding_bitrate_limit, normalize_volume,
+    AlbumDisplayMode, AppSettings, AppearanceSettings, ConnectSettings, PlaybackSettings,
+    PlaybackStreamMode, PlaybackTranscodingCodec, SettingsOrigin, SettingsUpdateRequest,
 };

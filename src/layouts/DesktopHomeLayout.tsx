@@ -1,8 +1,9 @@
 import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import Header from '~/components/common/header/Header';
 import PlayerBar from '~/components/player/PlayerBar';
-import IndexSideBar from '~/components/sidebar/index/IndexSideBar';
-import QueueSideBar from '~/components/sidebar/queue/QueueSideBar';
+import LeftSideBar from '~/components/sidebar/LeftSideBar';
+import RightSidebar from '~/components/sidebar/RightSideBar';
+import ConnectSync from '~/features/connect/ConnectSync';
 import { resolveAlbumRoute, resolveArtistRoute, resolveHomeRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { startPlaybackStateSync } from '~/features/playback/service';
@@ -41,12 +42,15 @@ const DesktopHomeLayout: ParentComponent = (props) => {
         }
       >
         <div class='flex h-full flex-col'>
+          <ConnectSync />
           <Header shouldShowProfiles={true} titleHref={resolveHomeRoute('pc')} />
 
           <div class='flex size-full flex-row overflow-hidden'>
-            <IndexSideBar />
-            <div class='flex h-full min-w-0 flex-1 flex-col'>{props.children}</div>
-            <QueueSideBar />
+            <LeftSideBar />
+            <div class='bg-primary-plane relative flex h-full min-w-0 flex-1'>
+              <div class='border-secondary-border absolute inset-0 m-2 flex flex-col overflow-hidden rounded-xl border'>{props.children}</div>
+            </div>
+            <RightSidebar />
           </div>
 
           <PlayerBar

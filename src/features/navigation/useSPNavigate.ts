@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, type NavigateOptions } from '@solidjs/router';
-import { closePlayerBar } from '~/components/sp/SPPlayerBarController';
+import { closePlayerBar } from '~/components/sp/player/SPExpandablePlayerBar';
 import { isSP } from '~/utils/isSP';
 import { resolveSPBrowseRoute } from './routes';
 

@@ -102,12 +102,21 @@ pub fn run() {
 
             let app_handle: PlaybackEventAppHandle =
                 Arc::new(Mutex::new(Some(app.handle().clone())));
-            let controller = playback::create_playback_controller(
+            let mut controller = playback::create_playback_controller(
                 &app.handle(),
                 app_handle.clone(),
                 persister,
                 initial_playback_settings.gapless_playback_enabled,
                 initial_playback_settings.volume,
+            );
+            let _ = controller.set_stream_settings(
+                initial_playback_settings.stream_mode,
+                initial_playback_settings.transcoding_bitrate_limit,
+                models::effective_transcoding_codec(
+                    initial_playback_settings.use_custom_transcoding_codec,
+                    initial_playback_settings.transcoding_codec,
+                ),
+                None,
             );
             app.manage(PlaybackControllerState::new(controller));
             let cover_art_cache_root = app
@@ -135,6 +144,9 @@ pub fn run() {
             playback::install_android_app_handle(app.handle().clone());
             #[cfg(target_os = "windows")]
             playback::install_windows_app_handle(app.handle().clone());
+
+            #[cfg(mobile)]
+            app.handle().plugin(tauri_plugin_app_events::init())?;
 
             Ok(())
         })

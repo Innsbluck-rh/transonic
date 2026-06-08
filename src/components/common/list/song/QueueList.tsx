@@ -10,7 +10,7 @@ import { buildQueueItemMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { hasPlaybackCommandError } from '~/features/playback/service';
-import { playbackStore } from '~/stores/PlaybackStore';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { formatCompactDuration } from '~/utils/duration';
 
 interface QueueListProps {
@@ -70,6 +70,7 @@ function moveDestinationIndex(sourceIndex: number, targetIndex: number, edge: Qu
 
 const QueueList: Component<QueueListProps> = (props) => {
   const navigate = useSPNavigate();
+  const { isPlayNextQueueIndex, status: playbackStatus } = usePlayback();
   const requestedCoverArtIdSet = new Set<string>();
   const [requestedCoverArtIds, setRequestedCoverArtIds] = createSignal<readonly string[]>([]);
   const [dropIndicator, setDropIndicator] = createSignal<QueueDropIndicator | null>(null);
@@ -280,7 +281,7 @@ const QueueList: Component<QueueListProps> = (props) => {
           const contextMenuProps = useContextMenu(buildQueueItemMenuItems(entry, i, navigate));
           const conditions = () =>
             resolveSongItemConditions({
-              playbackStatus: playbackStore.status,
+              playbackStatus: playbackStatus(),
               songId: entry.id,
               queueIndex: i(),
             });
@@ -321,9 +322,14 @@ const QueueList: Component<QueueListProps> = (props) => {
               </Show>
 
               <div class='flex min-w-0 flex-1 flex-col gap-0'>
-                <p class='song-item-title archivo text-md truncate font-bold' title={entry.title}>
-                  {entry.title}
-                </p>
+                <div class='flex items-center gap-1'>
+                  <Show when={isPlayNextQueueIndex(i())}>
+                    <Icon class='text-secondary-text text-xs' icon='material-symbols:next-plan' />
+                  </Show>
+                  <p class='song-item-title archivo text-md gap-1 truncate font-bold' title={entry.title}>
+                    {entry.title}
+                  </p>
+                </div>
                 <p class='song-item-meta archivo truncate text-[11px]' title={entry.artist ?? '[unknown artist]'}>
                   {entry.artist}
                 </p>

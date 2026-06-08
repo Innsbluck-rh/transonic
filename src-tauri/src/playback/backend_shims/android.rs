@@ -1,4 +1,7 @@
-use crate::models::{normalize_volume, PlaybackCapabilities};
+use crate::models::{
+    normalize_volume, PlaybackActualStreamInfo, PlaybackCapabilities, PlaybackStreamMode,
+    PlaybackTranscodingCodec,
+};
 use crate::playback::android_mobile_plugin::{
     AndroidActivatePreparedMediaRequest, AndroidPlaybackBridge, AndroidPlaybackHeader,
     AndroidPreparedMediaRequest, AndroidSetVolumeRequest, AndroidUpdateMediaArtworkRequest,
@@ -25,6 +28,7 @@ trait AndroidPlaybackControl: Send {
     fn stop(&self) -> Result<(), String>;
     fn seek_to(&self, position_ms: u32) -> Result<(), String>;
     fn current_position_ms(&self) -> Result<u32, String>;
+    fn current_stream_info(&self) -> Result<Option<PlaybackActualStreamInfo>, String>;
 }
 
 impl AndroidPlaybackControl for AndroidPlaybackBridge {
@@ -76,6 +80,10 @@ impl AndroidPlaybackControl for AndroidPlaybackBridge {
 
     fn current_position_ms(&self) -> Result<u32, String> {
         Self::current_position_ms(self)
+    }
+
+    fn current_stream_info(&self) -> Result<Option<PlaybackActualStreamInfo>, String> {
+        Self::current_stream_info(self)
     }
 }
 
@@ -141,7 +149,22 @@ impl PlaybackBackend for AndroidPlaybackBackend {
     fn capabilities(&self) -> PlaybackCapabilities {
         PlaybackCapabilities {
             gapless_playback: true,
+            transcoding_codecs: vec![
+                PlaybackTranscodingCodec::Mp3,
+                PlaybackTranscodingCodec::Aac,
+                PlaybackTranscodingCodec::Flac,
+                PlaybackTranscodingCodec::Vorbis,
+                PlaybackTranscodingCodec::Opus,
+            ],
         }
+    }
+
+    fn should_estimate_stream_content_length(
+        &self,
+        stream_mode: PlaybackStreamMode,
+        _raw_stream: bool,
+    ) -> bool {
+        true
     }
 
     fn plan_load(
@@ -208,6 +231,10 @@ impl PlaybackBackend for AndroidPlaybackBackend {
 
     fn current_position_ms(&self) -> Result<u32, String> {
         self.bridge.current_position_ms()
+    }
+
+    fn current_stream_info(&self) -> Result<Option<PlaybackActualStreamInfo>, String> {
+        self.bridge.current_stream_info()
     }
 
     fn set_volume(&mut self, volume: f32) -> Result<(), String> {
@@ -316,6 +343,10 @@ mod tests {
 
         fn current_position_ms(&self) -> Result<u32, String> {
             Ok(0)
+        }
+
+        fn current_stream_info(&self) -> Result<Option<PlaybackActualStreamInfo>, String> {
+            Ok(None)
         }
     }
 

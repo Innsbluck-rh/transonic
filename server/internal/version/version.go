@@ -1,6 +1,6 @@
 package version
 
-const ProtocolVersion = 1
+const ProtocolVersion = 2
 
 var (
 	Version   = "0.0.0-dev"

@@ -1,10 +1,12 @@
 import { createMemo, createSignal } from 'solid-js';
-import { commands, InterruptReason, PlayingState, type QueueSource, type SongResponse } from '~/bindings';
+import { commands, type InterruptReason, type PlaybackStatus, type PlayingState, type QueueSource, type SongResponse } from '~/bindings';
 import { setPlaybackSetting, settingsStore } from '~/features/settings/service';
 import { formatClockTime } from '~/utils/duration';
 import { hasPlaybackCommandError } from './service';
 
+import { connectStore } from '~/stores/ConnectStore';
 import { playbackStore } from '~/stores/PlaybackStore';
+import { mergePlaybackStatusWithSharedPlayback } from './sharedPlaybackStatus';
 
 function clampPositionMs(positionMs: number, durationMs: number) {
   if (durationMs <= 0) {
@@ -58,18 +60,29 @@ function isSameQueue(q1: SongResponse[], q2: SongResponse[]) {
   );
 }
 
+function sharedPlaybackStatus(baseStatus: PlaybackStatus | undefined): PlaybackStatus | null {
+  if (!connectStore.runtime.connected || !connectStore.sharedPlayback) {
+    return null;
+  }
+
+  return mergePlaybackStatusWithSharedPlayback(baseStatus, connectStore.sharedPlayback);
+}
+
 export function usePlayback() {
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
   const [previewVolume, setPreviewVolume] = createSignal<number | null>(null);
 
-  const status = createMemo(() => playbackStore.status);
-  const authoritativeReceivedAtMs = createMemo(() => playbackStore.authoritativeReceivedAtMs);
+  const status = createMemo(() => sharedPlaybackStatus(playbackStore.status) ?? playbackStore.status);
+  const authoritativeReceivedAtMs = createMemo(() =>
+    connectStore.runtime.connected && connectStore.sharedPlayback ? connectStore.sharedPlaybackReceivedAtMs : playbackStore.authoritativeReceivedAtMs
+  );
   const clockMs = createMemo(() => playbackStore.clockMs);
   const queue = createMemo<SongResponse[]>((prev) => {
-    const next = playbackStore.status?.queue ?? [];
+    const next = status()?.queue ?? [];
     return isSameQueue(prev, next) ? prev : next;
   }, []);
   const currentIndex = createMemo<number | null>(() => status()?.currentIndex ?? null);
+  const playNextQueueLen = createMemo<number>(() => status()?.playNextQueueLen ?? 0);
   const currentEntry = createMemo<SongResponse | null>(() => {
     const index = currentIndex();
     if (index === null) {
@@ -224,10 +237,21 @@ export function usePlayback() {
     commands.playbackAppendToQueue({ items }).then(hasPlaybackCommandError);
   };
 
+  const clearQueue = () => {
+    commands.playbackClearQueue().then(hasPlaybackCommandError);
+  };
+
   const isQueueIndexActive = (index: number) => currentIndex() === index;
   const queueIndexProgressPercent = (index: number) => (isQueueIndexActive(index) ? progressPercent() : 0);
+  const isPlayNextQueueIndex = (index: number) => {
+    const current = currentIndex();
+    const start = current === null ? 0 : Math.min(current + 1, queue().length);
+    const end = Math.min(start + playNextQueueLen(), queue().length);
+    return index >= start && index < end;
+  };
 
   return {
+    status,
     queue,
     currentIndex,
     currentEntry,
@@ -246,6 +270,7 @@ export function usePlayback() {
     interruptLabel,
     isQueueIndexActive,
     queueIndexProgressPercent,
+    isPlayNextQueueIndex,
     play,
     pause,
     togglePlayPause,
@@ -261,5 +286,6 @@ export function usePlayback() {
     playSongs,
     insertAfterCurrent,
     appendToQueue,
+    clearQueue,
   };
 }

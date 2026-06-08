@@ -1,8 +1,9 @@
 import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import { commands, events } from '~/bindings';
 import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
-import SPExpandablePlayerBar, { openPlayerBar } from '~/components/sp/SPExpandablePlayerBar';
 import SPHeader from '~/components/sp/SPHeader';
+import SPExpandablePlayerBar, { openPlayerBar } from '~/components/sp/player/SPExpandablePlayerBar';
+import ConnectSync from '~/features/connect/ConnectSync';
 import { startPlaybackStateSync } from '~/features/playback/service';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import { sessionStore } from '~/stores/SessionStore';
@@ -62,6 +63,7 @@ const SPHomeLayout: ParentComponent = (props) => {
       }
     >
       <div class='flex min-h-0 flex-1 flex-col'>
+        <ConnectSync />
         <SPHeader />
 
         <div class='bg-primary-bg relative flex min-h-0 flex-1 flex-col overflow-hidden'>

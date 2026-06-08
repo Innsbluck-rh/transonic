@@ -1,4 +1,4 @@
-use crate::models::PlaybackCapabilities;
+use crate::models::{PlaybackCapabilities, PlaybackTranscodingCodec};
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
@@ -10,6 +10,7 @@ impl PlaybackBackend for UnsupportedPlaybackBackend {
     fn capabilities(&self) -> PlaybackCapabilities {
         PlaybackCapabilities {
             gapless_playback: false,
+            transcoding_codecs: vec![PlaybackTranscodingCodec::Mp3],
         }
     }
 

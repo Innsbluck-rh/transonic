@@ -1,7 +1,9 @@
+import { Icon } from '@iconify-icon/solid';
 import { createSignal, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import { loadBootstrapToStore } from '~/features/session/service';
 import { sessionStore } from '~/stores/SessionStore';
+import Heading3 from '../common/Heading3';
 import SettingSection from './SettingSection';
 
 function ServerSettings() {
@@ -51,19 +53,30 @@ function ServerSettings() {
 
   return (
     <SettingSection title='Server'>
+      <Heading3>Server</Heading3>
       <Show when={activeSession()} fallback={<p class='text-secondary-text leading-5'>No active server session.</p>}>
         {(session) => (
-          <div class='flex flex-col gap-2'>
-            <p>{session().username}</p>
-            <p class='text-secondary-text leading-5'>{session().normalizedServerUrl}</p>
-            <p class='text-secondary-text text-xs'>
-              API {session().apiVersion}
-              <Show when={session().serverType}>{(serverType) => <> · {serverType()}</>}</Show>
-              <Show when={session().serverVersion}>{(serverVersion) => <> {serverVersion()}</>}</Show>
-            </p>
+          <div class='flex flex-col gap-3'>
+            <div class='flex gap-3'>
+              <Icon icon='material-symbols:dns' class='text-xl' />
+              <div class='flex flex-col'>
+                <p class='text-sm font-bold'>{session().normalizedServerUrl}</p>
+                <p class='text-secondary-text text-xs'>
+                  API {session().apiVersion}
+                  <Show when={session().serverType}>{(serverType) => <> · {serverType()}</>}</Show>
+                  <Show when={session().serverVersion}>{(serverVersion) => <> {serverVersion()}</>}</Show>
+                </p>
+              </div>
+            </div>
+            <div class='flex items-center gap-3'>
+              <Icon icon='material-symbols:account-circle' class='text-xl' />
+              <p>{session().username}</p>
+            </div>
           </div>
         )}
       </Show>
+
+      <Heading3 class='mt-3'>Backup</Heading3>
       <div class='flex flex-wrap gap-2'>
         <button type='button' disabled={backupBusy()} onClick={exportBackup}>
           Export Backup

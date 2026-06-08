@@ -1,17 +1,25 @@
-import { Component } from 'solid-js';
+import { Component, Show } from 'solid-js';
 import { resolveSPBrowseRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { connectStore } from '~/stores/ConnectStore';
+import ConnectButton from '../common/ConnectButton';
 import Title from '../common/Title';
 
 const SPHeader: Component = () => {
   const navigate = useSPNavigate();
 
   return (
-    <div class='bg-primary-plane z-50 flex h-12 flex-row items-center px-1.5 shadow-md' style={{ 'view-transition-name': 'sp-header' }}>
+    <div class='bg-primary-plane z-50 flex h-12 flex-row items-center pr-2.5 pl-1.5 shadow-md' style={{ 'view-transition-name': 'sp-header' }}>
       <Title class='cursor-pointer' onClick={() => navigate(resolveSPBrowseRoute())}>
         Transonic
       </Title>
-      {/*<div class='flex-1' />
+
+      <div class='flex-1' />
+
+      <Show when={connectStore.status === 'available'}>
+        <ConnectButton />
+      </Show>
+      {/*
       <div class='flex flex-row gap-0'>
         <div class='relative overflow-visible'>
           <div

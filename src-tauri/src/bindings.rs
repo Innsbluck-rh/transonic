@@ -10,7 +10,9 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::{
     commands,
-    models::{ConnectDevicesUpdated, MediaNotificationTap, PlaybackStatus},
+    models::{
+        ConnectDevicesUpdated, ConnectSharedPlaybackUpdated, MediaNotificationTap, PlaybackStatus,
+    },
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -18,10 +20,10 @@ pub fn builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             commands::bootstrap_app_state,
             commands::connect_server_profile,
-            commands::connect_get_devices_with_playback,
+            commands::connect_get_devices,
             commands::connect_get_runtime_status,
-            commands::connect_takeover_playback,
-            commands::connect_pause_device_playback,
+            commands::connect_get_shared_playback,
+            commands::connect_transfer_playback,
             commands::delete_server_profile,
             commands::export_server_backup,
             commands::import_server_backup,
@@ -45,6 +47,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::get_artist_image,
             commands::playback_get_state,
             commands::playback_set_queue,
+            commands::playback_clear_queue,
             commands::playback_insert_after_current,
             commands::playback_append_to_queue,
             commands::playback_play_queue_index,
@@ -58,6 +61,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::playback_set_volume,
             commands::playback_next,
             commands::playback_prev,
+            commands::search,
             commands::settings_update,
             commands::get_default_device_name,
             commands::consume_pending_notification_tap,
@@ -65,7 +69,8 @@ pub fn builder() -> Builder<tauri::Wry> {
         .events(collect_events![
             PlaybackStatus,
             MediaNotificationTap,
-            ConnectDevicesUpdated
+            ConnectDevicesUpdated,
+            ConnectSharedPlaybackUpdated
         ])
 }
 

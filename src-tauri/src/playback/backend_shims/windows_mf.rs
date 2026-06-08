@@ -22,7 +22,7 @@ use windows::Win32::Media::MediaFoundation::*;
 use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_MULTITHREADED};
 use windows::Win32::System::Variant::VT_I8;
 
-use crate::models::PlaybackCapabilities;
+use crate::models::{PlaybackCapabilities, PlaybackTranscodingCodec};
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
@@ -157,6 +157,11 @@ impl PlaybackBackend for MfPlaybackBackend {
     fn capabilities(&self) -> PlaybackCapabilities {
         PlaybackCapabilities {
             gapless_playback: false,
+            transcoding_codecs: vec![
+                PlaybackTranscodingCodec::Mp3,
+                PlaybackTranscodingCodec::Aac,
+                PlaybackTranscodingCodec::Flac,
+            ],
         }
     }
 

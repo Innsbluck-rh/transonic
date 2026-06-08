@@ -1,13 +1,16 @@
 import { Icon } from '@iconify-icon/solid';
 import { platform } from '@tauri-apps/plugin-os';
-import { Component, createMemo, JSX, Match, Show, Switch } from 'solid-js';
-import { type SongResponse } from '~/bindings';
+import { Component, createMemo, JSX, Show } from 'solid-js';
+import { ConnectDevicePresence, type SongResponse } from '~/bindings';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
-import SeekSlider from '~/components/common/SeekSlider';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
-import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice';
 import { usePlayback } from '~/features/playback/usePlayback';
+import { connectStore } from '~/stores/ConnectStore';
+import LoadCircle from '../common/LoadCircle';
+import PlaybackStatusText from '../common/playback/PlaybackStatusText';
+import VolumeSlider from '../common/playback/VolumeSlider';
 import PlayerIcon from './PlayerIcon';
 import PlayerSlider from './PlayerSlider';
 
@@ -23,8 +26,6 @@ interface PlayerBarProps {
 }
 
 const PlayerBar: Component<PlayerBarProps> = (props) => {
-  const navigate = useSPNavigate();
-
   const iconsVisibility: Record<PlayerIcons, boolean> = props.iconsVisibility ?? {
     prev: true,
     playpause: true,
@@ -51,23 +52,22 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
     previewVolume,
   } = usePlayback();
 
+  const externalPlaybackDevice = createMemo<ConnectDevicePresence | undefined>(() => {
+    return resolveExternalPlaybackDevice({
+      connected: connectStore.runtime.connected,
+      ownDeviceId: connectStore.runtime.deviceId,
+      devices: connectStore.devices,
+      sharedPlayback: connectStore.sharedPlayback,
+    });
+  });
+
   const isWindows = platform() === 'windows';
   const subtitleText = createMemo(() => {
     const artist = currentEntry()?.artist || '[unknown]';
     return isInterrupted() ? `${artist} ${playbackInterruptLabel()}` : artist;
   });
-  const volumeIcon = createMemo(() => {
-    const nextVolume = volume();
-    if (nextVolume <= 0) {
-      return 'material-symbols:volume-off';
-    }
-    if (nextVolume < 0.5) {
-      return 'material-symbols:volume-down';
-    }
-    return 'material-symbols:volume-up';
-  });
 
-  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.md, {
+  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.lg, {
     cachedFallbackSizes: [CoverArtSizes.lg],
   });
   const restAreaClass = createMemo(() => props.restAreaProps?.class);
@@ -78,7 +78,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   return (
-    <div class='bg-primary-plane relative flex h-24 w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0/0.05)]'>
+    <div class='bg-primary-plane relative flex h-[92px] w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0/0.05)]'>
       <div class='absolute z-30 w-full translate-y-[-50%]'>
         <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
       </div>
@@ -110,62 +110,81 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
         </div>
 
         <div {...props.restAreaProps} class={`ml-3 flex min-w-0 flex-1 items-center ${restAreaClass() ?? ''}`} onClick={onClickRestArea}>
-          <Switch
+          <Show
+            when={playingState() !== 'idle'}
             fallback={
-              <>
-                <div class='flex min-w-0 flex-1 flex-col'>
-                  <MarqueeParagraph
-                    text={currentEntry()?.title || '[unknown]'}
-                    class='archivo w-fit text-lg font-bold'
-                    classList={{
-                      'cursor-pointer': !!props.onClickTitle,
-                    }}
-                    onClick={() => {
-                      props.onClickTitle?.(currentEntry() ?? undefined);
-                    }}
-                  />
-                  <MarqueeParagraph
-                    text={subtitleText()}
-                    class='archivo text-secondary-text w-fit text-xs'
-                    classList={{
-                      'cursor-pointer': !!props.onClickArtist,
-                    }}
-                    pixelsPerSecond={40}
-                    onClick={() => {
-                      props.onClickArtist?.(currentEntry() ?? undefined);
-                    }}
-                  />
-                </div>
-                <Show when={isWindows}>
-                  <div class='ml-4 hidden w-32 shrink-0 items-center gap-2 lg:flex' onClick={(event) => event.stopPropagation()}>
-                    <Icon icon={volumeIcon()} class='text-primary-text scale-125' />
-                    <SeekSlider
-                      value={volume() * 100}
-                      max={100}
-                      onPreview={(value) => previewVolume(value === null ? null : value / 100)}
-                      onCommit={(value) => setVolume(value / 100)}
-                      rootClass='group relative h-5 w-full touch-none px-2'
-                      hitAreaClass='absolute top-1/2 left-0 h-5 w-full -translate-y-1/2'
-                      trackClass='bg-secondary-border absolute top-1/2 left-0 h-1 w-full -translate-y-1/2 rounded-full'
-                      progressClass='bg-accent absolute top-1/2 left-0 h-1 -translate-y-1/2 rounded-full'
-                      handleClass='bg-accent absolute top-1/2 h-3 w-3 origin-center translate-x-[-50%] -translate-y-1/2 rounded-full opacity-0 transition-opacity group-hover:opacity-100'
-                    />
-                  </div>
-                </Show>
-                <div class='mr-2 ml-5 flex flex-col gap-1'>
-                  <p class='archivo text-sm'>
-                    {currentPositionText()} / {durationText()}
-                  </p>
-                </div>
-              </>
-            }
-          >
-            <Match when={playingState() === 'idle'}>
               <div class='flex-1'>
                 <p class='archivo text-secondary-text italic'>[nothing played]</p>
               </div>
-            </Match>
-          </Switch>
+            }
+          >
+            <div class='relative mr-4.5 aspect-square h-[48px] w-auto'>
+              <Show
+                when={coverArt()}
+                fallback={
+                  <div class='border-secondary-border absolute inset-0 flex size-full items-center justify-center overflow-hidden rounded-sm border object-center'>
+                    <LoadCircle />
+                  </div>
+                }
+              >
+                {(assetUrl) => (
+                  <img
+                    class='absolute inset-0 size-full overflow-hidden rounded-sm object-cover object-center'
+                    src={assetUrl()}
+                    loading='lazy'
+                    decoding='async'
+                  />
+                )}
+              </Show>
+            </div>
+            <div class='flex min-w-0 flex-1 flex-col gap-2'>
+              <MarqueeParagraph
+                text={currentEntry()?.title || '[unknown]'}
+                class='archivo mt-1 w-fit text-lg leading-none font-bold'
+                classList={{
+                  'cursor-pointer': !!props.onClickTitle,
+                }}
+                onClick={() => {
+                  props.onClickTitle?.(currentEntry() ?? undefined);
+                }}
+              />
+              <div class='flex h-full w-full items-center gap-1'>
+                <MarqueeParagraph
+                  text={subtitleText()}
+                  class='archivo text-secondary-text w-fit text-xs leading-none'
+                  classList={{
+                    'cursor-pointer': !!props.onClickArtist,
+                  }}
+                  pixelsPerSecond={40}
+                  onClick={() => {
+                    props.onClickArtist?.(currentEntry() ?? undefined);
+                  }}
+                />
+
+                <Show when={externalPlaybackDevice()}>
+                  <>
+                    <p class='text-secondary-text leading-none'>・</p>
+                    <Icon icon={'material-symbols:volume-up'} class='text-accent text-sm leading-none' />
+                    <p class='text-accent text-xs leading-none font-bold'>{externalPlaybackDevice()?.displayName}</p>
+                  </>
+                </Show>
+              </div>
+            </div>
+            <Show when={isWindows}>
+              <VolumeSlider
+                value={volume() * 100}
+                max={100}
+                onPreview={(value) => previewVolume(value === null ? null : value / 100)}
+                onCommit={(value) => setVolume(value / 100)}
+              />
+            </Show>
+            <div class='mr-2 ml-5 flex min-w-22 flex-col gap-1 text-end'>
+              <p class='text-sm'>
+                {currentPositionText()} / <span class='font-bold'>{durationText()}</span>
+              </p>
+              <PlaybackStatusText class='ml-auto' />
+            </div>
+          </Show>
         </div>
       </div>
     </div>

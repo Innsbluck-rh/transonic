@@ -6,6 +6,7 @@ use crate::{
         folder_structure_album_songs::load_album_songs_from_client as load_folder_album_songs_from_client,
     },
     commands::common::{client, format_api_error},
+    connect::ConnectState,
     models::{
         CapabilityMatrix, PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest,
         PlaybackMoveQueueIndexRequest, PlaybackPlayQueueIndexRequest,
@@ -16,6 +17,16 @@ use crate::{
     playback::PlaybackRuntimeContext,
     ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
 };
+
+fn send_connect_playback_command(
+    app: &AppHandle,
+    op: &'static str,
+    payload: serde_json::Value,
+) -> Result<bool, String> {
+    app.state::<ConnectState>()
+        .0
+        .send_playback_command(op, payload)
+}
 
 fn active_capability_matrix(state: &ActiveSessionState) -> Result<CapabilityMatrix, String> {
     let guard = state
@@ -173,6 +184,18 @@ pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> R
                 .current_index
                 .or_else(|| (!songs.is_empty()).then_some(0));
 
+            if send_connect_playback_command(
+                &app,
+                "setQueue",
+                serde_json::json!({
+                    "queue": songs.clone(),
+                    "currentIndex": current_index,
+                    "autoPlay": payload.auto_play,
+                }),
+            )? {
+                return Ok(());
+            }
+
             {
                 let playback = app.state::<PlaybackControllerState>();
                 let mut controller = playback
@@ -218,6 +241,61 @@ pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> R
 
 #[tauri::command]
 #[specta::specta]
+pub fn playback_clear_queue(app: AppHandle) -> Result<(), String> {
+    if send_connect_playback_command(&app, "clearQueue", serde_json::json!({}))? {
+        return Ok(());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = (|| -> Result<(), String> {
+            let sessions = app.state::<ActiveSessionState>();
+            let cover_art_cache = app.state::<CoverArtCacheState>();
+            let playback = app.state::<PlaybackControllerState>();
+
+            let runtime_context = active_runtime_parts(&app, &sessions).ok().map(
+                |(active_client, active_capability_matrix, active_profile_id)| {
+                    (
+                        active_client,
+                        active_capability_matrix,
+                        active_profile_id,
+                        cover_art_cache.0.clone(),
+                    )
+                },
+            );
+
+            let mut controller = playback
+                .0
+                .lock()
+                .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+            if let Some((
+                active_client,
+                active_capability_matrix,
+                active_profile_id,
+                cover_art_cache,
+            )) = runtime_context.as_ref()
+            {
+                let runtime_context = PlaybackRuntimeContext {
+                    client: active_client,
+                    capability_matrix: active_capability_matrix,
+                    cover_art_cache: Some(cover_art_cache),
+                    profile_id: Some(active_profile_id),
+                };
+                controller.clear_queue(Some(&runtime_context))?;
+            } else {
+                controller.clear_queue(None)?;
+            }
+            Ok(())
+        })();
+
+        if let Err(error) = result {
+            log::error!("playback_clear_queue: failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub fn playback_insert_after_current(
     app: AppHandle,
     payload: PlaybackInsertAfterCurrentRequest,
@@ -225,6 +303,14 @@ pub fn playback_insert_after_current(
     tauri::async_runtime::spawn(async move {
         let result: Result<(), String> = async {
             let songs = flatten_queue_sources(&app, payload.items).await?;
+
+            if send_connect_playback_command(
+                &app,
+                "insertAfterCurrent",
+                serde_json::json!({ "items": songs.clone() }),
+            )? {
+                return Ok(());
+            }
 
             let playback = app.state::<PlaybackControllerState>();
             let mut controller = playback
@@ -252,6 +338,14 @@ pub fn playback_append_to_queue(
         let result: Result<(), String> = async {
             let songs = flatten_queue_sources(&app, payload.items).await?;
 
+            if send_connect_playback_command(
+                &app,
+                "appendToQueue",
+                serde_json::json!({ "items": songs.clone() }),
+            )? {
+                return Ok(());
+            }
+
             let playback = app.state::<PlaybackControllerState>();
             let mut controller = playback
                 .0
@@ -274,6 +368,14 @@ pub fn playback_play_queue_index(
     app: AppHandle,
     payload: PlaybackPlayQueueIndexRequest,
 ) -> Result<(), String> {
+    if send_connect_playback_command(
+        &app,
+        "playQueueIndex",
+        serde_json::json!({ "index": payload.index }),
+    )? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();
@@ -313,6 +415,14 @@ pub fn playback_remove_queue_index(
     app: AppHandle,
     payload: PlaybackRemoveQueueIndexRequest,
 ) -> Result<(), String> {
+    if send_connect_playback_command(
+        &app,
+        "removeQueueIndex",
+        serde_json::json!({ "index": payload.index }),
+    )? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();
@@ -370,6 +480,17 @@ pub fn playback_move_queue_index(
     app: AppHandle,
     payload: PlaybackMoveQueueIndexRequest,
 ) -> Result<(), String> {
+    if send_connect_playback_command(
+        &app,
+        "moveQueueIndex",
+        serde_json::json!({
+            "fromIndex": payload.from_index,
+            "toIndex": payload.to_index,
+        }),
+    )? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let playback = app.state::<PlaybackControllerState>();
@@ -395,6 +516,14 @@ pub fn playback_set_position(
     app: AppHandle,
     payload: PlaybackSetPositionRequest,
 ) -> Result<(), String> {
+    if send_connect_playback_command(
+        &app,
+        "seek",
+        serde_json::json!({ "positionMs": payload.position_ms }),
+    )? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let playback = app.state::<PlaybackControllerState>();
@@ -428,6 +557,10 @@ pub fn playback_set_volume(
 #[tauri::command]
 #[specta::specta]
 pub fn playback_play(app: AppHandle) -> Result<(), String> {
+    if send_connect_playback_command(&app, "play", serde_json::json!({}))? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();
@@ -464,6 +597,10 @@ pub fn playback_play(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_pause(app: AppHandle) -> Result<(), String> {
+    if send_connect_playback_command(&app, "pause", serde_json::json!({}))? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();
@@ -516,6 +653,10 @@ pub fn playback_pause(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_stop(app: AppHandle) -> Result<(), String> {
+    if send_connect_playback_command(&app, "stop", serde_json::json!({}))? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();
@@ -568,6 +709,14 @@ pub fn playback_stop(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_seek(app: AppHandle, payload: PlaybackSeekRequest) -> Result<(), String> {
+    if send_connect_playback_command(
+        &app,
+        "seek",
+        serde_json::json!({ "positionMs": payload.position_ms }),
+    )? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();
@@ -604,6 +753,10 @@ pub fn playback_seek(app: AppHandle, payload: PlaybackSeekRequest) -> Result<(),
 #[tauri::command]
 #[specta::specta]
 pub fn playback_next(app: AppHandle) -> Result<(), String> {
+    if send_connect_playback_command(&app, "next", serde_json::json!({}))? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();
@@ -640,6 +793,10 @@ pub fn playback_next(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_prev(app: AppHandle) -> Result<(), String> {
+    if send_connect_playback_command(&app, "prev", serde_json::json!({}))? {
+        return Ok(());
+    }
+
     tauri::async_runtime::spawn_blocking(move || {
         let result = (|| -> Result<(), String> {
             let sessions = app.state::<ActiveSessionState>();

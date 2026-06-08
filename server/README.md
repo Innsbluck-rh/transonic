@@ -34,6 +34,39 @@ working after restart.
 
 Default port: `127.0.0.1:4747`.
 
+## Linux systemd install
+
+Install the current binary as a systemd service:
+
+```sh
+sudo ./transonic-server-linux-amd64 install --open-firewall
+```
+
+The installer copies the binary to `/usr/bin/transonic-server`, creates
+`/etc/transonic-server/config.json` when it does not exist, writes the systemd
+unit to `/etc/systemd/system/transonic-server.service`, creates
+`/var/lib/transonic-server`, fixes ownership for existing data files, enables
+the service, and starts it. The generated config listens on `0.0.0.0:4747`, uses
+`/var/lib/transonic-server`, and includes a generated `sessionSigningSecret`.
+If the service exits immediately, the installer fails and prints `systemctl`
+and `journalctl` output.
+
+To install an existing config:
+
+```sh
+sudo ./transonic-server-linux-amd64 install --config ./transonic.config.json --open-firewall
+```
+
+If `/etc/transonic-server/config.json` already exists, it is preserved. Pass
+`--replace-config` only when you intentionally want to replace it.
+
+Useful follow-up commands:
+
+```sh
+transonic-server service status
+sudo transonic-server service uninstall
+```
+
 ## Raspberry Pi smoke
 
 Build on Windows:
@@ -41,6 +74,7 @@ Build on Windows:
 ```powershell
 $env:GOOS='linux'; $env:GOARCH='arm64'; go build -o dist/transonic-server-linux-arm64 ./cmd/transonic-server
 $env:GOOS='linux'; $env:GOARCH='arm'; $env:GOARM='7'; go build -o dist/transonic-server-linux-armv7 ./cmd/transonic-server
+$env:GOOS='linux'; $env:GOARCH='amd64'; go build -o dist/transonic-server-linux-amd64 ./cmd/transonic-server
 ```
 
 Copy `dist/transonic-server-linux-arm64` and `config.pi.example.json` to the Pi.

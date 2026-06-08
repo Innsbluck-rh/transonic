@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use tauri_specta::Event;
 
-use super::SongResponse;
+use super::{PlaybackStreamMode, SongResponse};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
@@ -108,6 +108,50 @@ pub struct PlaybackError {
     pub handled: bool,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackStreamRequestKind {
+    Load,
+    Prepare,
+    ActivatePrepared,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackStreamInfo {
+    pub request_kind: PlaybackStreamRequestKind,
+    pub song_id: String,
+    pub song_path: Option<String>,
+    pub source_content_type: Option<String>,
+    pub source_suffix: Option<String>,
+    pub source_bit_rate: Option<u32>,
+    #[specta(type = Option<f64>)]
+    pub source_size: Option<u64>,
+    pub stream_mode: PlaybackStreamMode,
+    pub raw_stream: bool,
+    pub stream_format: Option<String>,
+    pub stream_max_bit_rate: Option<u32>,
+    pub stream_offset_seconds: Option<u32>,
+    pub requested_position_ms: u32,
+    pub local_start_position_ms: u32,
+    pub autoplay: bool,
+    pub stream_endpoint: String,
+    pub stream_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackActualStreamInfo {
+    pub codec: Option<String>,
+    pub codec_profile: Option<String>,
+    pub sample_rate: Option<u32>,
+    pub channels: Option<u32>,
+    pub bit_depth: Option<u32>,
+    pub bitrate: Option<u32>,
+    pub sample_format: Option<String>,
+    pub mime_type: Option<String>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackStatus {
@@ -117,9 +161,14 @@ pub struct PlaybackStatus {
     pub gapless_status: GaplessStatus,
     pub queue: Vec<SongResponse>,
     pub current_index: Option<u32>,
+    pub play_next_queue_len: u32,
     pub current_position_ms: u32,
     pub current_song_id: Option<String>,
     pub playback_error: Option<PlaybackError>,
+    pub active_stream_info: Option<PlaybackStreamInfo>,
+    pub prepared_stream_info: Option<PlaybackStreamInfo>,
+    pub last_stream_request: Option<PlaybackStreamInfo>,
+    pub actual_stream_info: Option<PlaybackActualStreamInfo>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type, Event)]
@@ -149,9 +198,14 @@ impl PlaybackStatus {
             },
             queue: Vec::new(),
             current_index: None,
+            play_next_queue_len: 0,
             current_position_ms: 0,
             current_song_id: None,
             playback_error: None,
+            active_stream_info: None,
+            prepared_stream_info: None,
+            last_stream_request: None,
+            actual_stream_info: None,
         }
     }
 }

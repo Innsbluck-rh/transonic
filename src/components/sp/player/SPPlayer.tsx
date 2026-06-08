@@ -1,5 +1,7 @@
+import { Icon } from '@iconify-icon/solid';
 import { Component, JSX, Show } from 'solid-js';
 import MarqueeParagraph from '~/components/common/MarqueeParagraph';
+import PlaybackStatusText from '~/components/common/playback/PlaybackStatusText';
 import PlayerIcon from '~/components/player/PlayerIcon';
 import PlayerSlider from '~/components/player/PlayerSlider';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
@@ -8,9 +10,11 @@ import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/rou
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
-import Heading3 from '../common/Heading3';
-import QueueList from '../common/list/song/QueueList';
-import LoadCircle from '../common/LoadCircle';
+import { openPlaybackStreamInfoDialog } from '../../common/dialog/PlaybackStreamInfoDialog';
+import Heading3 from '../../common/Heading3';
+import QueueList from '../../common/list/song/QueueList';
+import LoadCircle from '../../common/LoadCircle';
+import { closePlayerBar } from './SPExpandablePlayerBar';
 
 interface SPPlayerProps {
   topSectionProps?: JSX.HTMLAttributes<HTMLDivElement>;
@@ -51,18 +55,37 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
       <div {...props.topSectionProps} class={`relative flex h-auto w-full shrink-0 flex-col items-center ${props.topSectionProps?.class ?? ''}`}>
-        <div class='z-10 mt-4 flex size-full flex-col items-center'>
+        <div class='z-10 mt-0 flex size-full flex-col items-center'>
+          <div class='flex w-full items-center gap-1 p-1'>
+            <Icon
+              icon='material-symbols:keyboard-arrow-down'
+              class='ripple mr-auto cursor-pointer p-2 text-2xl'
+              onClick={() => {
+                closePlayerBar(true);
+              }}
+            />
+            <PlaybackStatusText />
+            <div
+              class='flex cursor-pointer flex-row items-center rounded-full p-1'
+              title='Playback stream info'
+              aria-label='Playback stream info'
+              onClick={() => openPlaybackStreamInfoDialog()}
+            >
+              <Icon class='text-primary-text text-[18px]' icon='material-symbols:info-outline' />
+            </div>
+          </div>
+
           <div class='flex size-full flex-col items-center px-8'>
-            <div class='relative flex aspect-square h-auto w-46 min-w-1/3 shadow-xl'>
+            <div class='relative flex h-46 w-auto overflow-hidden shadow-xl'>
               <Show
                 when={coverArt()}
                 fallback={
-                  <div class='border-secondary-border absolute inset-0 flex items-center justify-center border'>
+                  <div class='border-secondary-border absolute inset-0 flex aspect-square items-center justify-center border'>
                     <LoadCircle />
                   </div>
                 }
               >
-                {(assetUrl) => <img class='absolute inset-0 object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
+                {(assetUrl) => <img class='size-full object-contain object-center' src={assetUrl()} loading='lazy' decoding='async' />}
               </Show>
             </div>
             <MarqueeParagraph
@@ -93,7 +116,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
             />
 
             <div
-              class='border-secondary-border mt-2 mb-4 flex w-full flex-row items-center justify-evenly'
+              class='mt-1 mb-5 flex w-full flex-row items-center justify-evenly'
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
@@ -110,8 +133,8 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
             </div>
           </div>
           <div class='absolute bottom-0 mb-2 flex w-full flex-row justify-between px-2'>
-            <p class='archivo text-accent text-xs font-bold'>{currentPositionText()}</p>
-            <p class='archivo text-xs font-bold'>{durationText()}</p>
+            <p class='text-accent text-xs font-bold'>{currentPositionText()}</p>
+            <p class='text-xs font-bold'>{durationText()}</p>
           </div>
         </div>
 
@@ -128,10 +151,10 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
         </div>
       </div>
 
-      <div class='border-secondary-border flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
+      <div class='border-primary-border bg-primary-bg flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
-      <div ref={setScrollContainerRef} class='flex-1 overflow-y-auto pb-3'>
+      <div ref={setScrollContainerRef} class='bg-primary-bg flex-1 overflow-y-auto pb-3'>
         <QueueList queue={queue()} itemRef={setItemRef} />
       </div>
     </div>

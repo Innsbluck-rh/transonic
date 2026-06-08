@@ -10,6 +10,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   playback: {
     gaplessPlaybackEnabled: false,
     volume: 1,
+    streamMode: 'raw',
+    transcodingBitrateLimit: 320,
+    useCustomTranscodingCodec: false,
+    transcodingCodec: 'auto',
   },
   connect: {
     enabled: false,
@@ -43,7 +47,37 @@ function normalizePlaybackSettings(raw: Partial<AppSettings['playback']> | null 
           ? legacyGaplessEnabled
           : legacyGaplessStrategy === 'next_track',
     volume,
+    streamMode: normalizePlaybackStreamMode(raw?.streamMode),
+    transcodingBitrateLimit: normalizeTranscodingBitrateLimit(raw?.transcodingBitrateLimit),
+    useCustomTranscodingCodec: raw?.useCustomTranscodingCodec === true,
+    transcodingCodec: normalizePlaybackTranscodingCodec(raw?.transcodingCodec),
   };
+}
+
+function normalizePlaybackStreamMode(raw: unknown): AppSettings['playback']['streamMode'] {
+  return raw === 'transcoding' ? 'transcoding' : 'raw';
+}
+
+function normalizeTranscodingBitrateLimit(raw: unknown): AppSettings['playback']['transcodingBitrateLimit'] {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+    return 320;
+  }
+  const bitrate = Math.trunc(raw);
+  return bitrate > 0 ? bitrate : 320;
+}
+
+function normalizePlaybackTranscodingCodec(raw: unknown): AppSettings['playback']['transcodingCodec'] {
+  switch (raw) {
+    case 'mp3':
+    case 'flac':
+    case 'aac':
+    case 'alac':
+    case 'vorbis':
+    case 'opus':
+      return raw;
+    default:
+      return 'auto';
+  }
 }
 
 function normalizeSettings(raw: unknown): AppSettings {
