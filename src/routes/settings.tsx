@@ -1,4 +1,4 @@
-import RouteHeader from '~/components/common/RouteHeader';
+import RouteHeader from '~/components/common/text/RouteHeader';
 import AlbumArtCacheSettings from '~/components/settings/AlbumArtCacheSettings';
 import AppearanceSettings from '~/components/settings/AppearanceSettings';
 import ConnectSettings from '~/components/settings/ConnectSettings';

@@ -1,13 +1,13 @@
 import { For } from 'solid-js';
 import { setAppearanceSetting, settingsStore } from '~/features/settings/service';
 import { applyTheme, currentTheme } from '~/features/theme/service';
-import Heading3 from '../common/Heading3';
+import Heading3 from '../common/text/Heading3';
 import SettingSection from './SettingSection';
 
 const themeOptions = [
+  { value: 'trans', label: 'Transonic' },
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
-  { value: 'trans', label: 'Transonic' },
 ] as const;
 
 const albumDisplayOptions = [

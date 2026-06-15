@@ -30,6 +30,9 @@ async connectGetRuntimeStatus() : Promise<ConnectRuntimeStatus> {
 async connectGetSharedPlayback() : Promise<ConnectSharedPlaybackState | null> {
     return await TAURI_INVOKE("connect_get_shared_playback");
 },
+async connectGetStateSnapshot() : Promise<ConnectStateSnapshot> {
+    return await TAURI_INVOKE("connect_get_state_snapshot");
+},
 async connectTransferPlayback(payload: ConnectTransferPlaybackRequest) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("connect_transfer_playback", { payload }) };
@@ -362,13 +365,11 @@ async consumePendingNotificationTap() : Promise<boolean> {
 
 
 export const events = __makeEvents__<{
-connectDevicesUpdated: ConnectDevicesUpdated,
-connectSharedPlaybackUpdated: ConnectSharedPlaybackUpdated,
+connectStateUpdated: ConnectStateUpdated,
 mediaNotificationTap: MediaNotificationTap,
 playbackStatus: PlaybackStatus
 }>({
-connectDevicesUpdated: "connect-devices-updated",
-connectSharedPlaybackUpdated: "connect-shared-playback-updated",
+connectStateUpdated: "connect-state-updated",
 mediaNotificationTap: "media-notification-tap",
 playbackStatus: "playback-status"
 })
@@ -405,14 +406,14 @@ export type AuthInput = { kind: "password"; username: string; password: string }
 export type AuthKind = "password" | "api_key"
 export type CapabilityMatrix = { openSubsonic: boolean; rawExtensions: OpenSubsonicExtension[]; apiKeyAuth: boolean; indexBasedQueue: boolean; playbackReport: boolean; transcoding: boolean; transcodeOffset: boolean; songLyrics: boolean }
 export type ConnectDevicePresence = { deviceId: string; displayName: string; platform: string; appVersion: string; lastSeenAt: string; online: boolean }
-export type ConnectDevicesUpdated = { devices: ConnectDevicePresence[] }
 export type ConnectPlaybackState = { playingState: PlayingState; queue?: SongResponse[]; currentIndex?: number | null; playNextQueueLen?: number; currentPositionMs?: number; currentSongId?: string | null }
 export type ConnectRuntimeStatus = { enabled: boolean; connected: boolean; message: string | null; serverUrl: string | null; deviceId: string | null; seq: number }
 export type ConnectServerProfileRequest = { profileId: string | null; displayName: string | null; serverUrl: string; auth: AuthInput }
 export type ConnectServerProfileResult = { status: "connected"; activeSession: ActiveSession; profiles: SavedProfileSummary[] } | { status: "auth_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "network_error"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "server_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "unsupported_auth"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] }
 export type ConnectSettings = { enabled?: boolean; useSubsonicServerHost?: boolean; connectServerHost?: string | null; connectServerPort?: number; deviceId?: string; deviceName?: string | null; allowInsecureConnectServer?: boolean }
 export type ConnectSharedPlaybackState = { seq: number; activeDeviceId: string | null; state: ConnectPlaybackState; updatedAt: string; updatedByDeviceId: string | null; updateReason: string | null }
-export type ConnectSharedPlaybackUpdated = { sharedPlayback: ConnectSharedPlaybackState }
+export type ConnectStateSnapshot = { runtime: ConnectRuntimeStatus; devices: ConnectDevicePresence[]; sharedPlayback: ConnectSharedPlaybackState | null }
+export type ConnectStateUpdated = { runtime: ConnectRuntimeStatus; devices: ConnectDevicePresence[]; sharedPlayback: ConnectSharedPlaybackState | null }
 export type ConnectTransferPlaybackRequest = { targetDeviceId: string }
 export type CoverArtCacheStatus = { profileId: string | null; cacheDir: string; entryCount: number; fileCount: number; totalBytes: number; ttlSeconds: number }
 export type CoverArtRequest = { profileId: string; coverArtId: string; size: number | null; cachedFallbackSizes?: number[] }
@@ -449,7 +450,7 @@ export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetPositionRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { items: QueueSource[]; currentIndex: number | null; autoPlay: boolean }
 export type PlaybackSetVolumeRequest = { volume: number }
-export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number; streamMode: PlaybackStreamMode; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
+export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number; streamMode: PlaybackStreamMode; meteredNetworkTranscodingEnabled: boolean; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
 export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId: string | null; playbackError: PlaybackError | null; activeStreamInfo: PlaybackStreamInfo | null; preparedStreamInfo: PlaybackStreamInfo | null; lastStreamRequest: PlaybackStreamInfo | null; actualStreamInfo: PlaybackActualStreamInfo | null }
 export type PlaybackStreamInfo = { requestKind: PlaybackStreamRequestKind; songId: string; songPath: string | null; sourceContentType: string | null; sourceSuffix: string | null; sourceBitRate: number | null; sourceSize: number | null; streamMode: PlaybackStreamMode; rawStream: boolean; streamFormat: string | null; streamMaxBitRate: number | null; streamOffsetSeconds: number | null; requestedPositionMs: number; localStartPositionMs: number; autoplay: boolean; streamEndpoint: string; streamUrl: string }
 export type PlaybackStreamMode = "raw" | "transcoding"

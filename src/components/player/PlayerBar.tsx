@@ -2,15 +2,17 @@ import { Icon } from '@iconify-icon/solid';
 import { platform } from '@tauri-apps/plugin-os';
 import { Component, createMemo, JSX, Show } from 'solid-js';
 import { ConnectDevicePresence, type SongResponse } from '~/bindings';
-import MarqueeParagraph from '~/components/common/MarqueeParagraph';
+import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice';
 import { usePlayback } from '~/features/playback/usePlayback';
+import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 import { connectStore } from '~/stores/ConnectStore';
+import { openPlaybackStreamInfoDialog } from '../common/dialog/PlaybackStreamInfoDialog';
 import LoadCircle from '../common/LoadCircle';
-import PlaybackStatusText from '../common/playback/PlaybackStatusText';
-import VolumeSlider from '../common/playback/VolumeSlider';
+import PlaybackStatusText from '../player/common/PlaybackStatusText';
+import VolumeSlider from '../player/common/VolumeSlider';
 import PlayerIcon from './PlayerIcon';
 import PlayerSlider from './PlayerSlider';
 
@@ -48,9 +50,10 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
     seek,
     previewSeek,
     volume,
-    setVolume,
     previewVolume,
+    commitPreviewedVolume,
   } = usePlayback();
+  const playbackStatus = usePlaybackStatus();
 
   const externalPlaybackDevice = createMemo<ConnectDevicePresence | undefined>(() => {
     return resolveExternalPlaybackDevice({
@@ -171,18 +174,25 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
               </div>
             </div>
             <Show when={isWindows}>
-              <VolumeSlider
-                value={volume() * 100}
-                max={100}
-                onPreview={(value) => previewVolume(value === null ? null : value / 100)}
-                onCommit={(value) => setVolume(value / 100)}
-              />
+              <VolumeSlider volume={volume()} onVolumeInput={previewVolume} onVolumeCommit={commitPreviewedVolume} />
             </Show>
             <div class='mr-2 ml-5 flex min-w-22 flex-col gap-1 text-end'>
               <p class='text-sm'>
                 {currentPositionText()} / <span class='font-bold'>{durationText()}</span>
               </p>
-              <PlaybackStatusText class='ml-auto' />
+              <div class='flex items-center gap-1.5'>
+                <PlaybackStatusText class='ml-auto' />
+                <Show when={playbackStatus()?.actualStreamInfo}>
+                  <div
+                    class='ripple flex cursor-pointer flex-row items-center rounded-full p-0.5'
+                    title='Playback stream info'
+                    aria-label='Playback stream info'
+                    onClick={() => openPlaybackStreamInfoDialog()}
+                  >
+                    <Icon class='text-primary-text' icon='material-symbols:info-outline' />
+                  </div>
+                </Show>
+              </div>
             </div>
           </Show>
         </div>

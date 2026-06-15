@@ -30,8 +30,8 @@ pub use browse::{
 };
 #[allow(unused_imports)]
 pub use connect::{
-    ConnectDevicePresence, ConnectDevicesUpdated, ConnectPlaybackState, ConnectRuntimeStatus,
-    ConnectSharedPlaybackState, ConnectSharedPlaybackUpdated, ConnectTransferPlaybackRequest,
+    ConnectDevicePresence, ConnectPlaybackState, ConnectRuntimeStatus, ConnectSharedPlaybackState,
+    ConnectStateSnapshot, ConnectStateUpdated, ConnectTransferPlaybackRequest,
 };
 #[allow(unused_imports)]
 pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
@@ -55,6 +55,7 @@ pub use session::{
 #[allow(unused_imports)]
 pub use settings::{
     effective_transcoding_codec, normalize_transcoding_bitrate_limit, normalize_volume,
-    AlbumDisplayMode, AppSettings, AppearanceSettings, ConnectSettings, PlaybackSettings,
+    resolve_effective_stream_settings, AlbumDisplayMode, AppSettings, AppearanceSettings,
+    ConnectSettings, EffectivePlaybackStreamSettings, NetworkCostState, PlaybackSettings,
     PlaybackStreamMode, PlaybackTranscodingCodec, SettingsOrigin, SettingsUpdateRequest,
 };

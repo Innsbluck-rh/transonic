@@ -77,6 +77,12 @@ struct AndroidDeviceNameResponse {
     device_name: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AndroidNetworkCostStateResponse {
+    state: String,
+}
+
 #[derive(Debug, Clone)]
 pub struct AndroidPlaybackBridge {
     handle: PluginHandle<Wry>,
@@ -189,6 +195,14 @@ impl AndroidPlaybackBridge {
             .run_mobile_plugin::<AndroidDeviceNameResponse>("defaultDeviceName", ())
             .map_err(|error| format!("Failed to query the Android device name: {error}"))?;
         Ok(response.device_name)
+    }
+
+    pub fn start_network_cost_monitoring(&self) -> Result<String, String> {
+        let response = self
+            .handle
+            .run_mobile_plugin::<AndroidNetworkCostStateResponse>("startNetworkCostMonitoring", ())
+            .map_err(|error| format!("Failed to start Android network cost monitoring: {error}"))?;
+        Ok(response.state)
     }
 }
 

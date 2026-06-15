@@ -1,5 +1,5 @@
 import { Component, For, Show } from 'solid-js';
-import Heading3 from '~/components/common/Heading3';
+import Heading3 from '~/components/common/text/Heading3';
 import ConnectDeviceCard from '~/components/settings/ConnectDeviceCard';
 import { connectStore } from '~/stores/ConnectStore';
 

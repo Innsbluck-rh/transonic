@@ -176,6 +176,7 @@ mod tests {
         settings.playback.gapless_playback_enabled = true;
         settings.playback.volume = 0.42;
         settings.playback.stream_mode = PlaybackStreamMode::Transcoding;
+        settings.playback.metered_network_transcoding_enabled = true;
         settings.playback.transcoding_bitrate_limit = 192;
         settings.playback.use_custom_transcoding_codec = true;
         settings.playback.transcoding_codec = PlaybackTranscodingCodec::Opus;
@@ -247,6 +248,7 @@ mod tests {
             PlaybackStreamMode::Transcoding
         );
         assert_eq!(settings.playback.transcoding_bitrate_limit, 256);
+        assert!(!settings.playback.metered_network_transcoding_enabled);
         assert!(!settings.playback.use_custom_transcoding_codec);
         assert_eq!(
             settings.playback.transcoding_codec,
@@ -289,6 +291,7 @@ mod tests {
         let (settings, origin) = store.snapshot();
         assert_eq!(settings.playback.stream_mode, PlaybackStreamMode::Raw);
         assert_eq!(settings.playback.transcoding_bitrate_limit, 320);
+        assert!(!settings.playback.metered_network_transcoding_enabled);
         assert!(!settings.playback.use_custom_transcoding_codec);
         assert_eq!(
             settings.playback.transcoding_codec,

@@ -53,6 +53,7 @@ pub struct PlaybackSettings {
     pub gapless_playback_enabled: bool,
     pub volume: f32,
     pub stream_mode: PlaybackStreamMode,
+    pub metered_network_transcoding_enabled: bool,
     pub transcoding_bitrate_limit: u32,
     pub use_custom_transcoding_codec: bool,
     pub transcoding_codec: PlaybackTranscodingCodec,
@@ -64,11 +65,33 @@ impl Default for PlaybackSettings {
             gapless_playback_enabled: true,
             volume: default_volume(),
             stream_mode: PlaybackStreamMode::default(),
+            metered_network_transcoding_enabled: false,
             transcoding_bitrate_limit: default_transcoding_bitrate_limit(),
             use_custom_transcoding_codec: false,
             transcoding_codec: PlaybackTranscodingCodec::default(),
         }
     }
+}
+
+#[allow(dead_code)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NetworkCostState {
+    Unknown,
+    Metered,
+    Unmetered,
+}
+
+impl Default for NetworkCostState {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct EffectivePlaybackStreamSettings {
+    pub stream_mode: PlaybackStreamMode,
+    pub transcoding_bitrate_limit: u32,
+    pub transcoding_codec: PlaybackTranscodingCodec,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
@@ -135,6 +158,28 @@ pub fn normalize_transcoding_bitrate_limit(limit: u32) -> u32 {
     }
 }
 
+pub fn resolve_effective_stream_settings(
+    playback: &PlaybackSettings,
+    network_cost_state: NetworkCostState,
+) -> EffectivePlaybackStreamSettings {
+    let stream_mode = if playback.metered_network_transcoding_enabled
+        && network_cost_state != NetworkCostState::Unmetered
+    {
+        PlaybackStreamMode::Transcoding
+    } else {
+        playback.stream_mode
+    };
+
+    EffectivePlaybackStreamSettings {
+        stream_mode,
+        transcoding_bitrate_limit: playback.transcoding_bitrate_limit,
+        transcoding_codec: effective_transcoding_codec(
+            playback.use_custom_transcoding_codec,
+            playback.transcoding_codec,
+        ),
+    }
+}
+
 impl<'de> Deserialize<'de> for PlaybackSettings {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -151,6 +196,8 @@ impl<'de> Deserialize<'de> for PlaybackSettings {
             volume: Option<f32>,
             #[serde(default)]
             stream_mode: PlaybackStreamMode,
+            #[serde(default)]
+            metered_network_transcoding_enabled: bool,
             #[serde(default = "default_transcoding_bitrate_limit")]
             transcoding_bitrate_limit: u32,
             #[serde(default)]
@@ -166,6 +213,7 @@ impl<'de> Deserialize<'de> for PlaybackSettings {
                 .unwrap_or_else(|| raw.prebuffer_strategy.as_deref() == Some("next_track")),
             volume: normalize_volume_option(raw.volume),
             stream_mode: raw.stream_mode,
+            metered_network_transcoding_enabled: raw.metered_network_transcoding_enabled,
             transcoding_bitrate_limit: normalize_transcoding_bitrate_limit(
                 raw.transcoding_bitrate_limit,
             ),
@@ -348,4 +396,61 @@ pub enum SettingsOrigin {
 #[serde(rename_all = "camelCase")]
 pub struct SettingsUpdateRequest {
     pub settings: AppSettings,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        resolve_effective_stream_settings, NetworkCostState, PlaybackSettings, PlaybackStreamMode,
+        PlaybackTranscodingCodec,
+    };
+
+    #[test]
+    fn effective_stream_settings_use_saved_mode_when_metered_override_is_disabled() {
+        let mut playback = PlaybackSettings::default();
+        playback.stream_mode = PlaybackStreamMode::Raw;
+        playback.metered_network_transcoding_enabled = false;
+
+        let effective = resolve_effective_stream_settings(&playback, NetworkCostState::Metered);
+
+        assert_eq!(effective.stream_mode, PlaybackStreamMode::Raw);
+    }
+
+    #[test]
+    fn effective_stream_settings_use_transcoding_on_metered_network() {
+        let mut playback = PlaybackSettings::default();
+        playback.stream_mode = PlaybackStreamMode::Raw;
+        playback.metered_network_transcoding_enabled = true;
+        playback.transcoding_bitrate_limit = 192;
+        playback.use_custom_transcoding_codec = true;
+        playback.transcoding_codec = PlaybackTranscodingCodec::Opus;
+
+        let effective = resolve_effective_stream_settings(&playback, NetworkCostState::Metered);
+
+        assert_eq!(effective.stream_mode, PlaybackStreamMode::Transcoding);
+        assert_eq!(effective.transcoding_bitrate_limit, 192);
+        assert_eq!(effective.transcoding_codec, PlaybackTranscodingCodec::Opus);
+    }
+
+    #[test]
+    fn effective_stream_settings_treat_unknown_network_as_metered() {
+        let mut playback = PlaybackSettings::default();
+        playback.stream_mode = PlaybackStreamMode::Raw;
+        playback.metered_network_transcoding_enabled = true;
+
+        let effective = resolve_effective_stream_settings(&playback, NetworkCostState::Unknown);
+
+        assert_eq!(effective.stream_mode, PlaybackStreamMode::Transcoding);
+    }
+
+    #[test]
+    fn effective_stream_settings_keep_raw_on_unmetered_network() {
+        let mut playback = PlaybackSettings::default();
+        playback.stream_mode = PlaybackStreamMode::Raw;
+        playback.metered_network_transcoding_enabled = true;
+
+        let effective = resolve_effective_stream_settings(&playback, NetworkCostState::Unmetered);
+
+        assert_eq!(effective.stream_mode, PlaybackStreamMode::Raw);
+    }
 }

@@ -1,13 +1,14 @@
 import { Icon } from '@iconify-icon/solid';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
-import { playbackStore } from '~/stores/PlaybackStore';
+import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 
 export default function PlaybackErrorDialog() {
   const [visibleError, setVisibleError] = createSignal<string | null>(null);
   const [dismissedError, setDismissedError] = createSignal<string | null>(null);
   const [copyState, setCopyState] = createSignal<string | null>(null);
+  const playbackStatus = usePlaybackStatus();
   const playbackError = createMemo(() => {
-    const error = playbackStore.status?.playbackError ?? null;
+    const error = playbackStatus()?.playbackError ?? null;
     return error && !error.handled ? error.message : null;
   });
 

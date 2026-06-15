@@ -1,4 +1,4 @@
-import { commands, events, type AppSettings, type ConnectSharedPlaybackState } from '~/bindings';
+import { commands, events, type AppSettings, type ConnectStateSnapshot, type ConnectStateUpdated } from '~/bindings';
 import { settingsStore } from '~/features/settings/service';
 import { connectStore, setConnectStore } from '~/stores/ConnectStore';
 import { sessionStore } from '~/stores/SessionStore';
@@ -178,21 +178,31 @@ export async function refreshConnectServerStatus() {
   }
 }
 
-export async function refreshConnectRuntimeStatus() {
+function sharedPlaybackReceivedAtMsForSnapshot(snapshot: ConnectStateSnapshot | ConnectStateUpdated) {
+  const nextSharedPlayback = snapshot.sharedPlayback;
+  if (nextSharedPlayback === null) {
+    return null;
+  }
+
+  if (connectStore.sharedPlayback?.seq === nextSharedPlayback.seq && connectStore.sharedPlaybackReceivedAtMs !== null) {
+    return connectStore.sharedPlaybackReceivedAtMs;
+  }
+
+  return monotonicNowMs();
+}
+
+function applyConnectStateSnapshot(snapshot: ConnectStateSnapshot | ConnectStateUpdated) {
+  setConnectStore({
+    runtime: snapshot.runtime,
+    devices: snapshot.devices,
+    sharedPlayback: snapshot.sharedPlayback,
+    sharedPlaybackReceivedAtMs: sharedPlaybackReceivedAtMsForSnapshot(snapshot),
+  });
+}
+
+export async function refreshConnectStateSnapshot() {
   try {
-    const status = await commands.connectGetRuntimeStatus();
-    setConnectStore('runtime', {
-      enabled: status.enabled,
-      connected: status.connected,
-      message: status.message,
-      deviceId: status.deviceId,
-      seq: status.seq,
-    });
-    if (!status.connected) {
-      setConnectStore('devices', []);
-      setConnectStore('sharedPlayback', null);
-      setConnectStore('sharedPlaybackReceivedAtMs', null);
-    }
+    applyConnectStateSnapshot(await commands.connectGetStateSnapshot());
   } catch (error) {
     setConnectStore('runtime', {
       enabled: false,
@@ -207,49 +217,21 @@ export async function refreshConnectRuntimeStatus() {
   }
 }
 
-export async function refreshConnectDevices() {
-  const devices = await commands.connectGetDevices();
-  setConnectStore('devices', devices);
-}
-
-function applyConnectSharedPlayback(sharedPlayback: ConnectSharedPlaybackState | null) {
-  if (sharedPlayback === null) {
-    if (connectStore.runtime.connected && connectStore.sharedPlayback !== null) {
-      return;
-    }
-    setConnectStore('sharedPlayback', null);
-    setConnectStore('sharedPlaybackReceivedAtMs', null);
-    return;
-  }
-
-  if (connectStore.sharedPlayback && sharedPlayback.seq < connectStore.sharedPlayback.seq) {
-    return;
-  }
-
-  setConnectStore('sharedPlayback', sharedPlayback);
-  setConnectStore('sharedPlaybackReceivedAtMs', monotonicNowMs());
-}
-
-export async function refreshConnectSharedPlayback() {
-  applyConnectSharedPlayback(await commands.connectGetSharedPlayback());
+export async function refreshConnectRuntimeStatus() {
+  await refreshConnectStateSnapshot();
 }
 
 export async function startConnectStateSync() {
-  const unlistenDevices = await events.connectDevicesUpdated.listen((event) => {
-    setConnectStore('devices', event.payload.devices);
-  });
-  const unlistenSharedPlayback = await events.connectSharedPlaybackUpdated.listen((event) => {
-    applyConnectSharedPlayback(event.payload.sharedPlayback);
+  const unlistenState = await events.connectStateUpdated.listen((event) => {
+    applyConnectStateSnapshot(event.payload);
   });
   try {
-    await Promise.all([refreshConnectDevices(), refreshConnectSharedPlayback()]);
+    await refreshConnectStateSnapshot();
   } catch (error) {
-    unlistenDevices();
-    unlistenSharedPlayback();
+    unlistenState();
     throw error;
   }
   return () => {
-    unlistenDevices();
-    unlistenSharedPlayback();
+    unlistenState();
   };
 }

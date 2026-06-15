@@ -1,12 +1,12 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, createSignal, onMount, Show } from 'solid-js';
 import { commands, type SearchResponse } from '~/bindings';
-import Heading3 from '~/components/common/Heading3';
 import AlbumList from '~/components/common/list/album/AlbumList';
 import BrowseList, { type BrowseListItem } from '~/components/common/list/index/BrowseList';
 import SongList from '~/components/common/list/song/SongList';
 import LoadCircle from '~/components/common/LoadCircle';
-import RouteHeader from '~/components/common/RouteHeader';
+import Heading3 from '~/components/common/text/Heading3';
+import RouteHeader from '~/components/common/text/RouteHeader';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';

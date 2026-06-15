@@ -10,8 +10,12 @@ use tauri::{AppHandle, Manager, Wry};
 use tauri_specta::Event as _;
 
 use crate::{
-    commands::common::client, models::CapabilityMatrix, models::MediaNotificationTap,
-    ActiveSessionState, CoverArtCacheState, PlaybackControllerState,
+    commands::{common::client, playback::active_runtime_parts},
+    models::{
+        resolve_effective_stream_settings, CapabilityMatrix, MediaNotificationTap, NetworkCostState,
+    },
+    ActiveSessionState, AppSettingsState, CoverArtCacheState, NetworkCostStateState,
+    PlaybackControllerState,
 };
 
 use super::{
@@ -190,6 +194,115 @@ fn decode_jstring(env: &mut JNIEnv<'_>, value: &JString<'_>) -> Option<String> {
     env.get_string(value).ok().map(Into::into)
 }
 
+fn parse_network_cost_state(value: &str) -> Option<NetworkCostState> {
+    match value {
+        "unknown" => Some(NetworkCostState::Unknown),
+        "metered" => Some(NetworkCostState::Metered),
+        "unmetered" => Some(NetworkCostState::Unmetered),
+        _ => None,
+    }
+}
+
+pub(crate) fn apply_network_cost_state_str(
+    app: &AppHandle<Wry>,
+    raw_state: &str,
+) -> Result<(), String> {
+    let network_cost_state = parse_network_cost_state(raw_state)
+        .ok_or_else(|| format!("Unknown network cost state: {raw_state}"))?;
+    apply_network_cost_state(app, network_cost_state)
+}
+
+fn apply_network_cost_state(
+    app: &AppHandle<Wry>,
+    next_state: NetworkCostState,
+) -> Result<(), String> {
+    let network_cost_state = app
+        .try_state::<NetworkCostStateState>()
+        .ok_or_else(|| "The network cost state is unavailable.".to_string())?;
+    let previous_state = {
+        let mut guard = network_cost_state
+            .0
+            .lock()
+            .map_err(|_| "The network cost state is unavailable.".to_string())?;
+        let previous = *guard;
+        if previous == next_state {
+            return Ok(());
+        }
+        *guard = next_state;
+        previous
+    };
+
+    let settings_state = app
+        .try_state::<AppSettingsState>()
+        .ok_or_else(|| "The app settings state is unavailable.".to_string())?;
+    let playback_settings = {
+        let guard = settings_state
+            .0
+            .lock()
+            .map_err(|_| "The app settings state is unavailable.".to_string())?;
+        guard.snapshot().0.playback
+    };
+
+    let previous_stream_settings =
+        resolve_effective_stream_settings(&playback_settings, previous_state);
+    let next_stream_settings = resolve_effective_stream_settings(&playback_settings, next_state);
+    if previous_stream_settings == next_stream_settings {
+        return Ok(());
+    }
+
+    let playback = app
+        .try_state::<PlaybackControllerState>()
+        .ok_or_else(|| "The playback controller state is unavailable.".to_string())?;
+    let sessions = app
+        .try_state::<ActiveSessionState>()
+        .ok_or_else(|| "The active session state is unavailable.".to_string())?;
+    let cover_art_cache = app
+        .try_state::<CoverArtCacheState>()
+        .ok_or_else(|| "The cover art cache state is unavailable.".to_string())?;
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+
+    let update_result =
+        if let Ok((client, capability_matrix, profile_id)) = active_runtime_parts(app, &sessions) {
+            let runtime_context = PlaybackRuntimeContext {
+                client: &client,
+                capability_matrix: &capability_matrix,
+                cover_art_cache: Some(&cover_art_cache.0),
+                profile_id: Some(&profile_id),
+            };
+            controller.set_stream_settings(
+                next_stream_settings.stream_mode,
+                next_stream_settings.transcoding_bitrate_limit,
+                next_stream_settings.transcoding_codec,
+                Some(&runtime_context),
+            )
+        } else {
+            controller.set_stream_settings(
+                next_stream_settings.stream_mode,
+                next_stream_settings.transcoding_bitrate_limit,
+                next_stream_settings.transcoding_codec,
+                None,
+            )
+        };
+
+    if let Err(error) = update_result {
+        log::warn!(
+            "android_runtime: failed to refresh stream settings after network change: {error}"
+        );
+    }
+    Ok(())
+}
+
+fn spawn_network_cost_state_apply(app: AppHandle<Wry>, next_state: NetworkCostState) {
+    std::thread::spawn(move || {
+        if let Err(error) = apply_network_cost_state(&app, next_state) {
+            log::warn!("android_runtime: failed to apply network cost state: {error}");
+        }
+    });
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_enqueuePlaybackEvent(
     mut env: JNIEnv<'_>,
@@ -268,4 +381,25 @@ pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_noti
         log::error!("android_runtime: failed to emit MediaNotificationTap event: {error}");
         PENDING_NOTIFICATION_TAP.store(true, Ordering::SeqCst);
     }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_updateNetworkCostState(
+    mut env: JNIEnv<'_>,
+    _this: JObject<'_>,
+    state: JString<'_>,
+) {
+    let Some(raw_state) = decode_jstring(&mut env, &state) else {
+        return;
+    };
+    let Some(network_cost_state) = parse_network_cost_state(raw_state.as_str()) else {
+        log::warn!("android_runtime: ignored unknown network cost state: {raw_state}");
+        return;
+    };
+    let Some(app) = cloned_app_handle() else {
+        log::info!("android_runtime: app handle not available, ignoring network cost update");
+        return;
+    };
+
+    spawn_network_cost_state_apply(app, network_cost_state);
 }

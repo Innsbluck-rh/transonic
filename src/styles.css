@@ -57,19 +57,6 @@
   --cjk-fonts:
     /*'Noto Sans SC', 'Noto Sans CJK SC', 'Noto Sans TC', 'Noto Sans CJK TC', 'Noto Sans JP', 'Noto Sans CJK JP', 'Noto Sans KR', 'Noto Sans CJK KR',*/
     'Microsoft YaHei', 'Microsoft JhengHei', 'Yu Gothic', 'Malgun Gothic', 'Hiragino Sans', 'PingFang SC', 'PingFang TC';
-  /* light theme default */
-  --theme-color-primary-bg: var(--color-zinc-200);
-  --theme-color-primary-plane: var(--color-zinc-50);
-  --theme-color-primary-surface: var(--color-gray-100);
-  --theme-color-primary-selected: var(--color-zinc-200);
-  --theme-color-accent: var(--color-sky-600);
-  --theme-color-primary-on-playing: var(--color-zinc-800);
-  --theme-color-primary-hover: var(--color-gray-200);
-  --theme-color-primary-border: rgb(0 0 0 / 0.25);
-  --theme-color-secondary-border: rgb(0 0 0 / 0.1);
-  --theme-color-primary-text: var(--color-gray-700);
-  --theme-color-secondary-text: var(--color-gray-500);
-  --theme-color-sp-nav-space: var(--color-zinc-400);
   --player-bar-height: 0.15rem;
   --player-bar-detect-height: 1rem;
   --player-bar-handle-size: 0.75rem;
@@ -77,7 +64,6 @@
   --safe-area-inset-right: env(safe-area-inset-right, 0px);
   --safe-area-inset-bottom: env(safe-area-inset-bottom, 0px);
   --safe-area-inset-left: env(safe-area-inset-left, 0px);
-  color-scheme: light;
 }
 
 .sp-top-space {
@@ -151,11 +137,14 @@
   input[type='text'],
   input[type='url'] {
     @apply border-primary-border bg-primary-surface text-primary-text min-w-0 rounded border px-3 py-2 text-sm;
+    accent-color: var(--color-accent);
+    caret-color: var(--color-accent);
     color-scheme: inherit;
   }
 
   input[type='checkbox'] {
     @apply accent-accent h-4 w-4 border border-current;
+    accent-color: var(--color-accent);
   }
 
   button {

@@ -1,20 +1,33 @@
 import { Icon } from '@iconify-icon/solid';
-import { Component, createMemo, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
+import { Component, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { ConnectDevicePresence } from '~/bindings';
-import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice';
+import { resolveCurrentPlaybackDevice } from '~/features/connect/playbackDevice';
 import { connectStore } from '~/stores/ConnectStore';
 import ConnectDeviceCard from '../settings/ConnectDeviceCard';
-import Heading3 from './Heading3';
+import Heading3 from './text/Heading3';
 
 const ConnectButton: Component = () => {
-  const externalPlaybackDevice = createMemo<ConnectDevicePresence | undefined>(() => {
-    return resolveExternalPlaybackDevice({
+  const activePlaybackDevice = (): ConnectDevicePresence | undefined =>
+    resolveCurrentPlaybackDevice({
       connected: connectStore.runtime.connected,
       ownDeviceId: connectStore.runtime.deviceId,
       devices: connectStore.devices,
       sharedPlayback: connectStore.sharedPlayback,
     });
-  });
+
+  const activeDeviceId = () => (connectStore.runtime.connected ? (connectStore.sharedPlayback?.activeDeviceId ?? null) : null);
+  const isOwnActiveDevice = () => {
+    const ownDeviceId = connectStore.runtime.deviceId;
+    return ownDeviceId !== null && activeDeviceId() === ownDeviceId;
+  };
+  const hasActiveDevice = () => isOwnActiveDevice() || activePlaybackDevice() !== undefined;
+  const isActiveDevicePlaying = () => hasActiveDevice() && connectStore.sharedPlayback?.state.playingState === 'playing';
+  const activeDeviceLabel = () => {
+    if (isOwnActiveDevice()) {
+      return 'This Device';
+    }
+    return activePlaybackDevice()?.displayName || '(Nothing Active)';
+  };
 
   let buttonEl: HTMLButtonElement | undefined;
   let menuEl: HTMLDivElement | undefined;
@@ -45,38 +58,37 @@ const ConnectButton: Component = () => {
 
   return (
     <div class='relative flex overflow-visible'>
-      <div class='relative overflow-visible'>
+      <div class='relative'>
         <button
           ref={(el) => (buttonEl = el)}
           type='button'
           aria-expanded={menuOpened()}
           aria-haspopup='menu'
           data-tauri-drag-exclude
-          class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-3 overflow-visible rounded-full border-0 p-1.5 lg:gap-2'
+          class='bg-primary-surface hover:bg-primary-hover border-secondary-border flex cursor-pointer flex-row items-center gap-2.5 rounded-full border px-3 py-2 lg:gap-2 lg:px-2.5 lg:py-1.5'
           onClick={() => setMenuOpened((opened) => !opened)}
         >
           <Icon
-            class='scale-150 lg:scale-100'
-            icon='material-symbols:devices'
+            class='scale-125 lg:scale-100'
+            icon={isActiveDevicePlaying() ? 'material-symbols:volume-up' : 'material-symbols:devices'}
             classList={{
-              'text-primary-text': !menuOpened(),
-              'text-accent': menuOpened(),
+              'text-accent': isActiveDevicePlaying(),
+              'text-primary-text': !isActiveDevicePlaying() && hasActiveDevice(),
+              'text-secondary-text': !isActiveDevicePlaying() && !hasActiveDevice(),
             }}
           />
 
-          <Show when={externalPlaybackDevice()}>
-            {(device) => (
-              <p
-                class='text-sm leading-none font-bold lg:text-xs'
-                classList={{
-                  'text-primary-text': !menuOpened(),
-                  'text-accent': menuOpened(),
-                }}
-              >
-                {device().displayName}
-              </p>
-            )}
-          </Show>
+          <p
+            class='text-sm leading-none font-bold lg:text-xs'
+            classList={{
+              italic: isOwnActiveDevice() || !hasActiveDevice(),
+              'text-accent': isActiveDevicePlaying(),
+              'text-primary-text': !isActiveDevicePlaying() && hasActiveDevice(),
+              'text-secondary-text': !isActiveDevicePlaying() && !hasActiveDevice(),
+            }}
+          >
+            {activeDeviceLabel()}
+          </p>
         </button>
       </div>
       <Show when={menuOpened()}>

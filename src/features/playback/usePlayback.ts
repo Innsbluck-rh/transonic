@@ -1,12 +1,12 @@
 import { createMemo, createSignal } from 'solid-js';
-import { commands, type InterruptReason, type PlaybackStatus, type PlayingState, type QueueSource, type SongResponse } from '~/bindings';
+import { commands, type InterruptReason, type PlayingState, type QueueSource, type SongResponse } from '~/bindings';
 import { setPlaybackSetting, settingsStore } from '~/features/settings/service';
+import { connectStore } from '~/stores/ConnectStore';
 import { formatClockTime } from '~/utils/duration';
 import { hasPlaybackCommandError } from './service';
 
-import { connectStore } from '~/stores/ConnectStore';
 import { playbackStore } from '~/stores/PlaybackStore';
-import { mergePlaybackStatusWithSharedPlayback } from './sharedPlaybackStatus';
+import { usePlaybackStatus } from './usePlaybackStatus';
 
 function clampPositionMs(positionMs: number, durationMs: number) {
   if (durationMs <= 0) {
@@ -60,19 +60,11 @@ function isSameQueue(q1: SongResponse[], q2: SongResponse[]) {
   );
 }
 
-function sharedPlaybackStatus(baseStatus: PlaybackStatus | undefined): PlaybackStatus | null {
-  if (!connectStore.runtime.connected || !connectStore.sharedPlayback) {
-    return null;
-  }
-
-  return mergePlaybackStatusWithSharedPlayback(baseStatus, connectStore.sharedPlayback);
-}
-
 export function usePlayback() {
   const [previewPositionMs, setPreviewPositionMs] = createSignal<number | null>(null);
   const [previewVolume, setPreviewVolume] = createSignal<number | null>(null);
 
-  const status = createMemo(() => sharedPlaybackStatus(playbackStore.status) ?? playbackStore.status);
+  const status = usePlaybackStatus();
   const authoritativeReceivedAtMs = createMemo(() =>
     connectStore.runtime.connected && connectStore.sharedPlayback ? connectStore.sharedPlaybackReceivedAtMs : playbackStore.authoritativeReceivedAtMs
   );
@@ -184,15 +176,16 @@ export function usePlayback() {
     void setPlaybackSetting('volume', clampedVolume);
   };
 
-  const previewVolumeChange = (nextVolume: number | null) => {
-    if (nextVolume === null) {
-      setPreviewVolume(null);
-      return;
-    }
-
+  const previewVolumeChange = (nextVolume: number) => {
     const clampedVolume = clampVolume(nextVolume);
     setPreviewVolume(clampedVolume);
     commands.playbackSetVolume({ volume: clampedVolume }).then(hasPlaybackCommandError);
+  };
+
+  const commitPreviewedVolume = (nextVolume: number) => {
+    const clampedVolume = clampVolume(nextVolume);
+    setPreviewVolume(null);
+    void setPlaybackSetting('volume', clampedVolume);
   };
 
   const playQueueIndex = (index: number) => {
@@ -280,6 +273,7 @@ export function usePlayback() {
     previewSeek,
     setVolume,
     previewVolume: previewVolumeChange,
+    commitPreviewedVolume,
     playQueueIndex,
     playAlbum,
     playFolderAlbum,

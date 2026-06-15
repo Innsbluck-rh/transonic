@@ -1,5 +1,7 @@
 export type TransonicColorTheme = 'light' | 'dark' | 'trans';
 
+export const DEFAULT_COLOR_THEME: TransonicColorTheme = 'trans';
+
 export type ThemeVariableName =
   | '--theme-color-primary-bg'
   | '--theme-color-primary-plane'
@@ -14,16 +16,29 @@ export type ThemeVariableName =
   | '--theme-color-sp-nav-space'
   | '--theme-color-accent';
 
-export type ThemeVariables = Partial<Record<ThemeVariableName, string>>;
+export type ThemeVariables = Record<ThemeVariableName, string>;
 
 export interface ColorTheme {
-  colorScheme?: 'light' | 'dark';
+  colorScheme: 'light' | 'dark';
   variables: ThemeVariables;
 }
 
 export const lightTheme: ColorTheme = {
   colorScheme: 'light',
-  variables: {},
+  variables: {
+    '--theme-color-primary-bg': 'var(--color-zinc-200)',
+    '--theme-color-primary-plane': 'var(--color-zinc-50)',
+    '--theme-color-primary-surface': 'var(--color-gray-100)',
+    '--theme-color-primary-selected': 'var(--color-zinc-200)',
+    '--theme-color-primary-on-playing': 'var(--color-zinc-800)',
+    '--theme-color-primary-hover': 'var(--color-gray-200)',
+    '--theme-color-primary-border': 'rgb(0 0 0 / 0.25)',
+    '--theme-color-secondary-border': 'rgb(0 0 0 / 0.1)',
+    '--theme-color-primary-text': 'var(--color-gray-700)',
+    '--theme-color-secondary-text': 'var(--color-gray-500)',
+    '--theme-color-sp-nav-space': 'var(--color-zinc-400)',
+    '--theme-color-accent': 'var(--color-sky-600)',
+  },
 };
 
 export const darkTheme: ColorTheme = {
@@ -40,8 +55,10 @@ export const darkTheme: ColorTheme = {
     '--theme-color-primary-text': 'var(--color-zinc-100)',
     '--theme-color-secondary-text': 'var(--color-zinc-400)',
     '--theme-color-sp-nav-space': 'var(--color-black)',
+    '--theme-color-accent': 'var(--color-sky-600)',
   },
 };
+
 export const transonicTheme: ColorTheme = {
   colorScheme: 'dark',
   variables: {
@@ -56,11 +73,12 @@ export const transonicTheme: ColorTheme = {
     '--theme-color-primary-text': 'var(--color-gray-100)',
     '--theme-color-secondary-text': 'var(--color-gray-400)',
     '--theme-color-sp-nav-space': 'var(--color-black)',
+    '--theme-color-accent': 'var(--color-sky-600)',
   },
 };
 
 export const builtInThemes: Record<TransonicColorTheme, ColorTheme> = {
+  trans: transonicTheme,
   light: lightTheme,
   dark: darkTheme,
-  trans: transonicTheme,
 };

@@ -2,9 +2,12 @@ use tauri::{AppHandle, State};
 
 use crate::{
     commands::playback::active_runtime_parts,
-    models::{effective_transcoding_codec, AppSettings, SettingsUpdateRequest},
+    models::{
+        resolve_effective_stream_settings, AppSettings, NetworkCostState, SettingsUpdateRequest,
+    },
     playback::PlaybackRuntimeContext,
-    ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
+    ActiveSessionState, AppSettingsState, CoverArtCacheState, NetworkCostStateState,
+    PlaybackControllerState,
 };
 
 fn snapshot_settings(state: &AppSettingsState) -> Result<AppSettings, String> {
@@ -15,6 +18,14 @@ fn snapshot_settings(state: &AppSettingsState) -> Result<AppSettings, String> {
     Ok(guard.snapshot().0)
 }
 
+fn snapshot_network_cost_state(state: &NetworkCostStateState) -> Result<NetworkCostState, String> {
+    let guard = state
+        .0
+        .lock()
+        .map_err(|_| "The network cost state is unavailable.".to_string())?;
+    Ok(*guard)
+}
+
 #[tauri::command]
 #[specta::specta]
 pub fn settings_update(
@@ -23,6 +34,7 @@ pub fn settings_update(
     playback: State<'_, PlaybackControllerState>,
     sessions: State<'_, ActiveSessionState>,
     cover_art_cache: State<'_, CoverArtCacheState>,
+    network_cost: State<'_, NetworkCostStateState>,
     payload: SettingsUpdateRequest,
 ) -> Result<AppSettings, String> {
     let (previous_settings, updated_settings) = {
@@ -35,20 +47,13 @@ pub fn settings_update(
         (previous, updated)
     };
 
-    let previous_transcoding_codec = effective_transcoding_codec(
-        previous_settings.playback.use_custom_transcoding_codec,
-        previous_settings.playback.transcoding_codec,
-    );
-    let updated_transcoding_codec = effective_transcoding_codec(
-        updated_settings.playback.use_custom_transcoding_codec,
-        updated_settings.playback.transcoding_codec,
-    );
+    let network_cost_state = snapshot_network_cost_state(&network_cost)?;
+    let previous_stream_settings =
+        resolve_effective_stream_settings(&previous_settings.playback, network_cost_state);
+    let updated_stream_settings =
+        resolve_effective_stream_settings(&updated_settings.playback, network_cost_state);
 
-    if previous_settings.playback.stream_mode != updated_settings.playback.stream_mode
-        || previous_settings.playback.transcoding_bitrate_limit
-            != updated_settings.playback.transcoding_bitrate_limit
-        || previous_transcoding_codec != updated_transcoding_codec
-    {
+    if previous_stream_settings != updated_stream_settings {
         let mut controller = playback
             .0
             .lock()
@@ -64,16 +69,16 @@ pub fn settings_update(
                 profile_id: Some(&profile_id),
             };
             controller.set_stream_settings(
-                updated_settings.playback.stream_mode,
-                updated_settings.playback.transcoding_bitrate_limit,
-                updated_transcoding_codec,
+                updated_stream_settings.stream_mode,
+                updated_stream_settings.transcoding_bitrate_limit,
+                updated_stream_settings.transcoding_codec,
                 Some(&runtime_context),
             )
         } else {
             controller.set_stream_settings(
-                updated_settings.playback.stream_mode,
-                updated_settings.playback.transcoding_bitrate_limit,
-                updated_transcoding_codec,
+                updated_stream_settings.stream_mode,
+                updated_stream_settings.transcoding_bitrate_limit,
+                updated_stream_settings.transcoding_codec,
                 None,
             )
         };

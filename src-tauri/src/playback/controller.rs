@@ -175,7 +175,9 @@ impl PlaybackController {
     }
 
     pub fn clear_gapless_preparation(&mut self) {
-        self.backend.clear_prepared();
+        if self.prepared_next.is_some() || self.status.prepared_stream_info.is_some() {
+            self.backend.clear_prepared();
+        }
         self.prepared_next = None;
         self.status.prepared_stream_info = None;
         self.gapless_failure = None;
@@ -859,6 +861,7 @@ impl PlaybackController {
             self.status.playing_state = PlayingState::Playing;
             self.status.playback_error = None;
             self.status.interrupt_reason = None;
+            self.sync_actual_stream_info_from_backend();
             self.process_native_events_inner(Some(context), false)?;
             if let Some(entry) =
                 current_queue_entry(&self.status.queue, self.status.current_index).cloned()
@@ -1174,7 +1177,7 @@ impl PlaybackController {
         self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
-        self.sync_actual_stream_info_from_backend();
+        self.status.actual_stream_info = None;
         self.interrupted_resume_state = None;
         self.report_status();
         self.state()
@@ -1331,7 +1334,7 @@ impl PlaybackController {
         self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
-        self.sync_actual_stream_info_from_backend();
+        self.replace_actual_stream_info_from_backend();
         self.interrupted_resume_state = None;
         if let Err(error) = self.sync_gapless_for_current_track(Some(context)) {
             log::warn!("controller.load_track_at_index: gapless refresh failed: {error}");
@@ -1949,14 +1952,37 @@ impl PlaybackController {
     }
 
     fn sync_actual_stream_info_from_backend(&mut self) {
+        if self.status.current_index.is_none() || self.status.current_song_id.is_none() {
+            self.status.actual_stream_info = None;
+            return;
+        }
+
         if !matches!(
             self.status.playing_state,
-            PlayingState::Playing | PlayingState::Paused
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
         ) {
             self.status.actual_stream_info = None;
             return;
         }
 
+        match self.backend.current_stream_info() {
+            Ok(Some(info)) => {
+                self.status.actual_stream_info = Some(info);
+            }
+            Ok(None) => {
+                // Backends may briefly have no selected track metadata during native
+                // transitions. Keep the last known stream info until a new value arrives
+                // or the queue/current track is explicitly cleared.
+            }
+            Err(error) => {
+                log::warn!(
+                    "controller.sync_actual_stream_info_from_backend: failed to sync stream info: {error}"
+                );
+            }
+        }
+    }
+
+    fn replace_actual_stream_info_from_backend(&mut self) {
         match self.backend.current_stream_info() {
             Ok(info) => {
                 self.status.actual_stream_info = info;
@@ -2024,6 +2050,7 @@ impl PlaybackController {
                         .unwrap_or(PlayingState::Paused);
                 }
                 self.interrupted_resume_state = None;
+                self.sync_actual_stream_info_from_backend();
                 Ok(true)
             }
             PlaybackNativeEvent::Playing { position_ms } => {
@@ -2033,6 +2060,7 @@ impl PlaybackController {
                 self.status.playback_error = None;
                 self.confirm_pending_seek();
                 self.interrupted_resume_state = None;
+                self.sync_actual_stream_info_from_backend();
                 Ok(true)
             }
             PlaybackNativeEvent::Paused { position_ms } => {
@@ -2042,6 +2070,7 @@ impl PlaybackController {
                 self.status.playback_error = None;
                 self.confirm_pending_seek();
                 self.interrupted_resume_state = None;
+                self.sync_actual_stream_info_from_backend();
                 Ok(true)
             }
             PlaybackNativeEvent::SeekProcessed { position_ms } => {
@@ -2256,6 +2285,7 @@ impl PlaybackController {
         self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
+        self.status.actual_stream_info = None;
         self.interrupted_resume_state = None;
     }
 
@@ -3809,6 +3839,43 @@ mod tests {
         let paused = controller.pause().unwrap();
         assert_eq!(paused.playing_state, PlayingState::Paused);
         assert_eq!(paused.current_position_ms, 2_500);
+        assert!(paused.actual_stream_info.is_none());
+        backend_state.lock().unwrap().current_stream_info =
+            Some(mock_actual_stream_info("song-a-resumed"));
+
+        let resumed = controller.play(&runtime_context).unwrap();
+        assert_eq!(resumed.playing_state, PlayingState::Playing);
+        assert_eq!(
+            resumed
+                .actual_stream_info
+                .as_ref()
+                .and_then(|info| info.codec.as_deref()),
+            Some("song-a-resumed")
+        );
+    }
+
+    #[test]
+    fn stop_and_state_sync_clear_actual_stream_info_for_current_track() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        let stopped = controller.stop().unwrap();
+        assert_eq!(stopped.playing_state, PlayingState::Stopped);
+        assert!(stopped.actual_stream_info.is_none());
+
+        let synced = controller.synced_state().unwrap();
+        assert_eq!(synced.playing_state, PlayingState::Stopped);
+        assert!(synced.actual_stream_info.is_none());
     }
 
     #[test]
@@ -3916,6 +3983,54 @@ mod tests {
             status.gapless_status.state,
             GaplessState::Preparing
         ));
+    }
+
+    #[test]
+    fn stream_setting_change_skips_backend_clear_without_prepared_gapless_track() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+
+        controller
+            .set_stream_settings(
+                PlaybackStreamMode::Transcoding,
+                192,
+                PlaybackTranscodingCodec::Mp3,
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(backend_state.lock().unwrap().clear_prepared_calls, 0);
+    }
+
+    #[test]
+    fn stream_setting_change_clears_existing_prepared_gapless_track() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+
+        controller
+            .set_stream_settings(
+                PlaybackStreamMode::Transcoding,
+                192,
+                PlaybackTranscodingCodec::Mp3,
+                Some(&runtime_context),
+            )
+            .unwrap();
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(backend_state.clear_prepared_calls, 1);
+        assert_eq!(backend_state.prepare_calls.len(), 2);
     }
 
     #[test]
@@ -4054,7 +4169,7 @@ mod tests {
         controller
             .process_native_events(Some(&runtime_context))
             .unwrap();
-        backend_state.lock().unwrap().current_stream_info = Some(mock_actual_stream_info("song-b"));
+        backend_state.lock().unwrap().current_stream_info = None;
         native_events
             .lock()
             .unwrap()
@@ -4064,10 +4179,12 @@ mod tests {
             .process_native_events(Some(&runtime_context))
             .unwrap();
 
-        let backend_state = backend_state.lock().unwrap();
-        assert_eq!(backend_state.load_calls.len(), 1);
-        assert_eq!(backend_state.activate_prepared_calls, 0);
-        assert_eq!(backend_state.prepare_calls.len(), 2);
+        {
+            let backend_state = backend_state.lock().unwrap();
+            assert_eq!(backend_state.load_calls.len(), 1);
+            assert_eq!(backend_state.activate_prepared_calls, 0);
+            assert_eq!(backend_state.prepare_calls.len(), 2);
+        }
 
         let status = controller.state();
         assert_eq!(status.playing_state, PlayingState::Playing);
@@ -4080,6 +4197,23 @@ mod tests {
                 .map(|info| (info.song_id.as_str(), &info.request_kind)),
             Some(("song-b", &PlaybackStreamRequestKind::ActivatePrepared))
         );
+        assert_eq!(
+            status
+                .actual_stream_info
+                .as_ref()
+                .and_then(|info| info.codec.as_deref()),
+            Some("song-a")
+        );
+        backend_state.lock().unwrap().current_stream_info = Some(mock_actual_stream_info("song-b"));
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Playing { position_ms: 0 });
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
         assert_eq!(
             status
                 .actual_stream_info

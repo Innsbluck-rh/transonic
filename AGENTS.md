@@ -13,13 +13,19 @@
 ## platform-specific code
 
 - Code gated by `#[cfg(target_os = "...")]` (e.g. `android`, `ios`) is **not** checked by `pnpm cargo:check` on the host OS (Windows).
-- When you modify platform-specific code, you MUST attempt to verify it with the corresponding target:
+- When you modify Android-specific Rust code, do NOT use raw `cargo check --target aarch64-linux-android` as the first verification command in this project. It bypasses Tauri's Android build setup and can fail only because the NDK C compiler environment is not wired for direct Cargo use.
+- For Android Rust verification, use Tauri's Android script target from the repository root:
   ```
-  cargo check --target <triple>          # e.g. aarch64-linux-android
+  pnpm tauri android android-studio-script --target aarch64
   ```
-- If the check fails due to missing toolchain components (NDK, linker, etc.) or the target is not installed, you MUST:
-  1. Clearly inform the user that the platform-specific code was **not** verified by cargo check.
-  2. State the exact command and target triple the user should run.
+- Tauri Android target names are `aarch64`, `armv7`, `i686`, and `x86_64`; use these names instead of Rust target triples with this command.
+- For non-Android platform-specific Rust code, attempt the corresponding Rust target check only when appropriate:
+  ```
+  cargo check --target <triple>
+  ```
+- If the platform-specific check fails due to missing toolchain components (NDK, linker, etc.) or the target is not installed, you MUST:
+  1. Clearly inform the user that the platform-specific code was **not** verified by the attempted platform check.
+  2. State the exact command and target that should be run.
 - Do NOT silently treat a host-only `cargo check` pass as full verification when platform-gated code was touched.
 
 ## ADR

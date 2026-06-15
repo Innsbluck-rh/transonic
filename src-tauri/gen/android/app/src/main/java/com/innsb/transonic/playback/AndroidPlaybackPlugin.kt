@@ -3,8 +3,13 @@ package com.innsb.transonic.playback
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.annotation.Keep
 import androidx.core.content.ContextCompat
 import androidx.media3.common.C
@@ -39,6 +44,9 @@ private const val KEY_ARTIST = "artist"
 private const val KEY_ALBUM = "album"
 private const val KEY_ARTWORK_PATH = "artworkPath"
 private const val KEY_VOLUME = "volume"
+private const val NETWORK_COST_UNKNOWN = "unknown"
+private const val NETWORK_COST_METERED = "metered"
+private const val NETWORK_COST_UNMETERED = "unmetered"
 
 @InvokeArg
 @Keep
@@ -123,6 +131,9 @@ data class CurrentStreamInfoResponse(
 @Keep
 data class DeviceNameResponse(val deviceName: String)
 
+@Keep
+data class NetworkCostStateResponse(val state: String)
+
 private data class ControllerMediaState(
   val mediaId: String,
   val basePositionMs: Long,
@@ -163,6 +174,25 @@ private fun UpdateMediaArtworkArgs.toBundle(): Bundle {
     putString(KEY_MEDIA_ID, mediaId)
     putString(KEY_ARTWORK_PATH, artworkPath)
   }
+}
+
+private fun Context.currentNetworkCostState(): String {
+  val connectivityManager = getSystemService(ConnectivityManager::class.java) ?: return NETWORK_COST_UNKNOWN
+  return try {
+    val activeNetwork = connectivityManager.activeNetwork ?: return NETWORK_COST_UNKNOWN
+    val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork)
+    when {
+      capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_METERED) == true -> NETWORK_COST_UNMETERED
+      connectivityManager.isActiveNetworkMetered -> NETWORK_COST_METERED
+      else -> NETWORK_COST_UNMETERED
+    }
+  } catch (_: SecurityException) {
+    NETWORK_COST_UNKNOWN
+  }
+}
+
+private fun emitNetworkCostState(context: Context) {
+  RustPlaybackBridge().updateNetworkCostState(context.currentNetworkCostState())
 }
 
 internal fun Bundle.toLoadPreparedMediaArgs(): LoadPreparedMediaArgs? {
@@ -472,6 +502,63 @@ private fun selectedAudioStreamInfo(controller: MediaController): CurrentStreamI
 @TauriPlugin
 @Keep
 class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
+  private var networkCostCallback: ConnectivityManager.NetworkCallback? = null
+  @Volatile private var networkCostCallbacksEnabled: Boolean = false
+
+  private fun emitNetworkCostStateIfEnabled(context: Context) {
+    if (networkCostCallbacksEnabled) {
+      emitNetworkCostState(context)
+    }
+  }
+
+  @Command
+  @Keep
+  fun startNetworkCostMonitoring(invoke: Invoke) {
+    val applicationContext = activity.applicationContext
+    val currentState = applicationContext.currentNetworkCostState()
+    val connectivityManager = applicationContext.getSystemService(ConnectivityManager::class.java)
+    if (connectivityManager == null) {
+      invoke.resolveObject(NetworkCostStateResponse(currentState))
+      return
+    }
+
+    if (networkCostCallback == null) {
+      networkCostCallbacksEnabled = false
+      val callback =
+        object : ConnectivityManager.NetworkCallback() {
+          override fun onAvailable(network: Network) {
+            emitNetworkCostStateIfEnabled(applicationContext)
+          }
+
+          override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            emitNetworkCostStateIfEnabled(applicationContext)
+          }
+
+          override fun onLost(network: Network) {
+            emitNetworkCostStateIfEnabled(applicationContext)
+          }
+
+          override fun onUnavailable() {
+            emitNetworkCostStateIfEnabled(applicationContext)
+          }
+        }
+
+      try {
+        connectivityManager.registerDefaultNetworkCallback(callback)
+        networkCostCallback = callback
+      } catch (_: SecurityException) {
+        networkCostCallbacksEnabled = false
+        invoke.resolveObject(NetworkCostStateResponse(currentState))
+        return
+      }
+    }
+
+    invoke.resolveObject(NetworkCostStateResponse(currentState))
+    Handler(Looper.getMainLooper()).post {
+      networkCostCallbacksEnabled = true
+    }
+  }
+
   @Command
   @Keep
   fun defaultDeviceName(invoke: Invoke) {

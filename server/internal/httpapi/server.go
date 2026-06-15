@@ -32,6 +32,8 @@ type Server struct {
 	httpServer *http.Server
 }
 
+const connectWebSocketReadLimitBytes int64 = 1 << 20
+
 type DeviceRequest struct {
 	DeviceID    string `json:"deviceId,omitempty"`
 	DisplayName string `json:"displayName,omitempty"`
@@ -213,6 +215,7 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("websocket accept failed", "error", err)
 		return
 	}
+	conn.SetReadLimit(connectWebSocketReadLimitBytes)
 	defer conn.CloseNow()
 
 	client, err := s.hub.Register(context.Background(), *session)
@@ -259,7 +262,10 @@ func (s *Server) websocket(w http.ResponseWriter, r *http.Request) {
 		var message realtime.Envelope
 		err := wsjson.Read(context.Background(), conn, &message)
 		if err != nil {
-			_ = conn.Close(websocket.StatusNormalClosure, "")
+			status := websocket.CloseStatus(err)
+			if status != websocket.StatusNormalClosure && status != websocket.StatusGoingAway {
+				s.logger.Warn("websocket read failed", "deviceId", session.DeviceID, "status", status, "error", err)
+			}
 			return
 		}
 		message.DeviceID = session.DeviceID

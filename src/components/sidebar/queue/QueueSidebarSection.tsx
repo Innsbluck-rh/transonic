@@ -1,6 +1,6 @@
 import { Component } from 'solid-js';
-import Heading3 from '~/components/common/Heading3';
 import QueueList from '~/components/common/list/song/QueueList';
+import Heading3 from '~/components/common/text/Heading3';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 

@@ -3,7 +3,7 @@ import { resolveSPBrowseRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { connectStore } from '~/stores/ConnectStore';
 import ConnectButton from '../common/ConnectButton';
-import Title from '../common/Title';
+import Title from '../common/text/Title';
 
 const SPHeader: Component = () => {
   const navigate = useSPNavigate();

@@ -3,7 +3,7 @@ import { createSignal, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import { loadBootstrapToStore } from '~/features/session/service';
 import { sessionStore } from '~/stores/SessionStore';
-import Heading3 from '../common/Heading3';
+import Heading3 from '../common/text/Heading3';
 import SettingSection from './SettingSection';
 
 function ServerSettings() {

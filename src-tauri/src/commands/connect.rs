@@ -4,9 +4,15 @@ use crate::{
     connect::ConnectState,
     models::{
         ConnectDevicePresence, ConnectRuntimeStatus, ConnectSharedPlaybackState,
-        ConnectTransferPlaybackRequest,
+        ConnectStateSnapshot, ConnectTransferPlaybackRequest,
     },
 };
+
+#[tauri::command]
+#[specta::specta]
+pub fn connect_get_state_snapshot(app: AppHandle) -> ConnectStateSnapshot {
+    app.state::<ConnectState>().0.snapshot()
+}
 
 #[tauri::command]
 #[specta::specta]

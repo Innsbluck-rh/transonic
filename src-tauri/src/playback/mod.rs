@@ -45,6 +45,26 @@ pub(crate) fn android_default_device_name(app: &tauri::AppHandle) -> Option<Stri
         .filter(|name| !name.trim().is_empty())
 }
 
+#[cfg(target_os = "android")]
+pub(crate) fn start_android_network_cost_monitoring(app: &tauri::AppHandle) {
+    use tauri::Manager;
+
+    let Some(runtime_state) = app.try_state::<android_mobile_plugin::AndroidPlaybackRuntimeState>()
+    else {
+        return;
+    };
+    match runtime_state.bridge.start_network_cost_monitoring() {
+        Ok(state) => {
+            if let Err(error) = android_runtime::apply_network_cost_state_str(app, &state) {
+                log::warn!("android: failed to apply initial network cost state: {error}");
+            }
+        }
+        Err(error) => {
+            log::warn!("android: failed to start network cost monitoring: {error}");
+        }
+    }
+}
+
 pub(crate) fn create_playback_controller(
     _app: &tauri::AppHandle,
     app_handle: PlaybackEventAppHandle,

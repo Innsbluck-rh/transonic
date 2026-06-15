@@ -1,5 +1,5 @@
 import type { JSXElement } from 'solid-js';
-import Heading2 from '~/components/common/Heading2';
+import Heading2 from '~/components/common/text/Heading2';
 
 type SettingSectionProps = {
   title: string;

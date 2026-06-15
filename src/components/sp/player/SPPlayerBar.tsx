@@ -1,7 +1,7 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, JSX, Show } from 'solid-js';
 import { ConnectDevicePresence, type SongResponse } from '~/bindings';
-import MarqueeParagraph from '~/components/common/MarqueeParagraph';
+import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice';
@@ -115,7 +115,7 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
                 <>
                   <p class='text-secondary-text text-[13px] leading-none'>・</p>
                   <Icon icon={'material-symbols:volume-up'} class='text-accent text-[13px]' />
-                  <p class='text-accent text-[13px] leading-none font-bold'>{externalPlaybackDevice()?.displayName}</p>
+                  <p class='text-accent text-[13px] leading-none font-bold text-nowrap'>{externalPlaybackDevice()?.displayName}</p>
                 </>
               </Show>
             </div>

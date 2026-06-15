@@ -21,9 +21,9 @@ use tokio_tungstenite::{
 use crate::{
     commands::{common::service, playback::active_runtime_parts},
     models::{
-        AuthInput, ConnectDevicePresence, ConnectDevicesUpdated, ConnectPlaybackState,
-        ConnectRuntimeStatus, ConnectSettings, ConnectSharedPlaybackState,
-        ConnectSharedPlaybackUpdated, PlaybackStatus,
+        AuthInput, ConnectDevicePresence, ConnectPlaybackState, ConnectRuntimeStatus,
+        ConnectSettings, ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectStateUpdated,
+        PlaybackStatus,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
@@ -78,6 +78,7 @@ struct SharedPlaybackUpdate {
     shared: ConnectSharedPlaybackState,
     should_apply: bool,
     allow_preserve_active_track: bool,
+    snapshot: ConnectStateSnapshot,
 }
 
 fn should_apply_shared_playback_to_backend(
@@ -132,7 +133,15 @@ impl Default for ConnectRuntimeStatus {
 }
 
 impl ConnectRuntime {
-    fn begin_restart(&self) -> u64 {
+    fn snapshot_from_inner(inner: &ConnectRuntimeInner) -> ConnectStateSnapshot {
+        ConnectStateSnapshot {
+            runtime: inner.status.clone(),
+            devices: inner.devices.clone(),
+            shared_playback: inner.shared_playback.clone(),
+        }
+    }
+
+    fn begin_restart(&self) -> (u64, ConnectStateSnapshot) {
         let mut inner = self.inner.lock().unwrap();
         inner.generation = inner.generation.wrapping_add(1);
         inner.sender = None;
@@ -142,17 +151,18 @@ impl ConnectRuntime {
         inner.status.connected = false;
         inner.status.message = Some("connect: restarting".to_string());
         inner.status.device_id = None;
-        inner.generation
+        let generation = inner.generation;
+        (generation, Self::snapshot_from_inner(&inner))
     }
 
     fn is_current(&self, generation: u64) -> bool {
         self.inner.lock().unwrap().generation == generation
     }
 
-    fn set_disabled(&self, generation: u64) {
+    fn set_disabled(&self, generation: u64) -> Option<ConnectStateSnapshot> {
         let mut inner = self.inner.lock().unwrap();
         if inner.generation != generation {
-            return;
+            return None;
         }
         inner.sender = None;
         inner.device_id = None;
@@ -161,12 +171,18 @@ impl ConnectRuntime {
         let seq = inner.status.seq;
         inner.status = ConnectRuntimeStatus::default();
         inner.status.seq = seq;
+        Some(Self::snapshot_from_inner(&inner))
     }
 
-    fn set_disconnected(&self, generation: u64, server_url: Option<String>, message: String) {
+    fn set_disconnected(
+        &self,
+        generation: u64,
+        server_url: Option<String>,
+        message: String,
+    ) -> Option<ConnectStateSnapshot> {
         let mut inner = self.inner.lock().unwrap();
         if inner.generation != generation {
-            return;
+            return None;
         }
         inner.sender = None;
         inner.device_id = None;
@@ -176,6 +192,7 @@ impl ConnectRuntime {
         inner.status.connected = false;
         inner.status.server_url = server_url;
         inner.status.message = Some(message);
+        Some(Self::snapshot_from_inner(&inner))
     }
 
     fn set_connected(
@@ -184,10 +201,10 @@ impl ConnectRuntime {
         server_url: String,
         device_id: String,
         sender: mpsc::UnboundedSender<ConnectOutbound>,
-    ) {
+    ) -> Option<ConnectStateSnapshot> {
         let mut inner = self.inner.lock().unwrap();
         if inner.generation != generation {
-            return;
+            return None;
         }
         inner.sender = Some(sender);
         inner.device_id = Some(device_id.clone());
@@ -196,19 +213,20 @@ impl ConnectRuntime {
         inner.status.server_url = Some(server_url);
         inner.status.device_id = Some(device_id);
         inner.status.message = Some("connect: websocket connected".to_string());
+        Some(Self::snapshot_from_inner(&inner))
     }
 
     fn set_devices(
         &self,
         generation: u64,
         devices: Vec<ConnectDevicePresence>,
-    ) -> Option<Vec<ConnectDevicePresence>> {
+    ) -> Option<(Vec<ConnectDevicePresence>, ConnectStateSnapshot)> {
         let mut inner = self.inner.lock().unwrap();
         if inner.generation != generation {
             return None;
         }
         inner.devices = devices;
-        Some(inner.devices.clone())
+        Some((inner.devices.clone(), Self::snapshot_from_inner(&inner)))
     }
 
     fn set_shared_playback(
@@ -249,6 +267,7 @@ impl ConnectRuntime {
             shared,
             should_apply: !should_skip_own_report,
             allow_preserve_active_track: was_active_device && is_active_device,
+            snapshot: Self::snapshot_from_inner(&inner),
         })
     }
 
@@ -363,6 +382,11 @@ impl ConnectRuntime {
         self.inner.lock().unwrap().status.clone()
     }
 
+    pub(crate) fn snapshot(&self) -> ConnectStateSnapshot {
+        let inner = self.inner.lock().unwrap();
+        Self::snapshot_from_inner(&inner)
+    }
+
     pub(crate) fn devices(&self) -> Vec<ConnectDevicePresence> {
         self.inner.lock().unwrap().devices.clone()
     }
@@ -427,7 +451,8 @@ impl crate::playback::PlaybackReporter for ConnectPlaybackReporter {
 
 pub(crate) fn restart(app: &tauri::AppHandle) {
     let runtime = app.state::<ConnectState>().0.clone();
-    let generation = runtime.begin_restart();
+    let (generation, snapshot) = runtime.begin_restart();
+    emit_state_updated(app, snapshot);
     let app = app.clone();
 
     tauri::async_runtime::spawn(async move {
@@ -443,14 +468,18 @@ async fn run_connect_loop(app: tauri::AppHandle, runtime: Arc<ConnectRuntime>, g
 
         match run_connect_once(&app, runtime.clone(), generation).await {
             Ok(ConnectRunResult::Disabled) => {
-                runtime.set_disabled(generation);
+                if let Some(snapshot) = runtime.set_disabled(generation) {
+                    emit_state_updated(&app, snapshot);
+                }
                 return;
             }
             Ok(ConnectRunResult::Restart) => {}
             Err(error) => {
                 let server_url = current_connect_server_url(&app);
                 log::warn!("connect: {error}");
-                runtime.set_disconnected(generation, server_url, error);
+                if let Some(snapshot) = runtime.set_disconnected(generation, server_url, error) {
+                    emit_state_updated(&app, snapshot);
+                }
             }
         }
 
@@ -537,12 +566,14 @@ async fn run_connect_once(
         .map_err(|error| format!("connect: websocket failed: {error}"))?;
     let (mut write, mut read) = ws.split();
     let (sender, mut receiver) = mpsc::unbounded_channel::<ConnectOutbound>();
-    runtime.set_connected(
+    if let Some(snapshot) = runtime.set_connected(
         generation,
         connect_server_url.clone(),
         login_response.device_id.clone(),
         sender,
-    );
+    ) {
+        emit_state_updated(app, snapshot);
+    }
 
     let mut heartbeat = tokio::time::interval(Duration::from_secs(20));
 
@@ -638,8 +669,8 @@ async fn handle_incoming_message(
         "presence.updated" => {
             let payload: PresenceUpdatedPayload = serde_json::from_value(payload)
                 .map_err(|error| format!("connect: presence update decode failed: {error}"))?;
-            if let Some(devices) = runtime.set_devices(generation, payload.devices) {
-                emit_devices_updated(app, devices);
+            if let Some((_devices, snapshot)) = runtime.set_devices(generation, payload.devices) {
+                emit_state_updated(app, snapshot);
             }
         }
         TYPE_PLAYBACK_SHARED_SNAPSHOT | TYPE_PLAYBACK_SHARED_UPDATED => {
@@ -647,7 +678,7 @@ async fn handle_incoming_message(
             let shared: ConnectSharedPlaybackState = serde_json::from_value(payload)
                 .map_err(|error| format!("connect: shared playback decode failed: {error}"))?;
             if let Some(update) = runtime.set_shared_playback(generation, shared) {
-                emit_shared_playback_updated(app, update.shared.clone());
+                emit_state_updated(app, update.snapshot.clone());
                 let is_active_device = runtime.device_id().as_deref().is_some_and(|device_id| {
                     update.shared.active_device_id.as_deref() == Some(device_id)
                 });
@@ -832,18 +863,15 @@ async fn execute_playback_apply(
     .map_err(|error| format!("connect: playback apply task failed: {error}"))?
 }
 
-fn emit_devices_updated(app: &tauri::AppHandle, devices: Vec<ConnectDevicePresence>) {
-    if let Err(error) = (ConnectDevicesUpdated { devices }).emit(app) {
-        log::warn!("connect: failed to emit devices update: {error}");
-    }
-}
-
-fn emit_shared_playback_updated(
-    app: &tauri::AppHandle,
-    shared_playback: ConnectSharedPlaybackState,
-) {
-    if let Err(error) = (ConnectSharedPlaybackUpdated { shared_playback }).emit(app) {
-        log::warn!("connect: failed to emit shared playback update: {error}");
+fn emit_state_updated(app: &tauri::AppHandle, snapshot: ConnectStateSnapshot) {
+    if let Err(error) = (ConnectStateUpdated {
+        runtime: snapshot.runtime,
+        devices: snapshot.devices,
+        shared_playback: snapshot.shared_playback,
+    })
+    .emit(app)
+    {
+        log::warn!("connect: failed to emit state update: {error}");
     }
 }
 

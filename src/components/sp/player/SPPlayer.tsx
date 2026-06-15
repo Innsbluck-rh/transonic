@@ -1,7 +1,7 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, JSX, Show } from 'solid-js';
-import MarqueeParagraph from '~/components/common/MarqueeParagraph';
-import PlaybackStatusText from '~/components/common/playback/PlaybackStatusText';
+import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
+import PlaybackStatusText from '~/components/player/common/PlaybackStatusText';
 import PlayerIcon from '~/components/player/PlayerIcon';
 import PlayerSlider from '~/components/player/PlayerSlider';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
@@ -11,9 +11,9 @@ import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 import { openPlaybackStreamInfoDialog } from '../../common/dialog/PlaybackStreamInfoDialog';
-import Heading3 from '../../common/Heading3';
 import QueueList from '../../common/list/song/QueueList';
 import LoadCircle from '../../common/LoadCircle';
+import Heading3 from '../../common/text/Heading3';
 import { closePlayerBar } from './SPExpandablePlayerBar';
 
 interface SPPlayerProps {

@@ -1,5 +1,5 @@
 import { createSignal, Match, Switch } from 'solid-js';
-import RouteHeader from '~/components/common/RouteHeader';
+import RouteHeader from '~/components/common/text/RouteHeader';
 import ArtistList from '~/components/sidebar/index/list/ArtistList';
 import FolderList from '~/components/sidebar/index/list/FolderList';
 import IndexModeSelect2 from '~/components/sidebar/index/select/IndexModeSelect2';

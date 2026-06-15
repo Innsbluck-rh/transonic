@@ -15,15 +15,10 @@ vi.mock('~/bindings', () => ({
   commands: {
     getDefaultDeviceName: vi.fn().mockResolvedValue('test-device'),
     settingsUpdate: vi.fn(),
-    connectGetRuntimeStatus: vi.fn(),
-    connectGetDevices: vi.fn(),
-    connectGetSharedPlayback: vi.fn(),
+    connectGetStateSnapshot: vi.fn(),
   },
   events: {
-    connectDevicesUpdated: {
-      listen: vi.fn(),
-    },
-    connectSharedPlaybackUpdated: {
+    connectStateUpdated: {
       listen: vi.fn(),
     },
   },
@@ -40,6 +35,7 @@ function enabledSettings(): AppSettings {
       gaplessPlaybackEnabled: false,
       volume: 1,
       streamMode: 'raw',
+      meteredNetworkTranscodingEnabled: false,
       transcodingBitrateLimit: 320,
       useCustomTranscodingCodec: false,
       transcodingCodec: 'auto',
@@ -65,13 +61,17 @@ describe('ConnectSettings', () => {
       status: 'ok',
       data: payload.settings,
     }));
-    vi.mocked(commands.connectGetRuntimeStatus).mockResolvedValue({
-      enabled: false,
-      connected: false,
-      message: null,
-      serverUrl: null,
-      deviceId: null,
-      seq: 0,
+    vi.mocked(commands.connectGetStateSnapshot).mockResolvedValue({
+      runtime: {
+        enabled: false,
+        connected: false,
+        message: null,
+        serverUrl: null,
+        deviceId: null,
+        seq: 0,
+      },
+      devices: [],
+      sharedPlayback: null,
     });
   });
 
@@ -127,7 +127,7 @@ describe('ConnectSettings', () => {
         }),
       }),
     });
-    expect(commands.connectGetRuntimeStatus).toHaveBeenCalled();
+    expect(commands.connectGetStateSnapshot).toHaveBeenCalled();
     expect(root.textContent).not.toContain('Advanced');
     expect(root.textContent).not.toContain('Use Subsonic Host URL');
     expect(root.textContent).not.toContain('Device Name');
@@ -151,7 +151,7 @@ describe('ConnectSettings', () => {
         }),
       }),
     });
-    expect(commands.connectGetRuntimeStatus).toHaveBeenCalled();
+    expect(commands.connectGetStateSnapshot).toHaveBeenCalled();
     expect(root.textContent).toContain('Advanced');
   });
 

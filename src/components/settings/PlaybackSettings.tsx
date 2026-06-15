@@ -1,9 +1,10 @@
 import { Icon } from '@iconify-icon/solid';
+import { platform } from '@tauri-apps/plugin-os';
 import { createMemo, For, Show } from 'solid-js';
 import type { PlaybackTranscodingCodec } from '~/bindings';
 import { setPlaybackSetting, settingsStore } from '~/features/settings/service';
 import { sessionStore } from '~/stores/SessionStore';
-import Heading3 from '../common/Heading3';
+import Heading3 from '../common/text/Heading3';
 import SettingSection from './SettingSection';
 
 const TRANSCODING_CODEC_LABELS: Record<PlaybackTranscodingCodec, string> = {
@@ -22,6 +23,7 @@ function parseStreamBitrateLimit(value: string) {
 }
 
 function PlaybackSettings() {
+  const isAndroid = platform() === 'android';
   const transcodingCodecOptions = createMemo<PlaybackTranscodingCodec[]>(() => {
     const options = new Set<PlaybackTranscodingCodec>(['auto', 'mp3']);
     for (const codec of sessionStore.playbackCapabilities.transcodingCodecs ?? []) {
@@ -32,6 +34,8 @@ function PlaybackSettings() {
   });
   const selectedTranscodingCodec = (): PlaybackTranscodingCodec =>
     settingsStore.playback.useCustomTranscodingCodec ? settingsStore.playback.transcodingCodec : 'mp3';
+  const showTranscodingSettings = () =>
+    settingsStore.playback.streamMode === 'transcoding' || settingsStore.playback.meteredNetworkTranscodingEnabled;
 
   return (
     <SettingSection title='Playback'>
@@ -80,42 +84,55 @@ function PlaybackSettings() {
         </label>
       </form>
 
-      <Show when={settingsStore.playback.streamMode === 'transcoding'}>
-        <form class='mt-2 flex flex-col gap-3'>
-          <label class='mx-2 flex items-center justify-between gap-4'>
-            <span>Stream Bitrate Limit</span>
-            <select
-              class='rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-1 text-sm text-[var(--text-primary)]'
-              value={settingsStore.playback.transcodingBitrateLimit}
-              onChange={(event) => setPlaybackSetting('transcodingBitrateLimit', parseStreamBitrateLimit(event.currentTarget.value))}
-            >
-              <option value={96}>96 kbps</option>
-              <option value={128}>128 kbps</option>
-              <option value={192}>192 kbps</option>
-              <option value={320}>320 kbps</option>
-            </select>
-          </label>
-          <label class='mx-2 flex items-center justify-between gap-4'>
-            <span>Use Custom Codec (unstable)</span>
+      <Heading3 class='mt-1'>Raw Stream</Heading3>
+      <form class='flex flex-col gap-3'>
+        <Show when={isAndroid} fallback={<p class='text-secondary-text italic'>[ nothing to show. ]</p>}>
+          <label class='flex items-center justify-between gap-4 py-1'>
+            <span>Use Transcoding Stream on metered networks</span>
             <input
               type='checkbox'
-              checked={settingsStore.playback.useCustomTranscodingCodec}
-              onChange={(event) => setPlaybackSetting('useCustomTranscodingCodec', event.currentTarget.checked)}
+              checked={settingsStore.playback.meteredNetworkTranscodingEnabled}
+              onChange={(event) => setPlaybackSetting('meteredNetworkTranscodingEnabled', event.currentTarget.checked)}
             />
           </label>
-          <label class='mx-2 flex items-center justify-between gap-4'>
-            <span>Transcoding Codec</span>
-            <select
-              class='rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-1 text-sm text-[var(--text-primary)] disabled:opacity-70'
-              disabled={!settingsStore.playback.useCustomTranscodingCodec}
-              value={selectedTranscodingCodec()}
-              onChange={(event) => setPlaybackSetting('transcodingCodec', event.currentTarget.value as PlaybackTranscodingCodec)}
-            >
-              <For each={transcodingCodecOptions()}>{(codec) => <option value={codec}>{TRANSCODING_CODEC_LABELS[codec]}</option>}</For>
-            </select>
-          </label>
-        </form>
-      </Show>
+        </Show>
+      </form>
+
+      <Heading3 class='mt-1'>Transcoding Stream</Heading3>
+      <form class='flex flex-col gap-3'>
+        <label class='flex items-center justify-between gap-4'>
+          <span>Stream Bitrate Limit</span>
+          <select
+            class='rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-1 text-sm text-[var(--text-primary)]'
+            value={settingsStore.playback.transcodingBitrateLimit}
+            onChange={(event) => setPlaybackSetting('transcodingBitrateLimit', parseStreamBitrateLimit(event.currentTarget.value))}
+          >
+            <option value={96}>96 kbps</option>
+            <option value={128}>128 kbps</option>
+            <option value={192}>192 kbps</option>
+            <option value={320}>320 kbps</option>
+          </select>
+        </label>
+        <label class='flex items-center justify-between gap-4'>
+          <span>Use Custom Codec (unstable)</span>
+          <input
+            type='checkbox'
+            checked={settingsStore.playback.useCustomTranscodingCodec}
+            onChange={(event) => setPlaybackSetting('useCustomTranscodingCodec', event.currentTarget.checked)}
+          />
+        </label>
+        <label class='flex items-center justify-between gap-4'>
+          <span>Transcoding Codec</span>
+          <select
+            class='rounded border border-[var(--border-subtle)] bg-[var(--bg-secondary)] px-2 py-1 text-sm text-[var(--text-primary)] disabled:opacity-70'
+            disabled={!settingsStore.playback.useCustomTranscodingCodec}
+            value={selectedTranscodingCodec()}
+            onChange={(event) => setPlaybackSetting('transcodingCodec', event.currentTarget.value as PlaybackTranscodingCodec)}
+          >
+            <For each={transcodingCodecOptions()}>{(codec) => <option value={codec}>{TRANSCODING_CODEC_LABELS[codec]}</option>}</For>
+          </select>
+        </label>
+      </form>
     </SettingSection>
   );
 }

@@ -1,5 +1,5 @@
 import { createSignal } from 'solid-js';
-import { builtInThemes, type ColorTheme, type ThemeVariables, type TransonicColorTheme } from './themes';
+import { DEFAULT_COLOR_THEME, builtInThemes, type ColorTheme, type ThemeVariables, type TransonicColorTheme } from './themes';
 
 const THEME_STORAGE_KEY = 'transonic.color-theme';
 const THEME_STYLE_ELEMENT_ID = 'transonic-theme-overrides';
@@ -9,7 +9,7 @@ export type AppliedColorTheme = TransonicColorTheme | 'custom';
 export type { ColorTheme, ThemeVariables, TransonicColorTheme } from './themes';
 export { builtInThemes };
 
-export const [currentTheme, setCurrentTheme] = createSignal<AppliedColorTheme>('light');
+export const [currentTheme, setCurrentTheme] = createSignal<AppliedColorTheme>(DEFAULT_COLOR_THEME);
 
 let themeOverridesSheet: CSSStyleSheet | null = null;
 
@@ -28,10 +28,10 @@ function isNamedTheme(theme: string | null): theme is TransonicColorTheme {
 }
 
 function readStoredTheme(): TransonicColorTheme {
-  if (typeof window === 'undefined') return 'light';
+  if (typeof window === 'undefined') return DEFAULT_COLOR_THEME;
 
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
-  return isNamedTheme(storedTheme) ? storedTheme : 'light';
+  return isNamedTheme(storedTheme) ? storedTheme : DEFAULT_COLOR_THEME;
 }
 
 function serializeThemeVariables(variables: ThemeVariables): string {
@@ -151,7 +151,7 @@ export function applyThemeDefinition(
   } = {}
 ) {
   const nextThemeName = options.themeName ?? 'custom';
-  const colorScheme = theme.colorScheme ?? 'light';
+  const colorScheme = theme.colorScheme;
 
   writeThemeOverrides(theme);
   syncDocumentTheme(nextThemeName, colorScheme);

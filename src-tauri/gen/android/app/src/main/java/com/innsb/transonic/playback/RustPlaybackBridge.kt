@@ -7,6 +7,8 @@ class RustPlaybackBridge {
 
   external fun notifyAppResumedFromNotification()
 
+  external fun updateNetworkCostState(state: String)
+
   companion object {
     init {
       System.loadLibrary("transonic_lib")

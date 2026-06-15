@@ -104,16 +104,23 @@ func (h *Hub) Register(ctx context.Context, session store.Session) (*Client, err
 }
 
 func (h *Hub) Unregister(ctx context.Context, client *Client) {
+	removed := false
 	h.mu.Lock()
 	if byDevice := h.clients[client.Session.UserKey]; byDevice != nil {
-		delete(byDevice, client.Session.DeviceID)
-		if len(byDevice) == 0 {
-			delete(h.clients, client.Session.UserKey)
+		if byDevice[client.Session.DeviceID] == client {
+			delete(byDevice, client.Session.DeviceID)
+			removed = true
+			if len(byDevice) == 0 {
+				delete(h.clients, client.Session.UserKey)
+			}
 		}
 	}
 	close(client.Send)
 	h.mu.Unlock()
 
+	if !removed {
+		return
+	}
 	h.freezeActiveDeviceIfOffline(ctx, client.Session)
 	h.broadcastPresence(ctx, client.Session.UserKey)
 }

@@ -1,8 +1,8 @@
 import { createSignal, For, onMount, Show } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
-import Heading2 from '~/components/common/Heading2';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
-import RouteHeader from '~/components/common/RouteHeader';
+import Heading2 from '~/components/common/text/Heading2';
+import RouteHeader from '~/components/common/text/RouteHeader';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';

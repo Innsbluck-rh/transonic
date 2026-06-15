@@ -1,9 +1,9 @@
 import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, createSignal, For, Show } from 'solid-js';
 import type { PlaybackActualStreamInfo, PlaybackStreamInfo } from '~/bindings';
+import { useLocalPlaybackDiagnosticsAvailable, usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 import { settingsStore } from '~/features/settings/service';
-import { playbackStore } from '~/stores/PlaybackStore';
-import Heading3 from '../Heading3';
+import Heading3 from '../text/Heading3';
 
 const [open, setOpen] = createSignal(false);
 
@@ -90,7 +90,8 @@ function actualStreamSection(title: string, info: PlaybackActualStreamInfo | nul
 export const PlaybackStreamInfoDialog: Component = () => {
   const [copyState, setCopyState] = createSignal<string | null>(null);
 
-  const status = () => playbackStore.status;
+  const status = usePlaybackStatus();
+  const localPlaybackDiagnosticsAvailable = useLocalPlaybackDiagnosticsAvailable();
   const currentSong = createMemo(() => {
     const currentStatus = status();
     const currentIndex = currentStatus?.currentIndex;
@@ -119,11 +120,16 @@ export const PlaybackStreamInfoDialog: Component = () => {
     pushRow(gaplessRows, 'state', currentStatus?.gaplessStatus.state);
     pushRow(gaplessRows, 'message', currentStatus?.gaplessStatus.message);
 
-    pushRow(settingsRows, 'streamMode', settingsStore.playback.streamMode);
-    pushRow(settingsRows, 'transcodingBitrateLimit', settingsStore.playback.transcodingBitrateLimit);
-    pushRow(settingsRows, 'useCustomTranscodingCodec', settingsStore.playback.useCustomTranscodingCodec);
-    pushRow(settingsRows, 'transcodingCodec', settingsStore.playback.transcodingCodec);
-    pushRow(settingsRows, 'gaplessPlaybackEnabled', settingsStore.playback.gaplessPlaybackEnabled);
+    if (localPlaybackDiagnosticsAvailable()) {
+      pushRow(settingsRows, 'streamMode', settingsStore.playback.streamMode);
+      pushRow(settingsRows, 'meteredNetworkTranscodingEnabled', settingsStore.playback.meteredNetworkTranscodingEnabled);
+      pushRow(settingsRows, 'transcodingBitrateLimit', settingsStore.playback.transcodingBitrateLimit);
+      pushRow(settingsRows, 'useCustomTranscodingCodec', settingsStore.playback.useCustomTranscodingCodec);
+      pushRow(settingsRows, 'transcodingCodec', settingsStore.playback.transcodingCodec);
+      pushRow(settingsRows, 'gaplessPlaybackEnabled', settingsStore.playback.gaplessPlaybackEnabled);
+    } else {
+      pushRow(settingsRows, 'status', 'unavailable for remote playback');
+    }
 
     pushRow(songRows, 'title', song?.title);
     pushRow(songRows, 'artist', song?.artist);

@@ -14,6 +14,22 @@ pub struct ConnectRuntimeStatus {
     pub seq: u32,
 }
 
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectStateSnapshot {
+    pub runtime: ConnectRuntimeStatus,
+    pub devices: Vec<ConnectDevicePresence>,
+    pub shared_playback: Option<ConnectSharedPlaybackState>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type, Event)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectStateUpdated {
+    pub runtime: ConnectRuntimeStatus,
+    pub devices: Vec<ConnectDevicePresence>,
+    pub shared_playback: Option<ConnectSharedPlaybackState>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectDevicePresence {
@@ -69,16 +85,4 @@ pub struct ConnectSharedPlaybackState {
 #[serde(rename_all = "camelCase")]
 pub struct ConnectTransferPlaybackRequest {
     pub target_device_id: String,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type, Event)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectDevicesUpdated {
-    pub devices: Vec<ConnectDevicePresence>,
-}
-
-#[derive(Debug, Clone, Serialize, specta::Type, Event)]
-#[serde(rename_all = "camelCase")]
-pub struct ConnectSharedPlaybackUpdated {
-    pub shared_playback: ConnectSharedPlaybackState,
 }

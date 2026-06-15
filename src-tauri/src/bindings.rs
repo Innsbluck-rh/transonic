@@ -10,9 +10,7 @@ use tauri_specta::{collect_commands, collect_events, Builder};
 
 use crate::{
     commands,
-    models::{
-        ConnectDevicesUpdated, ConnectSharedPlaybackUpdated, MediaNotificationTap, PlaybackStatus,
-    },
+    models::{ConnectStateUpdated, MediaNotificationTap, PlaybackStatus},
 };
 
 pub fn builder() -> Builder<tauri::Wry> {
@@ -23,6 +21,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::connect_get_devices,
             commands::connect_get_runtime_status,
             commands::connect_get_shared_playback,
+            commands::connect_get_state_snapshot,
             commands::connect_transfer_playback,
             commands::delete_server_profile,
             commands::export_server_backup,
@@ -69,8 +68,7 @@ pub fn builder() -> Builder<tauri::Wry> {
         .events(collect_events![
             PlaybackStatus,
             MediaNotificationTap,
-            ConnectDevicesUpdated,
-            ConnectSharedPlaybackUpdated
+            ConnectStateUpdated
         ])
 }
 

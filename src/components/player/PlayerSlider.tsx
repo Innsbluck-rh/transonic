@@ -1,5 +1,5 @@
 import { Component } from 'solid-js';
-import SeekSlider from '../common/playback/SeekSlider';
+import SeekSlider from '../player/common/SeekSlider';
 
 interface PlayerSliderProps {
   valueMs?: number;

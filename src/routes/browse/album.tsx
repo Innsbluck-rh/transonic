@@ -2,10 +2,10 @@ import { Icon } from '@iconify-icon/solid';
 import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { commands, type AlbumSongsResponse } from '~/bindings';
-import Heading3 from '~/components/common/Heading3';
 import SongList from '~/components/common/list/song/SongList';
 import LoadCircle from '~/components/common/LoadCircle';
-import MarqueeParagraph from '~/components/common/MarqueeParagraph';
+import Heading3 from '~/components/common/text/Heading3';
+import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { buildAlbumMenuItems } from '~/features/menu';
@@ -101,7 +101,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         />
       </div>
 
-      <div class='bg-primary-surface relative z-10 flex w-full flex-col items-center px-3.5 pb-2 lg:flex-row lg:pb-4'>
+      <div class='bg-primary-surface relative z-10 flex w-full flex-col items-center px-3.5 pb-4 lg:flex-row lg:pb-6'>
         <div
           class='group border-secondary-border pointer-events-auto relative z-10 h-auto border shadow-lg'
           onClick={() => {
@@ -167,7 +167,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         </div>
       </div>
 
-      <div class='border-secondary-border z-20 flex w-full flex-col border-t pb-4'>
+      <div class='border-secondary-border z-20 flex w-full flex-col border-t'>
         <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
           <Heading3 class='text-secondary-text'>songs</Heading3>
         </div>

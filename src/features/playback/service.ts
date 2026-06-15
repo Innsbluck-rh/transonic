@@ -1,6 +1,7 @@
 import { commands, events, type PlaybackStatus } from '~/bindings';
+import { connectStore } from '~/stores/ConnectStore';
 import { playbackStore, setPlaybackStore } from '~/stores/PlaybackStore';
-import { mergePlaybackStatusWithSharedPlayback } from './sharedPlaybackStatus';
+import { resolvePlaybackDisplayStatus } from './sharedPlaybackStatus';
 
 type PlaybackCommandResult = { status: 'ok' } | { status: 'error'; error: string };
 
@@ -22,6 +23,7 @@ export async function startPlaybackStateSync() {
   let stateGeneration = 0;
   let refreshInFlight = false;
   let animationFrameId: number | undefined;
+  let latestSharedPlaybackPlaying = false;
 
   const applyAuthoritativeState = (status: PlaybackStatus) => {
     stateGeneration += 1;
@@ -49,7 +51,17 @@ export async function startPlaybackStateSync() {
     animationFrameId = undefined;
   };
 
-  const shouldTickClock = () => playbackStore.status?.playingState === 'playing' && !document.hidden;
+  const displayStatus = () =>
+    resolvePlaybackDisplayStatus(playbackStore.status, connectStore.runtime.connected, connectStore.sharedPlayback, connectStore.runtime.deviceId);
+  const shouldTickClock = () => (displayStatus()?.playingState === 'playing' || latestSharedPlaybackPlaying) && !document.hidden;
+
+  const startClockLoop = () => {
+    if (animationFrameId !== undefined) {
+      return;
+    }
+
+    animationFrameId = window.requestAnimationFrame(tickClock);
+  };
 
   const tickClock = () => {
     if (!shouldTickClock()) {
@@ -58,7 +70,8 @@ export async function startPlaybackStateSync() {
     }
 
     setPlaybackStore('clockMs', monotonicNowMs());
-    animationFrameId = window.requestAnimationFrame(tickClock);
+    animationFrameId = undefined;
+    startClockLoop();
   };
 
   const syncClockLoop = () => {
@@ -67,18 +80,16 @@ export async function startPlaybackStateSync() {
       return;
     }
 
-    if (animationFrameId !== undefined) {
-      return;
-    }
-
-    animationFrameId = window.requestAnimationFrame(tickClock);
+    startClockLoop();
   };
 
   const unlistenStatus = await events.playbackStatus.listen((event) => {
     applyAuthoritativeState(event.payload);
   });
-  const unlistenSharedPlayback = await events.connectSharedPlaybackUpdated.listen((event) => {
-    applyAuthoritativeState(mergePlaybackStatusWithSharedPlayback(playbackStore.status, event.payload.sharedPlayback));
+  const unlistenConnectState = await events.connectStateUpdated.listen((event) => {
+    latestSharedPlaybackPlaying = event.payload.sharedPlayback?.state.playingState === 'playing';
+    setPlaybackStore('clockMs', monotonicNowMs());
+    syncClockLoop();
   });
 
   const refreshPlaybackState = async () => {
@@ -121,7 +132,7 @@ export async function startPlaybackStateSync() {
       requestPlaybackStateRefresh = undefined;
     }
     unlistenStatus();
-    unlistenSharedPlayback();
+    unlistenConnectState();
   };
 }
 

@@ -1,6 +1,10 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <!-- Base application theme. -->
     <style name="Theme.transonic" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <!-- Customize your theme here. -->
+        <item name="colorAccent">@color/transonic_accent</item>
+        <item name="colorControlActivated">@color/transonic_accent</item>
+        <item name="colorSecondary">@color/transonic_accent</item>
+        <item name="android:colorAccent">@color/transonic_accent</item>
+        <item name="android:colorControlActivated">@color/transonic_accent</item>
     </style>
 </resources>

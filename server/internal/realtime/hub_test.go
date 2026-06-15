@@ -537,6 +537,40 @@ func TestActiveOfflineClearsActiveDeviceAndStopsPlayback(t *testing.T) {
 	}
 }
 
+func TestOldConnectionUnregisterDoesNotRemoveReplacement(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	hub := NewHub(st, time.Minute)
+	session := store.Session{UserKey: "user", DeviceID: "device", UpstreamServerURL: "https://a/rest", Username: "a"}
+	_ = st.UpsertDevice(ctx, store.Device{UserKey: "user", DeviceID: "device", UpstreamServerURL: "https://a/rest", Username: "a", DisplayName: "Device"})
+	oldClient, _ := hub.Register(ctx, session)
+	drain(oldClient)
+	replacement, _ := hub.Register(ctx, session)
+	drain(replacement)
+
+	hub.Unregister(ctx, oldClient)
+	if !hub.isDeviceOnline("user", "device") {
+		t.Fatal("replacement connection was removed by stale unregister")
+	}
+	if !hub.sendToDevice("user", "device", TypePresenceUpdated, "", mustJSON(map[string]any{"devices": []store.Device{}})) {
+		t.Fatal("replacement connection is not reachable")
+	}
+	got := <-replacement.Send
+	if got.Type != TypePresenceUpdated {
+		t.Fatalf("expected replacement to receive presence update, got %s", got.Type)
+	}
+
+	hub.Unregister(ctx, replacement)
+	if hub.isDeviceOnline("user", "device") {
+		t.Fatal("replacement connection remained online after unregister")
+	}
+}
+
 func TestPlaybackCommandClaimsActiveDeviceWhenMissing(t *testing.T) {
 	ctx := context.Background()
 	st, err := store.OpenMemory(ctx)

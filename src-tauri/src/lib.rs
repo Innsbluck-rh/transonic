@@ -18,7 +18,7 @@ use tauri::Manager;
 use app_settings::{app_settings_path, AppSettingsStore};
 use artist_image_cache::ArtistImageCache;
 use cover_art_cache::CoverArtCache;
-use models::ActiveSession;
+use models::{resolve_effective_stream_settings, ActiveSession, NetworkCostState};
 use playback::{PlaybackController, PlaybackEventAppHandle};
 use playback_state::{playback_state_path, FilePlaybackStatePersister};
 
@@ -27,10 +27,17 @@ pub(crate) struct PlaybackControllerState(pub Mutex<PlaybackController>);
 pub(crate) struct AppSettingsState(pub Mutex<AppSettingsStore>);
 pub(crate) struct CoverArtCacheState(pub CoverArtCache);
 pub(crate) struct ArtistImageCacheState(pub ArtistImageCache);
+pub(crate) struct NetworkCostStateState(pub Mutex<NetworkCostState>);
 
 impl Default for ActiveSessionState {
     fn default() -> Self {
         Self(Mutex::new(None))
+    }
+}
+
+impl Default for NetworkCostStateState {
+    fn default() -> Self {
+        Self(Mutex::new(NetworkCostState::default()))
     }
 }
 
@@ -64,6 +71,7 @@ pub fn run() {
 
     let builder = tauri::Builder::default()
         .manage(ActiveSessionState::default())
+        .manage(NetworkCostStateState::default())
         .manage(connect::ConnectState::default())
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -96,6 +104,16 @@ pub fn run() {
                 }
             };
             let initial_playback_settings = settings_store.snapshot().0.playback;
+            let initial_network_cost_state = app
+                .state::<NetworkCostStateState>()
+                .0
+                .lock()
+                .map(|guard| *guard)
+                .unwrap_or_default();
+            let initial_stream_settings = resolve_effective_stream_settings(
+                &initial_playback_settings,
+                initial_network_cost_state,
+            );
             app.manage(AppSettingsState::new(settings_store));
             let persister_path = playback_state_path(&config_dir);
             let persister = Box::new(FilePlaybackStatePersister::new(persister_path));
@@ -110,12 +128,9 @@ pub fn run() {
                 initial_playback_settings.volume,
             );
             let _ = controller.set_stream_settings(
-                initial_playback_settings.stream_mode,
-                initial_playback_settings.transcoding_bitrate_limit,
-                models::effective_transcoding_codec(
-                    initial_playback_settings.use_custom_transcoding_codec,
-                    initial_playback_settings.transcoding_codec,
-                ),
+                initial_stream_settings.stream_mode,
+                initial_stream_settings.transcoding_bitrate_limit,
+                initial_stream_settings.transcoding_codec,
                 None,
             );
             app.manage(PlaybackControllerState::new(controller));
@@ -142,6 +157,8 @@ pub fn run() {
 
             #[cfg(target_os = "android")]
             playback::install_android_app_handle(app.handle().clone());
+            #[cfg(target_os = "android")]
+            playback::start_android_network_cost_monitoring(&app.handle());
             #[cfg(target_os = "windows")]
             playback::install_windows_app_handle(app.handle().clone());
 

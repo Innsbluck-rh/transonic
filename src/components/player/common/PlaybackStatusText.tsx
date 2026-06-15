@@ -1,6 +1,6 @@
 import { Component, createMemo, Show } from 'solid-js';
 import type { PlaybackActualStreamInfo } from '~/bindings';
-import { playbackStore } from '~/stores/PlaybackStore';
+import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 
 interface PlaybackStatusTextProps {
   class?: string;
@@ -51,7 +51,8 @@ function streamParts(info: PlaybackActualStreamInfo | null | undefined): string[
 }
 
 const PlaybackStatusText: Component<PlaybackStatusTextProps> = (props) => {
-  const actualStreamInfo = createMemo(() => playbackStore.status?.actualStreamInfo ?? null);
+  const playbackStatus = usePlaybackStatus();
+  const actualStreamInfo = createMemo(() => playbackStatus()?.actualStreamInfo ?? null);
   const parts = createMemo(() => streamParts(actualStreamInfo()));
   const codec = createMemo(() => {
     const info = actualStreamInfo();

@@ -1,7 +1,7 @@
 import { Icon } from '@iconify-icon/solid';
 import { useLocation, useNavigate, useSearchParams } from '@solidjs/router';
 import { createMemo } from 'solid-js';
-import Heading1 from '~/components/common/Heading1';
+import Heading1 from '~/components/common/text/Heading1';
 import { resolveHomeRoute } from '~/features/navigation/routes';
 import { type HomeErrorKind } from '~/features/session/bootstrap';
 
