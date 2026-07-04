@@ -10,6 +10,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   playback: {
     gaplessPlaybackEnabled: false,
     volume: 1,
+    useCustomOutput: false,
+    outputDeviceId: null,
     streamMode: 'raw',
     meteredNetworkTranscodingEnabled: false,
     transcodingBitrateLimit: 320,
@@ -39,6 +41,7 @@ function normalizePlaybackSettings(raw: Partial<AppSettings['playback']> | null 
   const legacyGaplessStrategy = raw && 'prebufferStrategy' in raw ? (raw as Partial<{ prebufferStrategy: unknown }>).prebufferStrategy : null;
   const legacyGaplessEnabled = raw && 'prebufferEnabled' in raw ? (raw as Partial<{ prebufferEnabled: unknown }>).prebufferEnabled : null;
   const volume = typeof raw?.volume === 'number' && Number.isFinite(raw.volume) ? Math.min(Math.max(raw.volume, 0), 1) : 1;
+  const outputDeviceId = normalizeOutputDeviceId(raw?.outputDeviceId);
 
   return {
     gaplessPlaybackEnabled:
@@ -48,12 +51,18 @@ function normalizePlaybackSettings(raw: Partial<AppSettings['playback']> | null 
           ? legacyGaplessEnabled
           : legacyGaplessStrategy === 'next_track',
     volume,
+    useCustomOutput: typeof raw?.useCustomOutput === 'boolean' ? raw.useCustomOutput : outputDeviceId !== null,
+    outputDeviceId,
     streamMode: normalizePlaybackStreamMode(raw?.streamMode),
     meteredNetworkTranscodingEnabled: raw?.meteredNetworkTranscodingEnabled === true,
     transcodingBitrateLimit: normalizeTranscodingBitrateLimit(raw?.transcodingBitrateLimit),
     useCustomTranscodingCodec: raw?.useCustomTranscodingCodec === true,
     transcodingCodec: normalizePlaybackTranscodingCodec(raw?.transcodingCodec),
   };
+}
+
+function normalizeOutputDeviceId(raw: unknown): AppSettings['playback']['outputDeviceId'] {
+  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
 }
 
 function normalizePlaybackStreamMode(raw: unknown): AppSettings['playback']['streamMode'] {
@@ -218,6 +227,10 @@ export async function hydrateSettings(settings: AppSettings, settingsOrigin: Set
 }
 
 export async function setPlaybackSetting<K extends keyof AppSettings['playback']>(key: K, value: AppSettings['playback'][K]) {
+  return setPlaybackSettings({ [key]: value } as Pick<AppSettings['playback'], K>);
+}
+
+export async function setPlaybackSettings(patch: Partial<AppSettings['playback']>) {
   const previousSettings: AppSettings = {
     appearance: {
       ...settingsStore.appearance,
@@ -235,7 +248,7 @@ export async function setPlaybackSetting<K extends keyof AppSettings['playback']
     },
     playback: {
       ...settingsStore.playback,
-      [key]: value,
+      ...patch,
     },
     connect: {
       ...settingsStore.connect,

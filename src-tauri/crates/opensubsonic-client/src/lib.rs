@@ -17,7 +17,9 @@ pub use error::ApiError;
 pub use extensions::{OpenSubsonicExtension, ServerFeatures};
 pub use probe::ServerProbe;
 pub use transport::{PreparedBinaryRequest, ReqwestTransport};
-pub use types::common::{AlbumListType, ClientInfo, EmptyPayload, MediaType, PlaybackState};
+pub use types::common::{
+    AlbumListType, Child, ClientInfo, EmptyPayload, MediaType, PlaybackState,
+};
 
 #[cfg(test)]
 mod tests;

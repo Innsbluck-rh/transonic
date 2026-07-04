@@ -7,7 +7,7 @@
   "scripts": {
     "start": "vite",
     "predev": "pnpm bindings:export",
-    "prebuild": "pnpm format:check && pnpm bindings:check",
+    "prebuild": "pnpm bindings:check",
     "dev": "tauri dev",
     "build": "tauri build",
     "ad:dev": "tauri android dev",
@@ -40,8 +40,7 @@
     "interactjs": "^1.10.27",
     "jsdom": "^29.1.0",
     "prettier-plugin-tailwindcss": "^0.7.2",
-    "solid-js": "^1.9.12",
-    "tauri-plugin-app-events-api": "~0.2.0"
+    "solid-js": "^1.9.12"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.2",

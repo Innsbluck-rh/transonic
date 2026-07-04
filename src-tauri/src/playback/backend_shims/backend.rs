@@ -12,6 +12,8 @@ pub struct PlaybackBackendLoadRequest {
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub source_content_type: Option<String>,
+    pub source_suffix: Option<String>,
     pub artwork_path: Option<String>,
     pub absolute_start_position_ms: u32,
     pub local_start_position_ms: u32,
@@ -57,6 +59,7 @@ pub trait PlaybackBackend: Send {
         PlaybackCapabilities {
             gapless_playback: false,
             transcoding_codecs: vec![PlaybackTranscodingCodec::Mp3],
+            output_device_selection: false,
         }
     }
 
@@ -94,6 +97,9 @@ pub trait PlaybackBackend: Send {
         Ok(None)
     }
     fn set_volume(&mut self, volume: f32) -> Result<(), String>;
+    fn set_output_device(&mut self, _output_device_id: Option<String>) -> Result<(), String> {
+        Ok(())
+    }
     fn pause(&mut self) -> Result<(), String>;
     fn resume(&mut self) -> Result<(), String>;
     fn stop(&mut self) -> Result<(), String>;

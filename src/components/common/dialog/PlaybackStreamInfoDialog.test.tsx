@@ -145,6 +145,8 @@ function resetStores() {
     playback: {
       gaplessPlaybackEnabled: true,
       volume: 1,
+      useCustomOutput: false,
+      outputDeviceId: null,
       streamMode: 'raw',
       meteredNetworkTranscodingEnabled: false,
       transcodingBitrateLimit: 320,

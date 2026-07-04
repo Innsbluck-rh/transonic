@@ -162,6 +162,7 @@ impl PlaybackBackend for MfPlaybackBackend {
                 PlaybackTranscodingCodec::Aac,
                 PlaybackTranscodingCodec::Flac,
             ],
+            output_device_selection: false,
         }
     }
 
@@ -791,7 +792,7 @@ fn build_cpal_stream(
 
     let stream = device
         .build_output_stream(
-            &config,
+            config,
             move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
                 let mut buf = ring.buf.lock().unwrap();
                 let available = buf.len().min(data.len());

@@ -45,6 +45,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::clear_cover_art_cache,
             commands::get_artist_image,
             commands::playback_get_state,
+            commands::playback_get_output_devices,
             commands::playback_set_queue,
             commands::playback_clear_queue,
             commands::playback_insert_after_current,

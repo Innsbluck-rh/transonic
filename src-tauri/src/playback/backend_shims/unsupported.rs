@@ -11,6 +11,7 @@ impl PlaybackBackend for UnsupportedPlaybackBackend {
         PlaybackCapabilities {
             gapless_playback: false,
             transcoding_codecs: vec![PlaybackTranscodingCodec::Mp3],
+            output_device_selection: false,
         }
     }
 

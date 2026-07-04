@@ -7,10 +7,6 @@ pub use backend::{
 #[cfg(target_os = "windows")]
 mod windows_symphonia;
 
-#[cfg(target_os = "windows")]
-#[allow(dead_code)]
-mod windows_mf;
-
 #[cfg(target_os = "android")]
 mod android;
 
@@ -22,6 +18,9 @@ pub use windows_symphonia::create_playback_backend;
 
 #[cfg(target_os = "windows")]
 pub use windows_symphonia::SymphoniaPlaybackEventHub;
+
+#[cfg(target_os = "windows")]
+pub(crate) use windows_symphonia::{list_output_devices, validate_output_device_id};
 
 #[cfg(target_os = "android")]
 pub use android::create_playback_backend;

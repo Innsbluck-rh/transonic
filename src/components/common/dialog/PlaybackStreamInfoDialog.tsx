@@ -127,6 +127,8 @@ export const PlaybackStreamInfoDialog: Component = () => {
       pushRow(settingsRows, 'useCustomTranscodingCodec', settingsStore.playback.useCustomTranscodingCodec);
       pushRow(settingsRows, 'transcodingCodec', settingsStore.playback.transcodingCodec);
       pushRow(settingsRows, 'gaplessPlaybackEnabled', settingsStore.playback.gaplessPlaybackEnabled);
+      pushRow(settingsRows, 'useCustomOutput', settingsStore.playback.useCustomOutput);
+      pushRow(settingsRows, 'outputDeviceId', settingsStore.playback.outputDeviceId);
     } else {
       pushRow(settingsRows, 'status', 'unavailable for remote playback');
     }

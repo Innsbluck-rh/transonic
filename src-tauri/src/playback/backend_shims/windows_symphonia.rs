@@ -22,6 +22,7 @@
 //! channel) instead of requiring a full reload.
 
 use std::collections::VecDeque;
+use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
 use std::thread::JoinHandle;
@@ -29,7 +30,8 @@ use std::thread::JoinHandle;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 use crate::models::{
-    normalize_volume, PlaybackActualStreamInfo, PlaybackCapabilities, PlaybackTranscodingCodec,
+    normalize_output_device_id, normalize_volume, PlaybackActualStreamInfo, PlaybackCapabilities,
+    PlaybackOutputDevice, PlaybackTranscodingCodec,
 };
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
@@ -317,6 +319,139 @@ pub fn create_playback_backend(event_hub: SymphoniaPlaybackEventHub) -> Box<dyn 
     Box::new(SymphoniaPlaybackBackend::new(event_hub))
 }
 
+pub fn validate_output_device_id(output_device_id: &str) -> Result<(), String> {
+    let normalized = normalize_output_device_id(Some(output_device_id.to_string()))
+        .ok_or_else(|| "Output device id is empty.".to_string())?;
+    let _ = resolve_cpal_output_device(Some(normalized.as_str()))?;
+    Ok(())
+}
+
+pub fn list_output_devices() -> Result<Vec<PlaybackOutputDevice>, String> {
+    let mut devices = Vec::new();
+    append_windows_output_devices(&mut devices);
+
+    devices.sort_by(|left, right| {
+        left.name
+            .to_lowercase()
+            .cmp(&right.name.to_lowercase())
+            .then_with(|| {
+                left.device_name
+                    .to_lowercase()
+                    .cmp(&right.device_name.to_lowercase())
+            })
+            .then_with(|| left.id.cmp(&right.id))
+    });
+    Ok(devices)
+}
+
+fn append_windows_output_devices(output: &mut Vec<PlaybackOutputDevice>) {
+    let host_id = cpal::HostId::Wasapi;
+    let host_instance = match cpal::host_from_id(host_id) {
+        Ok(host_instance) => host_instance,
+        Err(error) => {
+            log::warn!("cpal: output host {host_id} is unavailable: {error}");
+            return;
+        }
+    };
+    let devices = match host_instance.output_devices() {
+        Ok(devices) => devices,
+        Err(error) => {
+            log::warn!("cpal: failed to enumerate {host_id} output devices: {error}");
+            return;
+        }
+    };
+
+    for device in devices {
+        let id = match device.id() {
+            Ok(id) => id,
+            Err(error) => {
+                log::warn!("cpal: failed to read {host_id} output device id: {error}");
+                continue;
+            }
+        };
+        let (name, device_name) = output_device_names(&device, &id);
+        output.push(PlaybackOutputDevice {
+            id: id.to_string(),
+            name,
+            device_name,
+        });
+    }
+}
+
+fn output_device_names(device: &cpal::Device, id: &cpal::DeviceId) -> (String, String) {
+    let Ok(description) = device.description() else {
+        let fallback = id.to_string();
+        return (fallback.clone(), fallback);
+    };
+    let name = description.name().trim();
+    let name = if name.is_empty() {
+        id.to_string()
+    } else {
+        name.to_string()
+    };
+    let device_name = description
+        .extended()
+        .find_map(|line| device_name_from_friendly_name(line, &name))
+        .or_else(|| {
+            description
+                .extended()
+                .map(|line| line.trim())
+                .find(|line| !line.is_empty() && *line != name)
+                .map(ToString::to_string)
+        })
+        .or_else(|| {
+            description
+                .driver()
+                .map(str::trim)
+                .filter(|driver| !driver.is_empty() && *driver != name)
+                .map(ToString::to_string)
+        })
+        .unwrap_or_else(|| name.clone());
+    (name, device_name)
+}
+
+fn device_name_from_friendly_name(friendly_name: &str, output_name: &str) -> Option<String> {
+    let friendly_name = friendly_name.trim();
+    let prefix = format!("{output_name} (");
+    friendly_name
+        .strip_prefix(prefix.as_str())
+        .and_then(|value| value.strip_suffix(')'))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToString::to_string)
+}
+
+fn resolve_cpal_output_device(output_device_id: Option<&str>) -> Result<cpal::Device, String> {
+    let Some(output_device_id) =
+        output_device_id.and_then(|value| normalize_output_device_id(Some(value.to_string())))
+    else {
+        let host = cpal::host_from_id(cpal::HostId::Wasapi).map_err(|error| {
+            format!(
+                "Audio output device error: output host {} is unavailable: {error}",
+                cpal::HostId::Wasapi
+            )
+        })?;
+        return host.default_output_device().ok_or_else(|| {
+            "Audio output device error: no default audio output device found.".to_string()
+        });
+    };
+
+    let device_id = cpal::DeviceId::from_str(output_device_id.as_str())
+        .map_err(|error| format!("Audio output device error: invalid output device id: {error}"))?;
+    let host_id = device_id.host();
+    if host_id != cpal::HostId::Wasapi {
+        return Err(format!(
+            "Audio output device error: only listed Windows output devices are supported: {output_device_id}"
+        ));
+    }
+    let host = cpal::host_from_id(host_id).map_err(|error| {
+        format!("Audio output device error: output host {host_id} is unavailable: {error}")
+    })?;
+    host.device_by_id(&device_id).ok_or_else(|| {
+        format!("Audio output device error: output device is unavailable: {output_device_id}")
+    })
+}
+
 fn symphonia_codec_registry() -> &'static symphonia::core::codecs::registry::CodecRegistry {
     static REGISTRY: OnceLock<symphonia::core::codecs::registry::CodecRegistry> = OnceLock::new();
     REGISTRY.get_or_init(|| {
@@ -386,6 +521,10 @@ enum ActiveWorkerJob {
     },
     SetVolume {
         volume: f32,
+        reply: std::sync::mpsc::Sender<Result<(), String>>,
+    },
+    SetOutputDevice {
+        output_device_id: Option<String>,
         reply: std::sync::mpsc::Sender<Result<(), String>>,
     },
     Pause {
@@ -603,6 +742,7 @@ impl PlaybackBackend for SymphoniaPlaybackBackend {
                 PlaybackTranscodingCodec::Vorbis,
                 PlaybackTranscodingCodec::Opus,
             ],
+            output_device_selection: true,
         }
     }
 
@@ -668,6 +808,14 @@ impl PlaybackBackend for SymphoniaPlaybackBackend {
         self.send_active_unit(|reply| ActiveWorkerJob::SetVolume { volume, reply })
     }
 
+    fn set_output_device(&mut self, output_device_id: Option<String>) -> Result<(), String> {
+        let output_device_id = normalize_output_device_id(output_device_id);
+        self.send_active_unit(|reply| ActiveWorkerJob::SetOutputDevice {
+            output_device_id,
+            reply,
+        })
+    }
+
     fn pause(&mut self) -> Result<(), String> {
         self.send_active_unit(|reply| ActiveWorkerJob::Pause { reply })
     }
@@ -726,15 +874,20 @@ impl AudioRing {
         (consumed / ch) * 1000 / sr
     }
 
-    fn drain_into(&self, output: &mut [f32]) -> usize {
-        let mut buf = self.buf.lock().unwrap();
-        let available = buf.len().min(output.len());
-        for (i, sample) in buf.drain(..available).enumerate() {
-            output[i] = sample;
+    fn drain_frames_into(&self, max_frames: usize, output: &mut VecDeque<f32>) -> usize {
+        let channels = self.channels as usize;
+        if channels == 0 || max_frames == 0 {
+            return 0;
         }
+
+        let mut buf = self.buf.lock().unwrap();
+        let available_frames = buf.len() / channels;
+        let frames = available_frames.min(max_frames);
+        let samples = frames * channels;
+        output.extend(buf.drain(..samples));
         self.samples_consumed
-            .fetch_add(available as u64, Ordering::Relaxed);
-        available
+            .fetch_add(samples as u64, Ordering::Relaxed);
+        frames
     }
 
     fn is_drained_and_finished(&self) -> bool {
@@ -857,6 +1010,323 @@ impl StreamRouter {
     }
 }
 
+struct OutputResampler {
+    ring: Option<Arc<AudioRing>>,
+    source_queue: VecDeque<f32>,
+    previous_frame: Vec<f32>,
+    next_frame: Vec<f32>,
+    has_previous_frame: bool,
+    has_next_frame: bool,
+    phase: f64,
+    ended: bool,
+}
+
+impl Default for OutputResampler {
+    fn default() -> Self {
+        Self {
+            ring: None,
+            source_queue: VecDeque::new(),
+            previous_frame: Vec::new(),
+            next_frame: Vec::new(),
+            has_previous_frame: false,
+            has_next_frame: false,
+            phase: 0.0,
+            ended: false,
+        }
+    }
+}
+
+impl OutputResampler {
+    fn ensure_track(&mut self, ring: &Arc<AudioRing>) {
+        if self
+            .ring
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, ring))
+        {
+            return;
+        }
+
+        self.ring = Some(Arc::clone(ring));
+        self.source_queue.clear();
+        self.previous_frame.clear();
+        self.next_frame.clear();
+        self.has_previous_frame = false;
+        self.has_next_frame = false;
+        self.phase = 0.0;
+        self.ended = false;
+    }
+
+    fn is_drained_for(&self, ring: &Arc<AudioRing>) -> bool {
+        self.ring
+            .as_ref()
+            .is_some_and(|current| Arc::ptr_eq(current, ring))
+            && self.source_queue.is_empty()
+            && !self.has_previous_frame
+            && !self.has_next_frame
+    }
+
+    fn source_channels(&self) -> usize {
+        self.ring
+            .as_ref()
+            .map(|ring| ring.channels as usize)
+            .unwrap_or(0)
+    }
+
+    fn source_sample_rate(&self) -> u32 {
+        self.ring.as_ref().map(|ring| ring.sample_rate).unwrap_or(0)
+    }
+
+    fn buffered_source_frames(&self) -> usize {
+        let channels = self.source_channels();
+        if channels == 0 {
+            return 0;
+        }
+        (self.source_queue.len() / channels)
+            + usize::from(self.has_previous_frame)
+            + usize::from(self.has_next_frame)
+    }
+
+    fn pull_for_output(&mut self, output_frames: usize, output_sample_rate: u32) {
+        let Some(ring) = self.ring.as_ref() else {
+            return;
+        };
+        if output_frames == 0 || output_sample_rate == 0 || ring.sample_rate == 0 {
+            return;
+        }
+
+        let step = ring.sample_rate as f64 / output_sample_rate as f64;
+        let needed_frames = (output_frames as f64 * step).ceil() as usize + 2;
+        let buffered_frames = self.buffered_source_frames();
+        if needed_frames > buffered_frames {
+            ring.drain_frames_into(needed_frames - buffered_frames, &mut self.source_queue);
+        }
+    }
+
+    fn load_previous_frame(&mut self) -> bool {
+        let channels = self.source_channels();
+        let loaded = take_source_frame(&mut self.source_queue, channels, &mut self.previous_frame);
+        self.has_previous_frame = loaded;
+        loaded
+    }
+
+    fn ensure_next_frame(&mut self) -> bool {
+        if self.has_next_frame {
+            return true;
+        }
+        let channels = self.source_channels();
+        let loaded = take_source_frame(&mut self.source_queue, channels, &mut self.next_frame);
+        self.has_next_frame = loaded;
+        loaded
+    }
+
+    fn advance_source_frame(&mut self) {
+        if !self.has_next_frame {
+            return;
+        }
+
+        std::mem::swap(&mut self.previous_frame, &mut self.next_frame);
+        self.has_previous_frame = true;
+        self.has_next_frame = false;
+        let channels = self.source_channels();
+        self.has_next_frame =
+            take_source_frame(&mut self.source_queue, channels, &mut self.next_frame);
+    }
+
+    fn source_is_finished(&self) -> bool {
+        self.ring
+            .as_ref()
+            .is_some_and(|ring| ring.finished.load(Ordering::Acquire))
+            && self.source_queue.is_empty()
+    }
+
+    fn next_output_frame(
+        &mut self,
+        output: &mut [f32],
+        output_sample_rate: u32,
+        volume: f32,
+    ) -> bool {
+        if self.ended || output.is_empty() {
+            return false;
+        }
+        if output_sample_rate == 0 || self.source_sample_rate() == 0 {
+            return false;
+        }
+        if !self.has_previous_frame && !self.load_previous_frame() {
+            return false;
+        }
+        if !self.ensure_next_frame() {
+            if self.source_is_finished() {
+                map_source_frame(
+                    &self.previous_frame,
+                    &self.previous_frame,
+                    0.0,
+                    output,
+                    volume,
+                );
+                self.previous_frame.clear();
+                self.has_previous_frame = false;
+                self.ended = true;
+                return true;
+            }
+            return false;
+        }
+
+        map_source_frame(
+            &self.previous_frame,
+            &self.next_frame,
+            self.phase as f32,
+            output,
+            volume,
+        );
+
+        let step = self.source_sample_rate() as f64 / output_sample_rate as f64;
+        self.phase += step;
+        while self.phase >= 1.0 {
+            self.phase -= 1.0;
+            self.advance_source_frame();
+            if !self.has_next_frame {
+                break;
+            }
+        }
+
+        true
+    }
+}
+
+fn take_source_frame(source: &mut VecDeque<f32>, channels: usize, target: &mut Vec<f32>) -> bool {
+    if channels == 0 || source.len() < channels {
+        return false;
+    }
+
+    target.clear();
+    target.reserve(channels);
+    for _ in 0..channels {
+        if let Some(sample) = source.pop_front() {
+            target.push(sample);
+        }
+    }
+    true
+}
+
+fn interpolate_channel(previous: &[f32], next: &[f32], channel: usize, phase: f32) -> f32 {
+    let previous = previous.get(channel).copied().unwrap_or(0.0);
+    let next = next.get(channel).copied().unwrap_or(previous);
+    previous + (next - previous) * phase
+}
+
+fn source_sample_for_output_channel(
+    previous: &[f32],
+    next: &[f32],
+    output_channel: usize,
+    output_channels: usize,
+    phase: f32,
+) -> f32 {
+    let source_channels = previous.len().max(next.len());
+    if source_channels == 0 {
+        return 0.0;
+    }
+    if source_channels == 1 {
+        return interpolate_channel(previous, next, 0, phase);
+    }
+    if output_channels == 1 {
+        let sum = (0..source_channels)
+            .map(|channel| interpolate_channel(previous, next, channel, phase))
+            .sum::<f32>();
+        return sum / source_channels as f32;
+    }
+    if output_channel < source_channels {
+        return interpolate_channel(previous, next, output_channel, phase);
+    }
+    0.0
+}
+
+fn map_source_frame(previous: &[f32], next: &[f32], phase: f32, output: &mut [f32], volume: f32) {
+    let output_channels = output.len();
+    for (channel, sample) in output.iter_mut().enumerate() {
+        *sample =
+            (source_sample_for_output_channel(previous, next, channel, output_channels, phase)
+                * volume)
+                .clamp(-1.0, 1.0);
+    }
+}
+
+#[derive(Default)]
+struct OutputWriter {
+    resampler: OutputResampler,
+    output_frame: Vec<f32>,
+}
+
+impl OutputWriter {
+    fn write<T>(
+        &mut self,
+        data: &mut [T],
+        stream_router: &StreamRouter,
+        event_hub: &SymphoniaPlaybackEventHub,
+        active_tx: &std::sync::mpsc::Sender<ActiveWorkerJob>,
+        output_channels: u16,
+        output_sample_rate: u32,
+    ) where
+        T: cpal::SizedSample + cpal::FromSample<f32>,
+    {
+        let output_channels = output_channels as usize;
+        if output_channels == 0 {
+            return;
+        }
+
+        let mut written = 0usize;
+        while written + output_channels <= data.len() {
+            let current = stream_router.current_track();
+            self.resampler.ensure_track(&current.ring);
+            self.resampler
+                .pull_for_output((data.len() - written) / output_channels, output_sample_rate);
+
+            self.output_frame.resize(output_channels, 0.0);
+            if self.resampler.next_output_frame(
+                &mut self.output_frame,
+                output_sample_rate,
+                stream_router.volume(),
+            ) {
+                for (sample, value) in data[written..written + output_channels]
+                    .iter_mut()
+                    .zip(self.output_frame.iter().copied())
+                {
+                    *sample = T::from_sample(value);
+                }
+                written += output_channels;
+                continue;
+            }
+
+            if !current.ring.is_drained_and_finished()
+                || !self.resampler.is_drained_for(&current.ring)
+            {
+                break;
+            }
+
+            if let Some(pending) = stream_router.try_gapless_handoff(&current.ring) {
+                let _ = active_tx.send(ActiveWorkerJob::CompleteGaplessTransition {
+                    generation: pending.generation,
+                });
+                log::info!(
+                    "symphonia-cpal: gapless handoff generation={} completed",
+                    pending.generation
+                );
+                self.resampler.ensure_track(&pending.ring);
+                continue;
+            }
+
+            if !current.ring.ended_notified.swap(true, Ordering::AcqRel) {
+                event_hub.push(PlaybackNativeEvent::Ended);
+                log::info!("symphonia-cpal: end-of-stream signalled to event hub");
+            }
+            break;
+        }
+
+        for sample in &mut data[written..] {
+            *sample = T::from_sample(0.0);
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Active playback session (owned by worker thread)
 // ---------------------------------------------------------------------------
@@ -908,6 +1378,7 @@ fn active_worker_main(
 ) {
     let mut session: Option<ActiveSession> = None;
     let mut volume = 1.0_f32;
+    let mut output_device_id: Option<String> = None;
 
     while let Ok(job) = rx.recv() {
         match job {
@@ -918,7 +1389,14 @@ fn active_worker_main(
                 }
                 event_hub.reset();
                 match prepare_session(&request, true).and_then(|prepared| {
-                    activate_session(prepared, &event_hub, &active_tx, request.autoplay, volume)
+                    activate_session(
+                        prepared,
+                        &event_hub,
+                        &active_tx,
+                        request.autoplay,
+                        volume,
+                        output_device_id.as_deref(),
+                    )
                 }) {
                     Ok(active_session) => {
                         session = Some(active_session);
@@ -940,7 +1418,14 @@ fn active_worker_main(
 
                 tear_down_active(&mut session);
                 event_hub.reset();
-                match activate_session(prepared, &event_hub, &active_tx, autoplay, volume) {
+                match activate_session(
+                    prepared,
+                    &event_hub,
+                    &active_tx,
+                    autoplay,
+                    volume,
+                    output_device_id.as_deref(),
+                ) {
                     Ok(active_session) => {
                         session = Some(active_session);
                         let _ = reply.send(Ok(()));
@@ -1011,15 +1496,17 @@ fn active_worker_main(
                 let _ = reply.send(Ok(()));
             }
 
+            ActiveWorkerJob::SetOutputDevice {
+                output_device_id: next_output_device_id,
+                reply,
+            } => {
+                output_device_id = normalize_output_device_id(next_output_device_id);
+                let _ = reply.send(Ok(()));
+            }
+
             ActiveWorkerJob::Pause { reply } => {
                 let result = if let Some(s) = session.as_mut() {
-                    match s.cpal_stream.pause() {
-                        Ok(()) => {
-                            s.paused = true;
-                            Ok(())
-                        }
-                        Err(e) => Err(format!("Failed to pause audio output: {e}")),
-                    }
+                    pause_active_session(s)
                 } else {
                     Err("No stream is loaded for playback.".to_string())
                 };
@@ -1028,13 +1515,7 @@ fn active_worker_main(
 
             ActiveWorkerJob::Resume { reply } => {
                 let result = if let Some(s) = session.as_mut() {
-                    match s.cpal_stream.play() {
-                        Ok(()) => {
-                            s.paused = false;
-                            Ok(())
-                        }
-                        Err(e) => Err(format!("Failed to resume audio output: {e}")),
-                    }
+                    resume_active_session(s)
                 } else {
                     Err("No stream is loaded for playback.".to_string())
                 };
@@ -1151,9 +1632,36 @@ fn prepare_worker_main(
 
 fn tear_down_active(session: &mut Option<ActiveSession>) {
     if let Some(s) = session.take() {
-        let _ = s.cpal_stream.pause();
-        drop(s.cpal_stream);
-        tear_down_core(s.core);
+        let ActiveSession {
+            core, cpal_stream, ..
+        } = s;
+        let _ = cpal_stream.pause();
+        drop(cpal_stream);
+        tear_down_core(core);
+    }
+}
+
+fn pause_active_session(session: &mut ActiveSession) -> Result<(), String> {
+    if session.paused {
+        return Ok(());
+    }
+
+    match session.cpal_stream.pause() {
+        Ok(()) => {
+            session.paused = true;
+            Ok(())
+        }
+        Err(error) => Err(format!("Failed to pause audio output: {error}")),
+    }
+}
+
+fn resume_active_session(session: &mut ActiveSession) -> Result<(), String> {
+    match session.cpal_stream.play() {
+        Ok(()) => {
+            session.paused = false;
+            Ok(())
+        }
+        Err(error) => Err(format!("Failed to resume audio output: {error}")),
     }
 }
 
@@ -1310,11 +1818,14 @@ fn activate_session(
     active_tx: &std::sync::mpsc::Sender<ActiveWorkerJob>,
     autoplay: bool,
     volume: f32,
+    output_device_id: Option<&str>,
 ) -> Result<ActiveSession, String> {
     let PreparedSession {
         core,
         absolute_start_position_ms,
     } = prepared;
+    let normalized_output_device_id =
+        output_device_id.and_then(|value| normalize_output_device_id(Some(value.to_string())));
     core.activate_gapless_preparation();
     let stream_router = Arc::new(StreamRouter::new(
         Arc::clone(&core.ring),
@@ -1328,6 +1839,7 @@ fn activate_session(
         core.sample_rate,
         event_hub.clone(),
         active_tx.clone(),
+        normalized_output_device_id.as_deref(),
     ) {
         Ok(stream) => stream,
         Err(error) => {
@@ -1758,6 +2270,104 @@ mod tests {
             .make_audio_decoder(&params, &AudioDecoderOptions::default())
             .expect("Opus decoder should be registered for Ogg/Opus streams");
     }
+
+    #[test]
+    fn cpal_device_lost_stream_error_reports_native_error_once() {
+        let event_hub = SymphoniaPlaybackEventHub::default();
+        let mut event_source = event_hub.clone();
+        let reported = AtomicBool::new(false);
+
+        report_cpal_stream_error(
+            &event_hub,
+            &reported,
+            cpal::Error::new(cpal::ErrorKind::DeviceNotAvailable),
+        );
+        report_cpal_stream_error(
+            &event_hub,
+            &reported,
+            cpal::Error::new(cpal::ErrorKind::StreamInvalidated),
+        );
+
+        let events = event_source.drain_events();
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            PlaybackNativeEvent::Error { message, handled } => {
+                assert!(message.contains("Audio output device error: output stream lost"));
+                assert!(!handled);
+            }
+            other => panic!("expected native error event, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn cpal_buffer_underrun_stream_error_does_not_report_native_error() {
+        let event_hub = SymphoniaPlaybackEventHub::default();
+        let mut event_source = event_hub.clone();
+        let reported = AtomicBool::new(false);
+
+        report_cpal_stream_error(
+            &event_hub,
+            &reported,
+            cpal::Error::new(cpal::ErrorKind::Xrun),
+        );
+
+        assert!(event_source.drain_events().is_empty());
+        assert!(!reported.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn cpal_device_changed_stream_error_does_not_report_native_error() {
+        let event_hub = SymphoniaPlaybackEventHub::default();
+        let mut event_source = event_hub.clone();
+        let reported = AtomicBool::new(false);
+
+        report_cpal_stream_error(
+            &event_hub,
+            &reported,
+            cpal::Error::new(cpal::ErrorKind::DeviceChanged),
+        );
+
+        assert!(event_source.drain_events().is_empty());
+        assert!(!reported.load(Ordering::Acquire));
+    }
+
+    #[test]
+    fn output_resampler_writes_source_rate_pcm_to_output_rate_frames() {
+        let ring = Arc::new(AudioRing::new(2, 44_100));
+        ring.buf
+            .lock()
+            .unwrap()
+            .extend([0.0, 0.0, 1.0, 1.0, 0.0, 0.0]);
+        ring.finished.store(true, Ordering::Release);
+
+        let mut resampler = OutputResampler::default();
+        resampler.ensure_track(&ring);
+        resampler.pull_for_output(2, 48_000);
+
+        let mut first = [0.0, 0.0];
+        let mut second = [0.0, 0.0];
+
+        assert!(resampler.next_output_frame(&mut first, 48_000, 1.0));
+        assert!(resampler.next_output_frame(&mut second, 48_000, 1.0));
+        assert_eq!(first, [0.0, 0.0]);
+        assert!((second[0] - 0.91875).abs() < 0.0001);
+        assert!((second[1] - 0.91875).abs() < 0.0001);
+    }
+
+    #[test]
+    fn output_channel_mapping_handles_mono_downmix_and_extra_channels() {
+        let mut mono = [0.0];
+        map_source_frame(&[1.0, -1.0], &[1.0, -1.0], 0.0, &mut mono, 1.0);
+        assert_eq!(mono, [0.0]);
+
+        let mut stereo = [0.0, 0.0];
+        map_source_frame(&[0.5], &[0.5], 0.0, &mut stereo, 1.0);
+        assert_eq!(stereo, [0.5, 0.5]);
+
+        let mut four_channel = [0.0, 0.0, 0.0, 0.0];
+        map_source_frame(&[0.25, -0.25], &[0.25, -0.25], 0.0, &mut four_channel, 1.0);
+        assert_eq!(four_channel, [0.25, -0.25, 0.0, 0.0]);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1770,71 +2380,126 @@ fn build_cpal_stream(
     sample_rate: u32,
     event_hub: SymphoniaPlaybackEventHub,
     active_tx: std::sync::mpsc::Sender<ActiveWorkerJob>,
+    output_device_id: Option<&str>,
 ) -> Result<cpal::Stream, String> {
-    let host = cpal::default_host();
-    let device = host
-        .default_output_device()
-        .ok_or("No default audio output device found.")?;
-
+    let device = resolve_cpal_output_device(output_device_id)?;
+    let sample_format = cpal::SampleFormat::F32;
     let config = cpal::StreamConfig {
         channels,
-        sample_rate: sample_rate,
+        sample_rate,
         buffer_size: cpal::BufferSize::Default,
     };
 
-    let stream = device
+    log::info!(
+        "symphonia-cpal: source ch={} sr={} -> stream ch={} sr={} fmt={}",
+        channels,
+        sample_rate,
+        config.channels,
+        config.sample_rate,
+        sample_format,
+    );
+
+    build_cpal_stream_typed::<f32>(&device, config, stream_router, event_hub, active_tx)
+}
+
+fn build_cpal_stream_typed<T>(
+    device: &cpal::Device,
+    config: cpal::StreamConfig,
+    stream_router: Arc<StreamRouter>,
+    event_hub: SymphoniaPlaybackEventHub,
+    active_tx: std::sync::mpsc::Sender<ActiveWorkerJob>,
+) -> Result<cpal::Stream, String>
+where
+    T: cpal::SizedSample + cpal::FromSample<f32>,
+{
+    let output_channels = config.channels;
+    let output_sample_rate = config.sample_rate;
+    let error_event_hub = event_hub.clone();
+    let output_event_hub = event_hub.clone();
+    let stream_error_reported = Arc::new(AtomicBool::new(false));
+    let stream_error_reported_for_callback = Arc::clone(&stream_error_reported);
+    let mut output_writer = OutputWriter::default();
+
+    device
         .build_output_stream(
-            &config,
-            move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
-                let mut written = 0usize;
-
-                while written < data.len() {
-                    let current = stream_router.current_track();
-                    let start = written;
-                    let wrote = current.ring.drain_into(&mut data[start..]);
-                    let volume = stream_router.volume();
-                    if volume != 1.0 {
-                        for sample in &mut data[start..start + wrote] {
-                            *sample *= volume;
-                        }
-                    }
-                    written += wrote;
-                    if written == data.len() {
-                        break;
-                    }
-
-                    if !current.ring.is_drained_and_finished() {
-                        break;
-                    }
-
-                    if let Some(pending) = stream_router.try_gapless_handoff(&current.ring) {
-                        let _ = active_tx.send(ActiveWorkerJob::CompleteGaplessTransition {
-                            generation: pending.generation,
-                        });
-                        log::info!(
-                            "symphonia-cpal: gapless handoff generation={} completed",
-                            pending.generation
-                        );
-                        continue;
-                    }
-
-                    if !current.ring.ended_notified.swap(true, Ordering::AcqRel) {
-                        event_hub.push(PlaybackNativeEvent::Ended);
-                        log::info!("symphonia-cpal: end-of-stream signalled to event hub");
-                    }
-                    break;
-                }
-
-                for sample in &mut data[written..] {
-                    *sample = 0.0;
-                }
+            config,
+            move |data: &mut [T], _info: &cpal::OutputCallbackInfo| {
+                output_writer.write(
+                    data,
+                    &stream_router,
+                    &output_event_hub,
+                    &active_tx,
+                    output_channels,
+                    output_sample_rate,
+                );
             },
-            |err| {
-                log::error!("cpal output stream error: {err}");
+            move |err| {
+                report_cpal_stream_error(
+                    &error_event_hub,
+                    &stream_error_reported_for_callback,
+                    err,
+                );
             },
             None,
         )
-        .map_err(|e| format!("Failed to build cpal output stream: {e}"))?;
+        .map_err(|e| format!("Audio output device error: failed to build output stream: {e}"))
+}
 
-    Ok(stream)
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CpalStreamErrorClass {
+    Recoverable,
+    RouteChanged,
+    DeviceLost,
+    Fatal,
+}
+
+fn classify_cpal_stream_error(error: &cpal::Error) -> CpalStreamErrorClass {
+    match error.kind() {
+        cpal::ErrorKind::Xrun => CpalStreamErrorClass::Recoverable,
+        cpal::ErrorKind::DeviceChanged => CpalStreamErrorClass::RouteChanged,
+        cpal::ErrorKind::DeviceNotAvailable | cpal::ErrorKind::StreamInvalidated => {
+            CpalStreamErrorClass::DeviceLost
+        }
+        _ => CpalStreamErrorClass::Fatal,
+    }
+}
+
+fn cpal_stream_error_message(error: &cpal::Error) -> String {
+    match classify_cpal_stream_error(error) {
+        CpalStreamErrorClass::Recoverable => format!("Audio output stream recovered: {error}"),
+        CpalStreamErrorClass::RouteChanged => {
+            format!("Audio output route changed: {error}")
+        }
+        CpalStreamErrorClass::DeviceLost => {
+            format!("Audio output device error: output stream lost: {error}")
+        }
+        CpalStreamErrorClass::Fatal => {
+            format!("Audio output device error: output stream failed: {error}")
+        }
+    }
+}
+
+fn report_cpal_stream_error(
+    event_hub: &SymphoniaPlaybackEventHub,
+    reported: &AtomicBool,
+    error: cpal::Error,
+) {
+    match classify_cpal_stream_error(&error) {
+        CpalStreamErrorClass::Recoverable => {
+            log::warn!("cpal output stream recoverable error: {error}");
+        }
+        CpalStreamErrorClass::RouteChanged => {
+            log::info!("cpal output route changed: {error}");
+        }
+        CpalStreamErrorClass::DeviceLost | CpalStreamErrorClass::Fatal => {
+            let message = cpal_stream_error_message(&error);
+            log::error!("cpal output stream error: {message}");
+            if !reported.swap(true, Ordering::AcqRel) {
+                event_hub.push(PlaybackNativeEvent::Error {
+                    message,
+                    handled: false,
+                });
+            }
+        }
+    }
 }

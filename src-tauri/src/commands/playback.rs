@@ -9,7 +9,7 @@ use crate::{
     connect::ConnectState,
     models::{
         CapabilityMatrix, PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest,
-        PlaybackMoveQueueIndexRequest, PlaybackPlayQueueIndexRequest,
+        PlaybackMoveQueueIndexRequest, PlaybackOutputDevice, PlaybackPlayQueueIndexRequest,
         PlaybackRemoveQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
         PlaybackSetQueueRequest, PlaybackSetVolumeRequest, PlaybackStatus, QueueSource,
         SongResponse,
@@ -171,6 +171,12 @@ pub fn playback_get_state(
         }
         Err(_) => controller.synced_state(),
     }
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn playback_get_output_devices() -> Result<Vec<PlaybackOutputDevice>, String> {
+    crate::playback::list_output_devices()
 }
 
 #[tauri::command]

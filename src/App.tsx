@@ -2,6 +2,7 @@
 
 import { MetaProvider } from '@solidjs/meta';
 import { Navigate, Route, Router } from '@solidjs/router';
+import ConnectQueueResolveDialog from './components/common/dialog/ConnectQueueResolveDialog';
 import PlaybackErrorDialog from './components/common/dialog/PlaybackErrorDialog';
 import PlaybackStreamInfoDialog from './components/common/dialog/PlaybackStreamInfoDialog';
 import PCContextMenu from './components/menu/PCContextMenu';
@@ -38,6 +39,7 @@ export default function App() {
             <SPBottomContextMenu />
             <PlaybackErrorDialog />
             <PlaybackStreamInfoDialog />
+            <ConnectQueueResolveDialog />
           </div>
         </MetaProvider>
       )}

@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use opensubsonic_client::{
     api::retrieval::{RetrievalApi, StreamRequest},
     ApiError, MediaType, OpenSubsonicClient, PreparedBinaryRequest,
@@ -6,10 +8,10 @@ use opensubsonic_client::{
 use crate::{
     cover_art_cache::CoverArtCache,
     models::{
-        normalize_volume, CapabilityMatrix, ConnectPlaybackState, GaplessState, GaplessStatus,
-        InterruptReason, PlaybackCapabilities, PlaybackError, PlaybackStatus, PlaybackStreamInfo,
-        PlaybackStreamMode, PlaybackStreamRequestKind, PlaybackTranscodingCodec, PlayingState,
-        SongResponse,
+        normalize_output_device_id, normalize_volume, CapabilityMatrix, ConnectPlaybackState,
+        GaplessState, GaplessStatus, InterruptReason, PlaybackCapabilities, PlaybackError,
+        PlaybackStatus, PlaybackStreamInfo, PlaybackStreamMode, PlaybackStreamRequestKind,
+        PlaybackTranscodingCodec, PlayingState, SongResponse,
     },
     playback_state::{PlaybackStateFile, PlaybackStatePersister},
 };
@@ -34,12 +36,39 @@ pub struct PlaybackRuntimeContext<'a> {
 }
 
 const HANDLED_PLAYBACK_ERROR_PREFIX: &str = "[transonic-handled-playback-error]";
+const OUTPUT_DEVICE_ERROR_PREFIX: &str = "Audio output device error:";
+const OUTPUT_STREAM_RECOVERY_MAX_ATTEMPTS: u8 = 3;
+
+fn output_stream_recovery_delay(attempt: u8) -> Duration {
+    #[cfg(test)]
+    {
+        let _ = attempt;
+        Duration::ZERO
+    }
+    #[cfg(not(test))]
+    {
+        Duration::from_millis(match attempt {
+            0 | 1 => 100,
+            2 => 500,
+            _ => 1_500,
+        })
+    }
+}
 
 fn playback_error_from_load_failure(error: &str) -> PlaybackError {
     PlaybackError {
         message: error.replace(HANDLED_PLAYBACK_ERROR_PREFIX, ""),
         handled: error.contains(HANDLED_PLAYBACK_ERROR_PREFIX),
     }
+}
+
+fn is_output_device_load_error(error: &str) -> bool {
+    error.contains(OUTPUT_DEVICE_ERROR_PREFIX)
+}
+
+fn is_output_stream_runtime_error(error: &str) -> bool {
+    is_output_device_load_error(error)
+        && (error.contains("output stream lost") || error.contains("output stream failed"))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -70,6 +99,16 @@ enum PreparedGaplessTrackState {
         target: GaplessTrackTarget,
         generation: Option<u64>,
     },
+}
+
+#[derive(Debug, Clone)]
+struct OutputStreamRecoveryPlan {
+    message: String,
+    index: u32,
+    requested_position_ms: u32,
+    autoplay: bool,
+    attempt: u8,
+    not_before: Instant,
 }
 
 impl PreparedGaplessTrackState {
@@ -103,6 +142,9 @@ pub struct PlaybackController {
     stream_mode: PlaybackStreamMode,
     transcoding_max_bit_rate: u32,
     transcoding_codec: PlaybackTranscodingCodec,
+    output_device_id: Option<String>,
+    output_stream_recovery_attempts: u8,
+    pending_output_stream_recovery: Option<OutputStreamRecoveryPlan>,
     prepared_next: Option<PreparedGaplessTrackState>,
     gapless_failure: Option<String>,
     status: PlaybackStatus,
@@ -121,11 +163,16 @@ impl PlaybackController {
         persister: Box<dyn PlaybackStatePersister>,
         gapless_playback_enabled: bool,
         initial_volume: f32,
+        initial_output_device_id: Option<String>,
     ) -> Self {
         let playback_capabilities = backend.capabilities();
         let volume = normalize_volume(initial_volume);
         if let Err(error) = backend.set_volume(volume) {
             log::warn!("controller.new: failed to apply initial volume: {error}");
+        }
+        let output_device_id = normalize_output_device_id(initial_output_device_id);
+        if let Err(error) = backend.set_output_device(output_device_id.clone()) {
+            log::warn!("controller.new: failed to apply initial output device: {error}");
         }
         Self {
             backend,
@@ -139,6 +186,9 @@ impl PlaybackController {
             stream_mode: PlaybackStreamMode::Raw,
             transcoding_max_bit_rate: 320,
             transcoding_codec: PlaybackTranscodingCodec::Mp3,
+            output_device_id,
+            output_stream_recovery_attempts: 0,
+            pending_output_stream_recovery: None,
             prepared_next: None,
             gapless_failure: None,
             status: PlaybackStatus::empty(),
@@ -218,6 +268,93 @@ impl PlaybackController {
         let result = self.sync_gapless_for_current_track(context);
         self.report_status();
         result
+    }
+
+    pub fn set_output_device(
+        &mut self,
+        output_device_id: Option<String>,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<(), String> {
+        let output_device_id = normalize_output_device_id(output_device_id);
+        if self.output_device_id == output_device_id {
+            return Ok(());
+        }
+        let previous_output_device_id = self.output_device_id.clone();
+
+        let should_reload = matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused
+        );
+        let reload_context = if should_reload {
+            Some(context.ok_or_else(|| {
+                "No active session is available to reload playback after output device change."
+                    .to_string()
+            })?)
+        } else {
+            None
+        };
+
+        let reload_index = if should_reload {
+            let index = self.ensure_current_index()?;
+            self.sync_current_position_from_backend()?;
+            Some(index)
+        } else {
+            None
+        };
+        let reload_position_ms = self.status.current_position_ms;
+        let autoplay = matches!(self.status.playing_state, PlayingState::Playing);
+
+        self.backend.set_output_device(output_device_id.clone())?;
+        self.output_device_id = output_device_id;
+        self.clear_gapless_preparation();
+
+        if let Some(index) = reload_index {
+            if let Err(error) = self.backend.stop() {
+                let rollback_error = self
+                    .backend
+                    .set_output_device(previous_output_device_id.clone())
+                    .err();
+                self.output_device_id = previous_output_device_id;
+                return Err(format_output_device_change_error(error, rollback_error));
+            }
+            self.clear_native_events();
+            self.clear_server_reporting();
+            self.status.actual_stream_info = None;
+            let reload_result = self.reload_track_at_index_exact(
+                reload_context.expect("reload context is present when reload_index is set"),
+                index,
+                reload_position_ms,
+                autoplay,
+            );
+            if let Err(error) = reload_result {
+                let rollback_error = self
+                    .backend
+                    .set_output_device(previous_output_device_id.clone())
+                    .err();
+                self.output_device_id = previous_output_device_id;
+                let playback_error = playback_error_from_load_failure(&error);
+                let returned_error = playback_error.message.clone();
+                self.status.playing_state = PlayingState::Error;
+                self.status.current_position_ms = reload_position_ms;
+                self.status.playback_error = Some(playback_error);
+                self.status.interrupt_reason = None;
+                self.status.pending_seek_position_ms = None;
+                self.status.actual_stream_info = None;
+                self.interrupted_resume_state = None;
+                self.clear_gapless_preparation();
+                self.clear_server_reporting();
+                self.report_status();
+                return Err(format_output_device_change_error(
+                    returned_error,
+                    rollback_error,
+                ));
+            }
+        }
+
+        self.reset_output_stream_recovery_attempts();
+        self.persist_state();
+        self.report_status();
+        Ok(())
     }
 
     pub fn restore_state(
@@ -367,6 +504,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.status.actual_stream_info = None;
         self.interrupted_resume_state = None;
+        self.reset_output_stream_recovery_attempts();
         self.status.playing_state = if self.status.queue.is_empty() {
             PlayingState::Idle
         } else {
@@ -428,6 +566,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.status.actual_stream_info = None;
         self.interrupted_resume_state = None;
+        self.reset_output_stream_recovery_attempts();
 
         self.sync_queue_state();
         self.persist_state();
@@ -456,6 +595,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.sync_actual_stream_info_from_backend();
         self.interrupted_resume_state = None;
+        self.reset_output_stream_recovery_attempts();
 
         self.persist_state();
         self.report_status();
@@ -862,6 +1002,7 @@ impl PlaybackController {
             self.status.playback_error = None;
             self.status.interrupt_reason = None;
             self.sync_actual_stream_info_from_backend();
+            self.reset_output_stream_recovery_attempts();
             self.process_native_events_inner(Some(context), false)?;
             if let Some(entry) =
                 current_queue_entry(&self.status.queue, self.status.current_index).cloned()
@@ -991,6 +1132,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.status.actual_stream_info = None;
         self.interrupted_resume_state = None;
+        self.reset_output_stream_recovery_attempts();
         self.persist_state();
         self.report_status();
         Ok(self.state())
@@ -1227,13 +1369,21 @@ impl PlaybackController {
 
     /// Sync position from backend and persist. Used for app exit handler.
     pub fn sync_and_persist(&mut self) {
-        if self.active_profile_id.is_none() || self.restore_state_deferred {
-            return;
+        if self.active_profile_id.is_some() && !self.restore_state_deferred {
+            if matches!(self.status.playing_state, PlayingState::Playing) {
+                let _ = self.sync_current_position_from_backend();
+            }
+            self.persist_state();
         }
-        if matches!(self.status.playing_state, PlayingState::Playing) {
-            let _ = self.sync_current_position_from_backend();
+        if matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+        ) {
+            if let Err(error) = self.backend.stop() {
+                log::warn!("controller.sync_and_persist: failed to stop backend: {error}");
+            }
+            self.clear_native_events();
         }
-        self.persist_state();
     }
 
     fn ensure_current_index(&mut self) -> Result<u32, String> {
@@ -1336,6 +1486,7 @@ impl PlaybackController {
         self.status.pending_seek_position_ms = None;
         self.replace_actual_stream_info_from_backend();
         self.interrupted_resume_state = None;
+        self.reset_output_stream_recovery_attempts();
         if let Err(error) = self.sync_gapless_for_current_track(Some(context)) {
             log::warn!("controller.load_track_at_index: gapless refresh failed: {error}");
         }
@@ -1405,6 +1556,7 @@ impl PlaybackController {
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
         self.interrupted_resume_state = None;
+        self.reset_output_stream_recovery_attempts();
         if let Err(error) = self.sync_gapless_for_current_track(Some(context)) {
             log::warn!("controller.reload_track_at_index_exact: gapless refresh failed: {error}");
         }
@@ -1508,6 +1660,7 @@ impl PlaybackController {
             let raw_request = self.build_backend_load_request(
                 entry,
                 raw_stream,
+                true,
                 None,
                 requested_position_ms,
                 local_start_position_ms,
@@ -1541,6 +1694,12 @@ impl PlaybackController {
                             "load_track_at_index"
                         }
                     );
+                    if is_output_device_load_error(&raw_error) {
+                        return Err(format!(
+                            "Failed to {} playback stream: {raw_error}",
+                            if prepare_only { "prepare" } else { "load" }
+                        ));
+                    }
                     let fallback_stream = build_stream_request(
                         context.client,
                         song_id,
@@ -1553,6 +1712,7 @@ impl PlaybackController {
                     let fallback_request = self.build_backend_load_request(
                         entry,
                         fallback_stream,
+                        false,
                         None,
                         requested_position_ms,
                         local_start_position_ms,
@@ -1609,6 +1769,7 @@ impl PlaybackController {
         let standard_request = self.build_backend_load_request(
             entry,
             standard_stream,
+            false,
             None,
             requested_position_ms,
             local_start_position_ms,
@@ -1676,6 +1837,7 @@ impl PlaybackController {
         &self,
         entry: &SongResponse,
         request: PreparedBinaryRequest,
+        use_source_media_type_hint: bool,
         artwork_path: Option<String>,
         absolute_start_position_ms: u32,
         local_start_position_ms: u32,
@@ -1687,6 +1849,16 @@ impl PlaybackController {
             title: entry.title.clone(),
             artist: entry.artist.clone(),
             album: entry.album.clone(),
+            source_content_type: if use_source_media_type_hint {
+                entry.content_type.clone()
+            } else {
+                None
+            },
+            source_suffix: if use_source_media_type_hint {
+                entry.suffix.clone()
+            } else {
+                None
+            },
             artwork_path,
             absolute_start_position_ms,
             local_start_position_ms,
@@ -2001,14 +2173,12 @@ impl PlaybackController {
         report_changes: bool,
     ) -> Result<bool, String> {
         let events = self.native_events.drain_events();
-        if events.is_empty() {
-            return Ok(false);
-        }
 
         let mut changed = false;
         for event in events {
             changed |= self.apply_native_event(event, context)?;
         }
+        changed |= self.process_due_output_stream_recovery(context)?;
 
         if changed && report_changes {
             self.report_status();
@@ -2080,11 +2250,10 @@ impl PlaybackController {
                 Ok(true)
             }
             PlaybackNativeEvent::Error { message, handled } => {
-                self.status.playing_state = PlayingState::Error;
-                self.status.interrupt_reason = None;
-                self.status.pending_seek_position_ms = None;
-                self.status.playback_error = Some(PlaybackError { message, handled });
-                self.interrupted_resume_state = None;
+                if !handled && is_output_stream_runtime_error(&message) {
+                    return self.handle_output_stream_error(message, context);
+                }
+                self.transition_to_playback_error(message, handled);
                 Ok(true)
             }
             PlaybackNativeEvent::GaplessPrepared { generation } => {
@@ -2097,6 +2266,223 @@ impl PlaybackController {
             PlaybackNativeEvent::GaplessTransition => self.handle_gapless_transition(context),
             PlaybackNativeEvent::Ended => self.handle_track_ended(context),
         }
+    }
+
+    fn handle_output_stream_error(
+        &mut self,
+        message: String,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<bool, String> {
+        if self.pending_output_stream_recovery.is_some() {
+            return Ok(false);
+        }
+
+        if !matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+        ) {
+            self.transition_to_playback_error(message, false);
+            return Ok(true);
+        }
+
+        if self.output_stream_recovery_attempts >= OUTPUT_STREAM_RECOVERY_MAX_ATTEMPTS {
+            let current_position_ms = self.status.current_position_ms;
+            let stop_error = self.stop_backend_after_output_stream_error();
+            if let Some(context) = context {
+                self.report_current_server_playback_stopped(context, current_position_ms);
+            }
+            let message = match stop_error {
+                Some(stop_error) => format!(
+                    "{message}; automatic output stream recovery limit reached; failed to stop output stream: {stop_error}"
+                ),
+                None => format!("{message}; automatic output stream recovery limit reached"),
+            };
+            self.transition_to_playback_error(message, false);
+            return Ok(true);
+        }
+
+        let Some(context) = context else {
+            let stop_error = self.stop_backend_after_output_stream_error();
+            let message = match stop_error {
+                Some(stop_error) => {
+                    format!("{message}; cannot recover output stream without an active session; failed to stop output stream: {stop_error}")
+                }
+                None => {
+                    format!("{message}; cannot recover output stream without an active session")
+                }
+            };
+            self.transition_to_playback_error(message, false);
+            return Ok(true);
+        };
+
+        let Some(index) = self.status.current_index else {
+            let current_position_ms = self.status.current_position_ms;
+            let stop_error = self.stop_backend_after_output_stream_error();
+            self.report_current_server_playback_stopped(context, current_position_ms);
+            let message = match stop_error {
+                Some(stop_error) => {
+                    format!("{message}; cannot recover output stream without a current queue index; failed to stop output stream: {stop_error}")
+                }
+                None => {
+                    format!("{message}; cannot recover output stream without a current queue index")
+                }
+            };
+            self.transition_to_playback_error(message, false);
+            return Ok(true);
+        };
+
+        if matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused
+        ) {
+            if let Err(error) = self.sync_current_position_from_backend() {
+                log::warn!(
+                    "controller.handle_output_stream_error: failed to sync position before recovery: {error}"
+                );
+            }
+        }
+
+        let requested_position_ms = self.status.current_position_ms;
+        let autoplay = self.should_autoplay();
+        let next_attempt = self.output_stream_recovery_attempts.saturating_add(1);
+
+        if let Some(stop_error) = self.stop_backend_after_output_stream_error() {
+            self.report_current_server_playback_stopped(context, requested_position_ms);
+            self.transition_to_playback_error(
+                format!("{message}; failed to stop output stream for recovery: {stop_error}"),
+                false,
+            );
+            return Ok(true);
+        }
+
+        log::warn!(
+            "controller.handle_output_stream_error: scheduling output stream recovery attempt={next_attempt} index={index} position_ms={requested_position_ms}"
+        );
+
+        self.schedule_output_stream_recovery(
+            message,
+            index,
+            requested_position_ms,
+            autoplay,
+            next_attempt,
+        );
+        Ok(true)
+    }
+
+    fn process_due_output_stream_recovery(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+    ) -> Result<bool, String> {
+        let Some(plan) = self.pending_output_stream_recovery.clone() else {
+            return Ok(false);
+        };
+
+        let now = Instant::now();
+        if now < plan.not_before {
+            return Ok(false);
+        }
+
+        let Some(context) = context else {
+            self.pending_output_stream_recovery = None;
+            self.output_stream_recovery_attempts = OUTPUT_STREAM_RECOVERY_MAX_ATTEMPTS;
+            self.transition_to_playback_error(
+                format!(
+                    "{}; cannot recover output stream without an active session",
+                    plan.message
+                ),
+                false,
+            );
+            return Ok(true);
+        };
+
+        self.pending_output_stream_recovery = None;
+        self.run_output_stream_recovery_attempt(plan, context)
+    }
+
+    fn run_output_stream_recovery_attempt(
+        &mut self,
+        plan: OutputStreamRecoveryPlan,
+        context: &PlaybackRuntimeContext<'_>,
+    ) -> Result<bool, String> {
+        log::warn!(
+            "controller.run_output_stream_recovery_attempt: attempt={} index={} position_ms={}",
+            plan.attempt,
+            plan.index,
+            plan.requested_position_ms
+        );
+
+        match self.reload_track_at_index_exact(
+            context,
+            plan.index,
+            plan.requested_position_ms,
+            plan.autoplay,
+        ) {
+            Ok(()) => {
+                self.output_stream_recovery_attempts = plan.attempt;
+                Ok(true)
+            }
+            Err(reload_error) if plan.attempt < OUTPUT_STREAM_RECOVERY_MAX_ATTEMPTS => {
+                self.output_stream_recovery_attempts = plan.attempt;
+                let next_attempt = plan.attempt.saturating_add(1);
+                log::warn!(
+                    "controller.run_output_stream_recovery_attempt: attempt={} failed; scheduling attempt={next_attempt}: {reload_error}",
+                    plan.attempt
+                );
+                self.schedule_output_stream_recovery(
+                    plan.message,
+                    plan.index,
+                    plan.requested_position_ms,
+                    plan.autoplay,
+                    next_attempt,
+                );
+                Ok(true)
+            }
+            Err(reload_error) => {
+                self.output_stream_recovery_attempts = OUTPUT_STREAM_RECOVERY_MAX_ATTEMPTS;
+                self.report_current_server_playback_stopped(context, plan.requested_position_ms);
+                let playback_error = playback_error_from_load_failure(&format!(
+                    "{}; automatic output stream recovery failed after {} attempts: {reload_error}",
+                    plan.message, plan.attempt
+                ));
+                self.status.playing_state = PlayingState::Error;
+                self.status.current_position_ms = plan.requested_position_ms;
+                self.status.playback_error = Some(playback_error);
+                self.status.interrupt_reason = None;
+                self.status.pending_seek_position_ms = None;
+                self.status.actual_stream_info = None;
+                self.interrupted_resume_state = None;
+                self.clear_gapless_preparation();
+                self.clear_server_reporting();
+                Ok(true)
+            }
+        }
+    }
+
+    fn schedule_output_stream_recovery(
+        &mut self,
+        message: String,
+        index: u32,
+        requested_position_ms: u32,
+        autoplay: bool,
+        attempt: u8,
+    ) {
+        let delay = output_stream_recovery_delay(attempt);
+        self.pending_output_stream_recovery = Some(OutputStreamRecoveryPlan {
+            message,
+            index,
+            requested_position_ms,
+            autoplay,
+            attempt,
+            not_before: Instant::now() + delay,
+        });
+        self.status.playing_state = PlayingState::Interrupted;
+        self.status.interrupt_reason = Some(InterruptReason::FullReload);
+        self.status.pending_seek_position_ms = Some(requested_position_ms);
+        self.status.current_position_ms = requested_position_ms;
+        self.status.actual_stream_info = None;
+        self.status.playback_error = None;
+        self.interrupted_resume_state = None;
+        crate::playback::spawn_controller_process_native_events_after(delay);
     }
 
     fn handle_gapless_prepared(&mut self, generation: u64) -> bool {
@@ -2291,6 +2677,29 @@ impl PlaybackController {
 
     fn clear_native_events(&mut self) {
         let _ = self.native_events.drain_events();
+    }
+
+    fn stop_backend_after_output_stream_error(&mut self) -> Option<String> {
+        let stop_error = self.backend.stop().err();
+        self.clear_native_events();
+        self.clear_gapless_preparation();
+        self.clear_server_reporting();
+        self.status.actual_stream_info = None;
+        stop_error
+    }
+
+    fn transition_to_playback_error(&mut self, message: String, handled: bool) {
+        self.status.playing_state = PlayingState::Error;
+        self.status.interrupt_reason = None;
+        self.status.pending_seek_position_ms = None;
+        self.status.playback_error = Some(PlaybackError { message, handled });
+        self.status.actual_stream_info = None;
+        self.interrupted_resume_state = None;
+    }
+
+    fn reset_output_stream_recovery_attempts(&mut self) {
+        self.output_stream_recovery_attempts = 0;
+        self.pending_output_stream_recovery = None;
     }
 
     fn should_autoplay(&self) -> bool {
@@ -2499,6 +2908,15 @@ fn is_missing_prepared_stream_error(error: &str) -> bool {
     error.to_ascii_lowercase().contains("no prepared stream")
 }
 
+fn format_output_device_change_error(error: String, rollback_error: Option<String>) -> String {
+    match rollback_error {
+        Some(rollback_error) => {
+            format!("{error}; failed to roll back output device selection: {rollback_error}")
+        }
+        None => error,
+    }
+}
+
 fn validate_queue_index(
     entries: &[SongResponse],
     current_index: Option<u32>,
@@ -2697,6 +3115,8 @@ mod tests {
         load_absolute_start_positions_ms: Vec<u32>,
         load_local_start_positions_ms: Vec<u32>,
         load_artwork_paths: Vec<Option<String>>,
+        load_source_content_types: Vec<Option<String>>,
+        load_source_suffixes: Vec<Option<String>>,
         prepare_calls: Vec<String>,
         prepare_artwork_paths: Vec<Option<String>>,
         artwork_update_calls: Vec<(String, Option<String>)>,
@@ -2706,6 +3126,7 @@ mod tests {
         current_position_calls: usize,
         fail_first_load: bool,
         always_fail_load: bool,
+        load_error: Option<String>,
         fail_standard_load: bool,
         seek_behavior: MockSeekBehavior,
         has_failed_first_load: bool,
@@ -2713,6 +3134,8 @@ mod tests {
         resume_calls: usize,
         stop_calls: usize,
         volume_calls: Vec<f32>,
+        output_device_calls: Vec<Option<String>>,
+        fail_output_device: bool,
         activate_prepared_calls: usize,
         clear_prepared_calls: usize,
         activated_prepared_urls: Vec<String>,
@@ -2836,8 +3259,17 @@ mod tests {
                 .load_local_start_positions_ms
                 .push(request.local_start_position_ms);
             state.load_artwork_paths.push(request.artwork_path.clone());
+            state
+                .load_source_content_types
+                .push(request.source_content_type.clone());
+            state
+                .load_source_suffixes
+                .push(request.source_suffix.clone());
             if state.always_fail_load {
                 return Err("stream rejected".to_string());
+            }
+            if let Some(error) = state.load_error.clone() {
+                return Err(error);
             }
             if state.fail_standard_load && !request.request.url.as_str().contains("format=raw") {
                 return Err("standard stream rejected".to_string());
@@ -2864,6 +3296,9 @@ mod tests {
                 .push(request.artwork_path.clone());
             if state.always_fail_load {
                 return Err("stream rejected".to_string());
+            }
+            if let Some(error) = state.load_error.clone() {
+                return Err(error);
             }
             if state.fail_standard_load && !url.contains("format=raw") {
                 return Err("standard stream rejected".to_string());
@@ -2936,6 +3371,15 @@ mod tests {
 
         fn set_volume(&mut self, volume: f32) -> Result<(), String> {
             self.state.lock().unwrap().volume_calls.push(volume);
+            Ok(())
+        }
+
+        fn set_output_device(&mut self, output_device_id: Option<String>) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            if state.fail_output_device {
+                return Err("output device rejected".to_string());
+            }
+            state.output_device_calls.push(output_device_id);
             Ok(())
         }
 
@@ -3069,6 +3513,7 @@ mod tests {
         PlaybackCapabilities {
             gapless_playback,
             transcoding_codecs,
+            output_device_selection: false,
         }
     }
 
@@ -3141,6 +3586,45 @@ mod tests {
             Box::new(NoopPlaybackStatePersister),
             false,
             1.0,
+            None,
+        );
+        (controller, state, reporter_state)
+    }
+
+    fn controller_with_initial_output_device(
+        initial_output_device_id: Option<String>,
+        fail_output_device: bool,
+    ) -> (
+        PlaybackController,
+        Arc<Mutex<MockBackendState>>,
+        Arc<Mutex<MockReporterState>>,
+    ) {
+        let state = Arc::new(Mutex::new(MockBackendState {
+            fail_output_device,
+            ..MockBackendState::default()
+        }));
+        let reporter_state = Arc::new(Mutex::new(MockReporterState::default()));
+        let backend = Box::new(MockBackend {
+            state: state.clone(),
+            playback_capabilities: mock_playback_capabilities(true),
+            estimate_stream_content_length: true,
+            native_events: None,
+        });
+        let reporter: Box<dyn PlaybackReporter> = Box::new(MockReporter {
+            state: reporter_state.clone(),
+        });
+        let server_reporter: Box<dyn PlaybackServerReporter> = Box::new(NoopPlaybackServerReporter);
+        let queue_sync: Box<dyn QueueSyncGateway> = Box::new(NoopQueueSyncGateway);
+        let controller = PlaybackController::new(
+            backend,
+            reporter,
+            server_reporter,
+            queue_sync,
+            Box::new(NoopNativePlaybackEventSource),
+            Box::new(NoopPlaybackStatePersister),
+            false,
+            1.0,
+            initial_output_device_id,
         );
         (controller, state, reporter_state)
     }
@@ -3174,6 +3658,7 @@ mod tests {
             persister,
             false,
             1.0,
+            None,
         );
         (controller, state, reporter_state)
     }
@@ -3208,6 +3693,7 @@ mod tests {
             Box::new(NoopPlaybackStatePersister),
             false,
             1.0,
+            None,
         );
         (controller, state, queue_sync_state)
     }
@@ -3241,6 +3727,7 @@ mod tests {
             Box::new(NoopPlaybackStatePersister),
             false,
             1.0,
+            None,
         );
         (controller, state, reporter_state)
     }
@@ -3281,6 +3768,7 @@ mod tests {
             Box::new(NoopPlaybackStatePersister),
             false,
             1.0,
+            None,
         );
         (controller, state, reporter_state, native_events)
     }
@@ -3339,6 +3827,7 @@ mod tests {
             Box::new(NoopPlaybackStatePersister),
             false,
             1.0,
+            None,
         );
         (controller, state, reporter_state)
     }
@@ -3375,6 +3864,7 @@ mod tests {
             Box::new(NoopPlaybackStatePersister),
             false,
             1.0,
+            None,
         );
         if playback_report {
             controller.set_active_profile_id(Some("profile-1".to_string()));
@@ -4333,16 +4823,53 @@ mod tests {
             cover_art_cache: None,
             profile_id: None,
         };
-        controller
-            .set_queue(queue_entries(&["song-a"]), Some(0))
-            .unwrap();
+        let mut queue = queue_entries(&["song-a"]);
+        queue[0].content_type = Some("audio/x-m4a".to_string());
+        queue[0].suffix = Some("m4a".to_string());
+        controller.set_queue(queue, Some(0)).unwrap();
 
         controller.play(&runtime_context).unwrap();
 
-        let load_calls = backend_state.lock().unwrap().load_calls.clone();
-        assert_eq!(load_calls.len(), 2);
-        assert!(load_calls[0].contains("format=raw"));
-        assert!(!load_calls[1].contains("format=raw"));
+        let state = backend_state.lock().unwrap();
+        assert_eq!(state.load_calls.len(), 2);
+        assert!(state.load_calls[0].contains("format=raw"));
+        assert!(!state.load_calls[1].contains("format=raw"));
+        assert_eq!(
+            state.load_source_content_types,
+            vec![Some("audio/x-m4a".to_string()), None]
+        );
+        assert_eq!(
+            state.load_source_suffixes,
+            vec![Some("m4a".to_string()), None]
+        );
+    }
+
+    #[test]
+    fn raw_stream_output_device_error_does_not_fall_back_to_standard_stream() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        backend_state.lock().unwrap().load_error = Some(
+            "Audio output device error: failed to build output stream: unavailable".to_string(),
+        );
+
+        let result = controller.play(&runtime_context);
+        let state = backend_state.lock().unwrap();
+
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        assert!(error.contains("Audio output device error"));
+        assert!(!error.contains("fallback stream failed"));
+        assert_eq!(state.load_calls.len(), 1);
+        assert!(state.load_calls[0].contains("format=raw"));
     }
 
     #[test]
@@ -4955,6 +5482,210 @@ mod tests {
         assert_eq!(status.playing_state, PlayingState::Error);
         assert_eq!(error.message, "network timeout");
         assert!(error.handled);
+    }
+
+    #[test]
+    fn native_output_stream_error_reloads_current_track_at_current_position() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 6_543;
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Error {
+                message: "Audio output device error: output stream lost: DeviceNotAvailable"
+                    .to_string(),
+                handled: false,
+            });
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(status.current_position_ms, 6_543);
+        assert!(status.playback_error.is_none());
+        assert_eq!(backend_state.stop_calls, stop_calls_before + 1);
+        assert_eq!(backend_state.load_calls.len(), 2);
+        assert_eq!(
+            backend_state.load_absolute_start_positions_ms,
+            vec![0, 6_543]
+        );
+    }
+
+    #[test]
+    fn repeated_native_output_stream_error_retries_until_recovery_limit() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        for position_ms in [6_543, 7_777, 8_888] {
+            backend_state.lock().unwrap().current_position_ms = position_ms;
+            native_events
+                .lock()
+                .unwrap()
+                .push(PlaybackNativeEvent::Error {
+                    message: "Audio output device error: output stream lost: DeviceNotAvailable"
+                        .to_string(),
+                    handled: false,
+                });
+            controller
+                .process_native_events(Some(&runtime_context))
+                .unwrap();
+
+            let status = controller.state();
+            assert_eq!(status.playing_state, PlayingState::Playing);
+            assert_eq!(status.current_position_ms, position_ms);
+        }
+
+        let load_calls_after_recovery_limit = backend_state.lock().unwrap().load_calls.len();
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Error {
+                message: "Audio output device error: output stream lost: DeviceNotAvailable"
+                    .to_string(),
+                handled: false,
+            });
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(status.playing_state, PlayingState::Error);
+        assert!(status.playback_error.as_ref().is_some_and(|error| error
+            .message
+            .contains("automatic output stream recovery limit reached")));
+        assert_eq!(
+            backend_state.load_calls.len(),
+            load_calls_after_recovery_limit
+        );
+    }
+
+    #[test]
+    fn native_output_stream_error_retry_succeeds_after_initial_reload_failure() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 8_765;
+        backend_state.lock().unwrap().always_fail_load = true;
+
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Error {
+                message: "Audio output device error: output stream lost: DeviceNotAvailable"
+                    .to_string(),
+                handled: false,
+            });
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        assert_eq!(status.playing_state, PlayingState::Interrupted);
+        assert_eq!(status.current_position_ms, 8_765);
+        assert!(status.playback_error.is_none());
+
+        backend_state.lock().unwrap().always_fail_load = false;
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(status.current_position_ms, 8_765);
+        assert!(status.playback_error.is_none());
+        assert_eq!(backend_state.lock().unwrap().load_calls.len(), 3);
+    }
+
+    #[test]
+    fn native_output_stream_error_retry_limit_does_not_leave_playing_without_stream() {
+        let (mut controller, backend_state, _, native_events) =
+            controller_with_mock_backend_and_native_events(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 8_765;
+        backend_state.lock().unwrap().always_fail_load = true;
+
+        native_events
+            .lock()
+            .unwrap()
+            .push(PlaybackNativeEvent::Error {
+                message: "Audio output device error: output stream lost: DeviceNotAvailable"
+                    .to_string(),
+                handled: false,
+            });
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+        let status = controller.state();
+        assert_eq!(status.playing_state, PlayingState::Interrupted);
+        assert_eq!(status.current_position_ms, 8_765);
+        assert!(status.playback_error.is_none());
+
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+        controller
+            .process_native_events(Some(&runtime_context))
+            .unwrap();
+
+        let status = controller.state();
+        let error = status.playback_error.unwrap();
+        assert_eq!(status.playing_state, PlayingState::Error);
+        assert_eq!(status.current_position_ms, 8_765);
+        assert!(error
+            .message
+            .contains("automatic output stream recovery failed after 3 attempts"));
+        assert_eq!(backend_state.lock().unwrap().load_calls.len(), 4);
     }
 
     #[test]
@@ -5795,6 +6526,208 @@ mod tests {
     }
 
     #[test]
+    fn set_output_device_while_stopped_updates_backend_without_reload() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        controller
+            .set_output_device(Some("output:speakers".to_string()), None)
+            .unwrap();
+
+        let backend_state = backend_state.lock().unwrap();
+        assert_eq!(
+            backend_state.output_device_calls,
+            vec![None, Some("output:speakers".to_string())]
+        );
+        assert_eq!(backend_state.stop_calls, stop_calls_before);
+        assert!(backend_state.load_calls.is_empty());
+    }
+
+    #[test]
+    fn initial_output_device_error_keeps_saved_effective_device_until_clear_succeeds() {
+        let (mut controller, backend_state, _) = controller_with_initial_output_device(
+            Some("output:temporarily-missing".to_string()),
+            true,
+        );
+
+        controller
+            .set_output_device(Some("output:temporarily-missing".to_string()), None)
+            .unwrap();
+        let default_switch_result = controller.set_output_device(None, None);
+
+        assert!(default_switch_result.is_err());
+        assert!(backend_state.lock().unwrap().output_device_calls.is_empty());
+    }
+
+    #[test]
+    fn set_output_device_while_playing_reloads_current_track_at_current_position() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 4_321;
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        controller
+            .set_output_device(
+                Some("output:headphones".to_string()),
+                Some(&runtime_context),
+            )
+            .unwrap();
+        let status = controller.state();
+        let backend_state = backend_state.lock().unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(status.current_position_ms, 4_321);
+        assert_eq!(backend_state.stop_calls, stop_calls_before + 1);
+        assert_eq!(
+            backend_state.output_device_calls.last(),
+            Some(&Some("output:headphones".to_string()))
+        );
+        assert_eq!(backend_state.load_calls.len(), 2);
+        assert_eq!(
+            backend_state.load_absolute_start_positions_ms,
+            vec![0, 4_321]
+        );
+    }
+
+    #[test]
+    fn set_output_device_while_paused_reloads_current_track_paused() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller.pause().unwrap();
+        backend_state.lock().unwrap().current_position_ms = 2_222;
+
+        controller
+            .set_output_device(
+                Some("output:headphones".to_string()),
+                Some(&runtime_context),
+            )
+            .unwrap();
+        let status = controller.state();
+        let backend_state = backend_state.lock().unwrap();
+
+        assert_eq!(status.playing_state, PlayingState::Paused);
+        assert_eq!(status.current_position_ms, 2_222);
+        assert_eq!(backend_state.load_calls.len(), 2);
+        assert_eq!(
+            backend_state.load_absolute_start_positions_ms,
+            vec![0, 2_222]
+        );
+    }
+
+    #[test]
+    fn set_output_device_clears_prepared_gapless_state() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller
+            .set_gapless_playback_enabled(true, Some(&runtime_context))
+            .unwrap();
+        let clear_calls_before = backend_state.lock().unwrap().clear_prepared_calls;
+
+        controller
+            .set_output_device(
+                Some("output:headphones".to_string()),
+                Some(&runtime_context),
+            )
+            .unwrap();
+
+        assert!(backend_state.lock().unwrap().clear_prepared_calls > clear_calls_before);
+    }
+
+    #[test]
+    fn set_output_device_backend_error_does_not_stop_active_playback() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().fail_output_device = true;
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        let result = controller.set_output_device(
+            Some("output:headphones".to_string()),
+            Some(&runtime_context),
+        );
+        let status = controller.state();
+
+        assert!(result.is_err());
+        assert_eq!(status.playing_state, PlayingState::Playing);
+        assert_eq!(backend_state.lock().unwrap().stop_calls, stop_calls_before);
+    }
+
+    #[test]
+    fn set_output_device_reload_error_rolls_back_and_does_not_leave_playing_without_stream() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 4_321;
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+        backend_state.lock().unwrap().always_fail_load = true;
+
+        let result = controller.set_output_device(
+            Some("output:headphones".to_string()),
+            Some(&runtime_context),
+        );
+        let status = controller.state();
+        let backend_state = backend_state.lock().unwrap();
+
+        assert!(result.is_err());
+        assert_eq!(status.playing_state, PlayingState::Error);
+        assert_eq!(status.current_position_ms, 4_321);
+        assert!(status.playback_error.is_some());
+        assert_eq!(backend_state.stop_calls, stop_calls_before + 1);
+        assert_eq!(backend_state.output_device_calls.last(), Some(&None));
+    }
+
+    #[test]
     fn restore_state_sets_queue_and_stopped_state() {
         let (mut controller, _, _) = controller_with_mock_backend(false);
         let queue = queue_entries(&["song-a", "song-b", "song-c"]);
@@ -5849,6 +6782,38 @@ mod tests {
         assert!(!controller.is_initialized_for_profile("profile-1"));
         assert!(!controller.can_preserve_active_connect_snapshot_for_profile("profile-1"));
         assert!(saved_states.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn sync_and_persist_stops_loaded_backend_for_app_exit() {
+        let persister = RecordingPersister::default();
+        let saved_states = persister.states.clone();
+        let (mut controller, backend_state, _) =
+            controller_with_mock_backend_and_persister(Box::new(persister));
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: Some("profile-1"),
+        };
+        controller.set_active_profile_id(Some("profile-1".to_string()));
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        backend_state.lock().unwrap().current_position_ms = 12_345;
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        controller.sync_and_persist();
+
+        assert_eq!(
+            backend_state.lock().unwrap().stop_calls,
+            stop_calls_before + 1
+        );
+        let saved_states = saved_states.lock().unwrap();
+        let saved_state = saved_states.last().unwrap();
+        assert_eq!(saved_state.current_position_ms, 12_345);
     }
 
     #[test]

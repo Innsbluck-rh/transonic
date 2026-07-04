@@ -28,6 +28,8 @@ pub struct AndroidPreparedMediaRequest {
     pub title: String,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub source_content_type: Option<String>,
+    pub source_suffix: Option<String>,
     pub artwork_path: Option<String>,
     pub volume: f32,
 }

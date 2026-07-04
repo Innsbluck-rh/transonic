@@ -117,6 +117,8 @@ function resetStores() {
     playback: {
       gaplessPlaybackEnabled: false,
       volume: 1,
+      useCustomOutput: false,
+      outputDeviceId: null,
       streamMode: 'raw',
       meteredNetworkTranscodingEnabled: false,
       transcodingBitrateLimit: 320,
@@ -196,6 +198,42 @@ describe('usePlayback', () => {
       expect(playback.queue().map((entry) => entry.id)).toEqual(['remote-1', 'remote-2']);
       expect(playback.currentIndex()).toBe(1);
       expect(playback.currentEntry()?.id).toBe('remote-2');
+
+      return dispose;
+    });
+
+    dispose();
+  });
+
+  it('uses the refreshed Connect receive time when a same-seq report moves to the next track', () => {
+    const remoteQueue = [song('remote-1'), song('remote-2')];
+    const previousSharedPlayback = sharedPlayback(remoteQueue, 0);
+    const nextSharedPlayback = sharedPlayback(remoteQueue, 1);
+    nextSharedPlayback.seq = previousSharedPlayback.seq;
+    nextSharedPlayback.updatedAt = '2026-05-31T00:00:18Z';
+    nextSharedPlayback.state.currentPositionMs = 0;
+    setConnectStore('runtime', {
+      enabled: true,
+      connected: true,
+      message: null,
+      deviceId: 'own-device',
+      seq: 1,
+    });
+    setConnectStore('sharedPlayback', previousSharedPlayback);
+    setConnectStore('sharedPlaybackReceivedAtMs', 100);
+    setPlaybackStore('clockMs', 18_100);
+
+    const dispose = createRoot((dispose) => {
+      const playback = usePlayback();
+
+      expect(playback.currentPositionMs()).toBe(18_000);
+
+      setConnectStore('sharedPlayback', nextSharedPlayback);
+      setConnectStore('sharedPlaybackReceivedAtMs', 18_100);
+
+      expect(playback.currentIndex()).toBe(1);
+      expect(playback.currentEntry()?.id).toBe('remote-2');
+      expect(playback.currentPositionMs()).toBe(0);
 
       return dispose;
     });

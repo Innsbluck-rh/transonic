@@ -6,7 +6,8 @@ use serde_json::{json, Value};
 use crate::{
     api::{
         annotation::{AnnotationApi, ReportPlaybackRequest},
-        browsing::{BrowsingApi, GetIndexesRequest, GetMusicDirectoryRequest},
+        browsing::{BrowsingApi, GetIndexesRequest, GetMusicDirectoryRequest, GetSongRequest},
+        search::{Search3Request, SearchApi},
         system::SystemApi,
         transcoding::{GetTranscodeDecisionRequest, GetTranscodeStreamRequest, TranscodingApi},
     },
@@ -370,6 +371,131 @@ async fn get_music_directory_surfaces_api_failures_without_payload_fields() {
             assert_eq!(code, 70);
             assert_eq!(message.as_deref(), Some("Directory not found"));
         }
+        other => panic!("unexpected error: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn search3_decodes_single_objects_and_string_numbers() {
+    let mut server = Server::new_async().await;
+    let body = r#"{
+      "subsonic-response": {
+        "status": "ok",
+        "version": "1.16.1",
+        "searchResult3": {
+          "artist": {
+            "id": 1001,
+            "name": "Artist One",
+            "albumCount": "2"
+          },
+          "album": {
+            "id": "album-1",
+            "name": "Album One",
+            "songCount": "10"
+          },
+          "song": {
+            "id": "song-1",
+            "title": "Song One",
+            "track": "04",
+            "duration": "178",
+            "mediaType": " SONG "
+          }
+        }
+      }
+    }"#;
+
+    server
+        .mock("GET", "/rest/search3.view")
+        .match_query(Matcher::AllOf(vec![
+            Matcher::UrlEncoded("u".into(), "demo".into()),
+            Matcher::UrlEncoded("v".into(), "1.13.0".into()),
+            Matcher::UrlEncoded("c".into(), "transonic".into()),
+            Matcher::UrlEncoded("f".into(), "json".into()),
+            Matcher::UrlEncoded("query".into(), "smoke".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create_async()
+        .await;
+
+    let client = build_client(
+        &server.url(),
+        Auth::Token {
+            username: "demo".to_string(),
+            password: "sesame".to_string(),
+        },
+    );
+
+    let response = client
+        .search3(Search3Request {
+            query: "smoke".to_string(),
+            artist_count: None,
+            artist_offset: None,
+            album_count: None,
+            album_offset: None,
+            song_count: None,
+            song_offset: None,
+            music_folder_id: None,
+        })
+        .await
+        .unwrap();
+
+    let payload = response.payload.search_result3;
+    assert_eq!(payload.artist[0].id, "1001");
+    assert_eq!(payload.artist[0].album_count, Some(2));
+    assert_eq!(payload.album[0].song_count, Some(10));
+    assert_eq!(payload.song[0].track, Some(4));
+    assert_eq!(payload.song[0].duration, Some(178));
+    assert_eq!(payload.song[0].media_type.as_deref(), Some(" SONG "));
+}
+
+#[tokio::test]
+async fn get_song_decode_requires_title_without_fallback() {
+    let mut server = Server::new_async().await;
+    let body = r#"{
+      "subsonic-response": {
+        "status": "ok",
+        "version": "1.16.1",
+        "song": {
+          "id": "song-1",
+          "name": "Song One"
+        }
+      }
+    }"#;
+
+    server
+        .mock("GET", "/rest/getSong.view")
+        .match_query(Matcher::AllOf(vec![
+            Matcher::UrlEncoded("u".into(), "demo".into()),
+            Matcher::UrlEncoded("v".into(), "1.13.0".into()),
+            Matcher::UrlEncoded("c".into(), "transonic".into()),
+            Matcher::UrlEncoded("f".into(), "json".into()),
+            Matcher::UrlEncoded("id".into(), "song-1".into()),
+        ]))
+        .with_status(200)
+        .with_header("content-type", "application/json")
+        .with_body(body)
+        .create_async()
+        .await;
+
+    let client = build_client(
+        &server.url(),
+        Auth::Token {
+            username: "demo".to_string(),
+            password: "sesame".to_string(),
+        },
+    );
+
+    let error = client
+        .get_song(GetSongRequest {
+            id: "song-1".to_string(),
+        })
+        .await
+        .unwrap_err();
+
+    match error {
+        ApiError::Decode { message, .. } => assert!(message.contains("title")),
         other => panic!("unexpected error: {other:?}"),
     }
 }

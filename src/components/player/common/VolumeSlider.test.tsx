@@ -30,6 +30,10 @@ function mockSliderRect(slider: Element) {
   });
 }
 
+function wheelEvent(deltaY: number) {
+  return new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY });
+}
+
 describe('VolumeSlider', () => {
   let container: HTMLDivElement;
   let dispose: () => void;
@@ -81,5 +85,34 @@ describe('VolumeSlider', () => {
 
     expect(onVolumeInput.mock.calls.map(([volume]) => volume)).toEqual([0.1, 0.4, 0.7]);
     expect(onVolumeCommit.mock.calls.map(([volume]) => volume)).toEqual([0.7]);
+  });
+
+  it('changes volume by one percentage point per wheel event', () => {
+    const onVolumeInput = vi.fn();
+    const onVolumeCommit = vi.fn();
+    dispose = render(() => <VolumeSlider volume={0.5} onVolumeInput={onVolumeInput} onVolumeCommit={onVolumeCommit} />, container);
+
+    const slider = container.querySelector('[role="slider"]');
+    expect(slider).not.toBeNull();
+
+    slider!.dispatchEvent(wheelEvent(-1));
+    slider!.dispatchEvent(wheelEvent(1));
+
+    expect(onVolumeInput.mock.calls.map(([volume]) => volume)).toEqual([0.51, 0.49]);
+    expect(onVolumeCommit.mock.calls.map(([volume]) => volume)).toEqual([0.51, 0.49]);
+  });
+
+  it('ignores wheel events when disabled', () => {
+    const onVolumeInput = vi.fn();
+    const onVolumeCommit = vi.fn();
+    dispose = render(() => <VolumeSlider volume={0.5} disabled onVolumeInput={onVolumeInput} onVolumeCommit={onVolumeCommit} />, container);
+
+    const slider = container.querySelector('[role="slider"]');
+    expect(slider).not.toBeNull();
+
+    slider!.dispatchEvent(wheelEvent(-1));
+
+    expect(onVolumeInput).not.toHaveBeenCalled();
+    expect(onVolumeCommit).not.toHaveBeenCalled();
   });
 });

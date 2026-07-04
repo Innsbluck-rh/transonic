@@ -42,6 +42,8 @@ private const val KEY_AUTOPLAY = "autoplay"
 private const val KEY_TITLE = "title"
 private const val KEY_ARTIST = "artist"
 private const val KEY_ALBUM = "album"
+private const val KEY_SOURCE_CONTENT_TYPE = "sourceContentType"
+private const val KEY_SOURCE_SUFFIX = "sourceSuffix"
 private const val KEY_ARTWORK_PATH = "artworkPath"
 private const val KEY_VOLUME = "volume"
 private const val NETWORK_COST_UNKNOWN = "unknown"
@@ -67,6 +69,8 @@ class LoadPreparedMediaArgs {
   lateinit var title: String
   var artist: String? = null
   var album: String? = null
+  var sourceContentType: String? = null
+  var sourceSuffix: String? = null
   var artworkPath: String? = null
   var volume: Float = 1f
 }
@@ -158,6 +162,8 @@ private fun LoadPreparedMediaArgs.toBundle(): Bundle {
     putString(KEY_TITLE, title)
     putString(KEY_ARTIST, artist)
     putString(KEY_ALBUM, album)
+    putString(KEY_SOURCE_CONTENT_TYPE, sourceContentType)
+    putString(KEY_SOURCE_SUFFIX, sourceSuffix)
     putString(KEY_ARTWORK_PATH, artworkPath)
     putFloat(KEY_VOLUME, volume)
   }
@@ -223,6 +229,8 @@ internal fun Bundle.toLoadPreparedMediaArgs(): LoadPreparedMediaArgs? {
     this.title = title
     this.artist = getString(KEY_ARTIST)
     this.album = getString(KEY_ALBUM)
+    this.sourceContentType = getString(KEY_SOURCE_CONTENT_TYPE)
+    this.sourceSuffix = getString(KEY_SOURCE_SUFFIX)
     this.artworkPath = getString(KEY_ARTWORK_PATH)
     this.volume = getFloat(KEY_VOLUME, 1f)
   }

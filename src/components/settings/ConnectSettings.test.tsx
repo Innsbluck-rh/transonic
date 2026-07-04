@@ -34,6 +34,8 @@ function enabledSettings(): AppSettings {
     playback: {
       gaplessPlaybackEnabled: false,
       volume: 1,
+      useCustomOutput: false,
+      outputDeviceId: null,
       streamMode: 'raw',
       meteredNetworkTranscodingEnabled: false,
       transcodingBitrateLimit: 320,

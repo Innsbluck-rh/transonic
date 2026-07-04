@@ -167,7 +167,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         </div>
       </div>
 
-      <div class='border-secondary-border z-20 flex w-full flex-col border-t'>
+      <div class='border-secondary-border z-20 flex w-full flex-col border-t pb-2'>
         <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
           <Heading3 class='text-secondary-text'>songs</Heading3>
         </div>

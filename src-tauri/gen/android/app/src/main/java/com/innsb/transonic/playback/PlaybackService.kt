@@ -11,6 +11,7 @@ import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackSelectionParameters.AudioOffloadPreferences
@@ -19,6 +20,9 @@ import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
+import androidx.media3.extractor.DefaultExtractorsFactory
+import androidx.media3.extractor.Extractor
+import androidx.media3.extractor.ExtractorsFactory
 import androidx.media3.session.DefaultMediaNotificationProvider
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSession.ConnectionResult
@@ -33,6 +37,7 @@ import com.google.common.util.concurrent.SettableFuture
 import java.io.File
 
 private const val HANDLED_PLAYBACK_ERROR_PREFIX = "[transonic-handled-playback-error]"
+private const val HTTP_HEADER_CONTENT_TYPE = "Content-Type"
 
 private data class PendingLoad(
   val mediaId: String,
@@ -43,6 +48,24 @@ private data class PlaybackSlotState(
   val mediaId: String,
   val basePositionMs: Long,
 )
+
+@UnstableApi
+private class ContainerMimeTypeHintingExtractorsFactory(
+  private val containerMimeTypeHint: String?,
+) : ExtractorsFactory {
+  private val delegate = DefaultExtractorsFactory()
+
+  override fun createExtractors(): Array<Extractor> {
+    return delegate.createExtractors()
+  }
+
+  override fun createExtractors(uri: Uri, responseHeaders: Map<String, List<String>>): Array<Extractor> {
+    val hint = containerMimeTypeHint ?: return delegate.createExtractors(uri, responseHeaders)
+    val hintedHeaders = LinkedHashMap<String, List<String>>(responseHeaders)
+    hintedHeaders[HTTP_HEADER_CONTENT_TYPE] = listOf(hint)
+    return delegate.createExtractors(uri, hintedHeaders)
+  }
+}
 
 @UnstableApi
 private class QueueCommandForwardingPlayer(
@@ -430,11 +453,16 @@ class PlaybackService : MediaSessionService(), Player.Listener {
       ?.let { artworkPath -> artworkContentUri(artworkPath) }
       ?.let { artworkUri -> metadataBuilder.setArtworkUri(artworkUri) }
 
-    val mediaItem = MediaItem.Builder()
+    val containerMimeTypeHint =
+      sourceContainerMimeTypeHint(request.sourceContentType, request.sourceSuffix)
+    val mediaItemBuilder = MediaItem.Builder()
       .setMediaId(request.mediaId)
       .setUri(request.streamUrl)
       .setMediaMetadata(metadataBuilder.build())
-      .build()
+    if (containerMimeTypeHint != null) {
+      mediaItemBuilder.setMimeType(containerMimeTypeHint)
+    }
+    val mediaItem = mediaItemBuilder.build()
 
     val requestHeaders = linkedMapOf<String, String>()
     request.headers.forEach { header ->
@@ -446,8 +474,38 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     val dataSourceFactory = DefaultHttpDataSource.Factory()
       .setAllowCrossProtocolRedirects(true)
       .setDefaultRequestProperties(requestHeaders)
-    return ProgressiveMediaSource.Factory(dataSourceFactory)
+    return ProgressiveMediaSource.Factory(
+      dataSourceFactory,
+      ContainerMimeTypeHintingExtractorsFactory(containerMimeTypeHint),
+    )
       .createMediaSource(mediaItem)
+  }
+
+  private fun sourceContainerMimeTypeHint(contentType: String?, suffix: String?): String? {
+    val normalizedContentType =
+      contentType
+        ?.substringBefore(';')
+        ?.trim()
+        ?.lowercase()
+        ?.takeIf { it.isNotBlank() }
+    when (normalizedContentType) {
+      MimeTypes.AUDIO_MP4,
+      MimeTypes.VIDEO_MP4,
+      MimeTypes.APPLICATION_MP4,
+      "audio/m4a",
+      "audio/x-m4a",
+      -> return MimeTypes.AUDIO_MP4
+    }
+
+    val normalizedSuffix = suffix?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+    return when (normalizedSuffix) {
+      "m4a",
+      "m4b",
+      "mp4",
+      -> MimeTypes.AUDIO_MP4
+
+      else -> null
+    }
   }
 
   private fun LoadPreparedMediaArgs.toPlaybackSlotState(): PlaybackSlotState {

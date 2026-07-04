@@ -1,4 +1,4 @@
-import { commands, events, type AppSettings, type ConnectStateSnapshot, type ConnectStateUpdated } from '~/bindings';
+import { commands, events, type AppSettings, type ConnectSharedPlaybackState, type ConnectStateSnapshot, type ConnectStateUpdated } from '~/bindings';
 import { settingsStore } from '~/features/settings/service';
 import { connectStore, setConnectStore } from '~/stores/ConnectStore';
 import { sessionStore } from '~/stores/SessionStore';
@@ -19,6 +19,46 @@ let refreshGeneration = 0;
 
 function monotonicNowMs() {
   return typeof performance === 'undefined' ? Date.now() : performance.now();
+}
+
+function normalizedPlaybackPositionMs(sharedPlayback: ConnectSharedPlaybackState) {
+  return sharedPlayback.state.currentPositionMs ?? 0;
+}
+
+function currentQueueEntryId(sharedPlayback: ConnectSharedPlaybackState) {
+  const currentIndex = sharedPlayback.state.currentIndex;
+  if (currentIndex === null || currentIndex === undefined) {
+    return null;
+  }
+
+  return sharedPlayback.state.queue?.[currentIndex]?.id ?? null;
+}
+
+function hasSameSharedPlaybackTimelineBase(previous: ConnectSharedPlaybackState, next: ConnectSharedPlaybackState) {
+  return (
+    previous.updatedAt === next.updatedAt &&
+    (previous.activeDeviceId ?? null) === (next.activeDeviceId ?? null) &&
+    previous.state.playingState === next.state.playingState &&
+    (previous.state.currentIndex ?? null) === (next.state.currentIndex ?? null) &&
+    (previous.state.currentSongId ?? null) === (next.state.currentSongId ?? null) &&
+    currentQueueEntryId(previous) === currentQueueEntryId(next) &&
+    normalizedPlaybackPositionMs(previous) === normalizedPlaybackPositionMs(next)
+  );
+}
+
+export function shouldReuseSharedPlaybackReceivedAtMs(
+  previous: ConnectSharedPlaybackState | null | undefined,
+  next: ConnectSharedPlaybackState,
+  previousReceivedAtMs: number | null | undefined
+) {
+  return (
+    previousReceivedAtMs !== null &&
+    previousReceivedAtMs !== undefined &&
+    previous !== null &&
+    previous !== undefined &&
+    previous.seq === next.seq &&
+    hasSameSharedPlaybackTimelineBase(previous, next)
+  );
 }
 
 export function splitUrlHostAndPort(rawUrl: string | null) {
@@ -184,7 +224,7 @@ function sharedPlaybackReceivedAtMsForSnapshot(snapshot: ConnectStateSnapshot | 
     return null;
   }
 
-  if (connectStore.sharedPlayback?.seq === nextSharedPlayback.seq && connectStore.sharedPlaybackReceivedAtMs !== null) {
+  if (shouldReuseSharedPlaybackReceivedAtMs(connectStore.sharedPlayback, nextSharedPlayback, connectStore.sharedPlaybackReceivedAtMs)) {
     return connectStore.sharedPlaybackReceivedAtMs;
   }
 

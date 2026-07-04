@@ -7,8 +7,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use crate::models::{
-    normalize_transcoding_bitrate_limit, normalize_volume, AppSettings, AppearanceSettings,
-    ConnectSettings, PlaybackSettings, SettingsOrigin,
+    normalize_output_device_id, normalize_transcoding_bitrate_limit, normalize_volume, AppSettings,
+    AppearanceSettings, ConnectSettings, PlaybackSettings, SettingsOrigin,
 };
 
 const APP_SETTINGS_FILENAME: &str = "app-settings.json";
@@ -138,6 +138,8 @@ fn save_app_settings_file(path: &Path, settings: &AppSettings) -> Result<(), Str
 
 fn normalize_app_settings(mut settings: AppSettings) -> AppSettings {
     settings.playback.volume = normalize_volume(settings.playback.volume);
+    settings.playback.output_device_id =
+        normalize_output_device_id(settings.playback.output_device_id);
     settings.playback.transcoding_bitrate_limit =
         normalize_transcoding_bitrate_limit(settings.playback.transcoding_bitrate_limit);
     settings
@@ -175,6 +177,8 @@ mod tests {
         settings.appearance.album_display_mode = AlbumDisplayMode::List;
         settings.playback.gapless_playback_enabled = true;
         settings.playback.volume = 0.42;
+        settings.playback.use_custom_output = true;
+        settings.playback.output_device_id = Some("output:device-1".to_string());
         settings.playback.stream_mode = PlaybackStreamMode::Transcoding;
         settings.playback.metered_network_transcoding_enabled = true;
         settings.playback.transcoding_bitrate_limit = 192;
@@ -213,6 +217,19 @@ mod tests {
         let stored = store.replace(settings).unwrap();
 
         assert_eq!(stored.playback.transcoding_bitrate_limit, 320);
+    }
+
+    #[test]
+    fn settings_store_normalizes_empty_output_device_id_when_replacing() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        let mut store = AppSettingsStore::load(path).unwrap();
+        let mut settings = AppSettings::default();
+        settings.playback.output_device_id = Some("  ".to_string());
+
+        let stored = store.replace(settings).unwrap();
+
+        assert_eq!(stored.playback.output_device_id, None);
     }
 
     #[test]
@@ -297,6 +314,43 @@ mod tests {
             settings.playback.transcoding_codec,
             PlaybackTranscodingCodec::Auto
         );
+        assert_eq!(settings.playback.output_device_id, None);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn playback_output_device_id_loads_settings() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"outputDeviceId\": \"output:device-1\"\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert!(settings.playback.use_custom_output);
+        assert_eq!(
+            settings.playback.output_device_id.as_deref(),
+            Some("output:device-1")
+        );
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
+    fn empty_playback_output_device_id_loads_as_none() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"outputDeviceId\": \"   \"\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert_eq!(settings.playback.output_device_id, None);
         assert_eq!(origin, crate::models::SettingsOrigin::Stored);
     }
 

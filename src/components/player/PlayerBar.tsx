@@ -140,10 +140,10 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                 )}
               </Show>
             </div>
-            <div class='flex min-w-0 flex-1 flex-col gap-2'>
+            <div class='flex min-w-0 flex-1 flex-col gap-1'>
               <MarqueeParagraph
                 text={currentEntry()?.title || '[unknown]'}
-                class='archivo mt-1 w-fit text-lg leading-none font-bold'
+                class='archivo mt-1 w-fit pb-1 text-lg leading-none font-bold'
                 classList={{
                   'cursor-pointer': !!props.onClickTitle,
                 }}

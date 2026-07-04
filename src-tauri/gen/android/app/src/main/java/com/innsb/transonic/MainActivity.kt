@@ -54,6 +54,7 @@ class MainActivity : TauriActivity() {
 
   override fun onResume() {
     super.onResume()
+    RustPlaybackBridge().notifyAppResumed()
     reapplySystemBarsTheme()
     mainWebView?.let { webView ->
       ViewCompat.requestApplyInsets(webView)

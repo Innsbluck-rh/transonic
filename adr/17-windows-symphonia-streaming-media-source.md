@@ -4,6 +4,12 @@ date:     2026-04-05 20:30
 version:  0.0.1
 -->
 
+## 2026-06-20 修正
+
+- ~~symphonia streaming backend の PCM 出力を、現行の ASIO 出力対応の根拠として扱います。~~\
+  (2026-06-20 17:40) この読み方は取り下げました。この ADR は streaming media source の決定記録であり、現行の Windows 出力デバイス切り替えは ADR-19 の通り WASAPI 限定です。
+- この ADR にある ASIO への言及は、PCM を扱う構造上の可能性を述べたものです。ASIO runtime integration の実装指針、API 形状、UI 方針として参照しないでください。
+
 ## 概要
 
 - Windows 再生バックエンドの symphonia 実装において、全量ダウンロード方式（download-then-play）をプログレッシブ・ストリーミング方式に置き換えた経緯と実装内容を記録します。

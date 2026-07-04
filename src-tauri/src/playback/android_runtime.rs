@@ -12,7 +12,8 @@ use tauri_specta::Event as _;
 use crate::{
     commands::{common::client, playback::active_runtime_parts},
     models::{
-        resolve_effective_stream_settings, CapabilityMatrix, MediaNotificationTap, NetworkCostState,
+        resolve_effective_stream_settings, CapabilityMatrix, MediaNotificationTap,
+        NetworkCostState, PlaybackStatus,
     },
     ActiveSessionState, AppSettingsState, CoverArtCacheState, NetworkCostStateState,
     PlaybackControllerState,
@@ -303,6 +304,36 @@ fn spawn_network_cost_state_apply(app: AppHandle<Wry>, next_state: NetworkCostSt
     });
 }
 
+fn sync_playback_status_for_android_resume(app: &AppHandle<Wry>) -> Option<PlaybackStatus> {
+    let playback = app.try_state::<PlaybackControllerState>()?;
+    let runtime_context = playback_runtime_context(app);
+    let runtime_context_ref = runtime_context
+        .as_ref()
+        .map(OwnedPlaybackRuntimeContext::as_context);
+    let mut controller = match playback.0.lock() {
+        Ok(controller) => controller,
+        Err(_) => {
+            log::warn!("android_runtime: playback controller state unavailable during resume");
+            return None;
+        }
+    };
+
+    match controller.synced_state_with_context(runtime_context_ref.as_ref()) {
+        Ok(status) => Some(status),
+        Err(error) => {
+            log::warn!("android_runtime: failed to sync playback state during resume: {error}");
+            None
+        }
+    }
+}
+
+fn spawn_android_resume_sync(app: AppHandle<Wry>) {
+    std::thread::spawn(move || {
+        let playback_status = sync_playback_status_for_android_resume(&app);
+        crate::connect::sync_after_android_resume(&app, playback_status);
+    });
+}
+
 #[no_mangle]
 pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_enqueuePlaybackEvent(
     mut env: JNIEnv<'_>,
@@ -381,6 +412,18 @@ pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_noti
         log::error!("android_runtime: failed to emit MediaNotificationTap event: {error}");
         PENDING_NOTIFICATION_TAP.store(true, Ordering::SeqCst);
     }
+}
+
+#[no_mangle]
+pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_notifyAppResumed(
+    _env: JNIEnv<'_>,
+    _this: JObject<'_>,
+) {
+    let Some(app) = cloned_app_handle() else {
+        return;
+    };
+
+    spawn_android_resume_sync(app);
 }
 
 #[no_mangle]

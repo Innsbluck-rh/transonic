@@ -217,6 +217,14 @@ async playbackGetState() : Promise<Result<PlaybackStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async playbackGetOutputDevices() : Promise<Result<PlaybackOutputDevice[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_get_output_devices") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async playbackSetQueue(payload: PlaybackSetQueueRequest) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("playback_set_queue", { payload }) };
@@ -440,17 +448,18 @@ export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
 export type PlaybackActualStreamInfo = { codec: string | null; codecProfile: string | null; sampleRate: number | null; channels: number | null; bitDepth: number | null; bitrate: number | null; sampleFormat: string | null; mimeType: string | null }
 export type PlaybackAppendToQueueRequest = { items: QueueSource[] }
-export type PlaybackCapabilities = { gaplessPlayback: boolean; transcodingCodecs: PlaybackTranscodingCodec[] }
+export type PlaybackCapabilities = { gaplessPlayback: boolean; transcodingCodecs: PlaybackTranscodingCodec[]; outputDeviceSelection: boolean }
 export type PlaybackError = { message: string; handled: boolean }
 export type PlaybackInsertAfterCurrentRequest = { items: QueueSource[] }
 export type PlaybackMoveQueueIndexRequest = { fromIndex: number; toIndex: number }
+export type PlaybackOutputDevice = { id: string; name: string; deviceName: string }
 export type PlaybackPlayQueueIndexRequest = { index: number }
 export type PlaybackRemoveQueueIndexRequest = { index: number }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetPositionRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { items: QueueSource[]; currentIndex: number | null; autoPlay: boolean }
 export type PlaybackSetVolumeRequest = { volume: number }
-export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number; streamMode: PlaybackStreamMode; meteredNetworkTranscodingEnabled: boolean; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
+export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number; useCustomOutput: boolean; outputDeviceId: string | null; streamMode: PlaybackStreamMode; meteredNetworkTranscodingEnabled: boolean; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
 export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId: string | null; playbackError: PlaybackError | null; activeStreamInfo: PlaybackStreamInfo | null; preparedStreamInfo: PlaybackStreamInfo | null; lastStreamRequest: PlaybackStreamInfo | null; actualStreamInfo: PlaybackActualStreamInfo | null }
 export type PlaybackStreamInfo = { requestKind: PlaybackStreamRequestKind; songId: string; songPath: string | null; sourceContentType: string | null; sourceSuffix: string | null; sourceBitRate: number | null; sourceSize: number | null; streamMode: PlaybackStreamMode; rawStream: boolean; streamFormat: string | null; streamMaxBitRate: number | null; streamOffsetSeconds: number | null; requestedPositionMs: number; localStartPositionMs: number; autoplay: boolean; streamEndpoint: string; streamUrl: string }
 export type PlaybackStreamMode = "raw" | "transcoding"

@@ -4,55 +4,11 @@ pub mod folder_structure;
 pub mod folder_structure_album_songs;
 pub mod song;
 
-use serde::Deserialize;
-
 use crate::commands::common::normalize_media_type;
-use crate::commands::json::{opt_boolish, opt_stringish, opt_u32ish, opt_u64ish, stringish};
 use crate::models::SongResponse;
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct RawSong {
-    #[serde(deserialize_with = "stringish")]
-    pub id: String,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    pub parent: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    pub path: Option<String>,
-    pub title: String,
-    pub album: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    pub album_id: Option<String>,
-    pub artist: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    pub artist_id: Option<String>,
-    pub cover_art: Option<String>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    pub track: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    pub disc_number: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    pub year: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    pub duration: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u64ish")]
-    pub size: Option<u64>,
-    pub content_type: Option<String>,
-    pub suffix: Option<String>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    pub bit_rate: Option<u32>,
-    pub genre: Option<String>,
-    pub created: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    pub starred: Option<String>,
-    #[serde(default, deserialize_with = "opt_boolish")]
-    pub is_dir: Option<bool>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    pub media_type: Option<String>,
-}
-
-impl From<RawSong> for SongResponse {
-    fn from(value: RawSong) -> Self {
+impl From<opensubsonic_client::Child> for SongResponse {
+    fn from(value: opensubsonic_client::Child) -> Self {
         let cover_art_id = value.cover_art;
         Self {
             id: value.id,

@@ -7,6 +7,8 @@ class RustPlaybackBridge {
 
   external fun notifyAppResumedFromNotification()
 
+  external fun notifyAppResumed()
+
   external fun updateNetworkCostState(state: String)
 
   companion object {

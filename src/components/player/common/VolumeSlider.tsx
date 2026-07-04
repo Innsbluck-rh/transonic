@@ -22,6 +22,9 @@ function volumePercentage(volume: number) {
   return Math.round(clampVolume(volume) * 100);
 }
 
+// TODO: Make the scroll step configurable.
+const VOLUME_SCROLL_STEP_PERCENTAGE = 1;
+
 const VolumeSlider: Component<VolumeSliderProps> = (props) => {
   let sliderRef: HTMLDivElement | undefined;
   let lastInputVolume: number | null = null;
@@ -166,6 +169,23 @@ const VolumeSlider: Component<VolumeSliderProps> = (props) => {
     props.onVolumeCommit?.(clampedVolume);
   };
 
+  const handleWheel: JSX.EventHandlerUnion<HTMLDivElement, WheelEvent> = (event) => {
+    if (props.disabled) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (event.deltaY === 0) {
+      return;
+    }
+
+    const direction = event.deltaY < 0 ? 1 : -1;
+    const nextPercentage = displayedPercentage() + direction * VOLUME_SCROLL_STEP_PERCENTAGE;
+    commitVolume(nextPercentage / 100);
+  };
+
   return (
     <div
       class='flex w-auto shrink-0 items-center overflow-x-hidden p-1'
@@ -218,6 +238,7 @@ const VolumeSlider: Component<VolumeSliderProps> = (props) => {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerCancel}
+          onWheel={handleWheel}
           onClick={(e) => e.stopPropagation()}
         >
           <For each={indicators()}>

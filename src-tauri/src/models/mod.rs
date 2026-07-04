@@ -39,10 +39,10 @@ pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
 pub use playback::{
     GaplessState, GaplessStatus, InterruptReason, MediaNotificationTap, PlaybackActualStreamInfo,
     PlaybackAppendToQueueRequest, PlaybackError, PlaybackInsertAfterCurrentRequest,
-    PlaybackMoveQueueIndexRequest, PlaybackPlayQueueIndexRequest, PlaybackRemoveQueueIndexRequest,
-    PlaybackSeekRequest, PlaybackSetPositionRequest, PlaybackSetQueueRequest,
-    PlaybackSetVolumeRequest, PlaybackStatus, PlaybackStreamInfo, PlaybackStreamRequestKind,
-    PlayingState, QueueSource,
+    PlaybackMoveQueueIndexRequest, PlaybackOutputDevice, PlaybackPlayQueueIndexRequest,
+    PlaybackRemoveQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
+    PlaybackSetQueueRequest, PlaybackSetVolumeRequest, PlaybackStatus, PlaybackStreamInfo,
+    PlaybackStreamRequestKind, PlayingState, QueueSource,
 };
 #[allow(unused_imports)]
 pub use search::{SearchRequest, SearchResponse};
@@ -54,8 +54,9 @@ pub use session::{
 };
 #[allow(unused_imports)]
 pub use settings::{
-    effective_transcoding_codec, normalize_transcoding_bitrate_limit, normalize_volume,
-    resolve_effective_stream_settings, AlbumDisplayMode, AppSettings, AppearanceSettings,
-    ConnectSettings, EffectivePlaybackStreamSettings, NetworkCostState, PlaybackSettings,
-    PlaybackStreamMode, PlaybackTranscodingCodec, SettingsOrigin, SettingsUpdateRequest,
+    effective_output_device_id, effective_transcoding_codec, normalize_output_device_id,
+    normalize_transcoding_bitrate_limit, normalize_volume, resolve_effective_stream_settings,
+    AlbumDisplayMode, AppSettings, AppearanceSettings, ConnectSettings,
+    EffectivePlaybackStreamSettings, NetworkCostState, PlaybackSettings, PlaybackStreamMode,
+    PlaybackTranscodingCodec, SettingsOrigin, SettingsUpdateRequest,
 };

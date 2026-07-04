@@ -4,8 +4,10 @@ mod native_events;
 mod queue_sync;
 mod reporting;
 mod server_reporting;
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(test)))]
 mod windows_runtime;
+use crate::models::{normalize_output_device_id, PlaybackOutputDevice};
+#[cfg(not(test))]
 use crate::playback_state::PlaybackStatePersister;
 
 #[cfg(target_os = "android")]
@@ -13,8 +15,11 @@ mod android_mobile_plugin;
 #[cfg(target_os = "android")]
 mod android_runtime;
 
+#[cfg(not(test))]
 use queue_sync::NoopQueueSyncGateway;
+#[cfg(not(test))]
 use reporting::{CompositePlaybackReporter, TauriPlaybackReporter};
+#[cfg(not(test))]
 use server_reporting::BackgroundPlaybackServerReporter;
 
 #[cfg(not(any(target_os = "android", target_os = "windows")))]
@@ -29,12 +34,21 @@ pub(crate) use android_runtime::install_android_app_handle;
 #[cfg(target_os = "android")]
 pub(crate) use android_runtime::spawn_android_artwork_update;
 pub use controller::{PlaybackController, PlaybackRuntimeContext};
+#[cfg(not(test))]
 pub use reporting::PlaybackEventAppHandle;
 pub(crate) use reporting::PlaybackReporter;
-#[cfg(target_os = "windows")]
+#[cfg(all(target_os = "windows", not(test)))]
 pub(crate) use windows_runtime::install_windows_app_handle;
-#[cfg(target_os = "windows")]
-pub(crate) use windows_runtime::spawn_controller_process_native_events;
+#[cfg(all(target_os = "windows", not(test)))]
+pub(crate) use windows_runtime::{
+    spawn_controller_process_native_events, spawn_controller_process_native_events_after,
+};
+
+#[cfg(any(not(target_os = "windows"), test))]
+pub(crate) fn spawn_controller_process_native_events_after(_delay: std::time::Duration) {}
+
+#[cfg(test)]
+pub(crate) fn spawn_controller_process_native_events() {}
 
 #[cfg(target_os = "android")]
 pub(crate) fn android_default_device_name(app: &tauri::AppHandle) -> Option<String> {
@@ -65,12 +79,14 @@ pub(crate) fn start_android_network_cost_monitoring(app: &tauri::AppHandle) {
     }
 }
 
+#[cfg(not(test))]
 pub(crate) fn create_playback_controller(
     _app: &tauri::AppHandle,
     app_handle: PlaybackEventAppHandle,
     persister: Box<dyn PlaybackStatePersister>,
     gapless_playback_enabled: bool,
     initial_volume: f32,
+    initial_output_device_id: Option<String>,
 ) -> PlaybackController {
     let reporter: Box<dyn reporting::PlaybackReporter> =
         Box::new(CompositePlaybackReporter::new(vec![
@@ -94,6 +110,7 @@ pub(crate) fn create_playback_controller(
                 persister,
                 gapless_playback_enabled,
                 initial_volume,
+                initial_output_device_id,
             );
         }
     }
@@ -110,6 +127,7 @@ pub(crate) fn create_playback_controller(
             persister,
             gapless_playback_enabled,
             initial_volume,
+            initial_output_device_id,
         );
     }
 
@@ -124,9 +142,44 @@ pub(crate) fn create_playback_controller(
             persister,
             gapless_playback_enabled,
             initial_volume,
+            initial_output_device_id,
         );
     }
 
     #[cfg(target_os = "android")]
     panic!("Android playback runtime state was not registered before controller setup.")
+}
+
+pub(crate) fn list_output_devices() -> Result<Vec<PlaybackOutputDevice>, String> {
+    #[cfg(target_os = "windows")]
+    {
+        return backend_shims::list_output_devices();
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        Ok(Vec::new())
+    }
+}
+
+pub(crate) fn validate_output_device_id(
+    output_device_id: Option<String>,
+) -> Result<Option<String>, String> {
+    let output_device_id = normalize_output_device_id(output_device_id);
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(id) = output_device_id.as_deref() {
+            backend_shims::validate_output_device_id(id)?;
+        }
+        return Ok(output_device_id);
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    {
+        if output_device_id.is_some() {
+            return Err("Output device selection is only supported on Windows.".to_string());
+        }
+        Ok(output_device_id)
+    }
 }

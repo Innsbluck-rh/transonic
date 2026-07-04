@@ -52,6 +52,8 @@ impl<'de> Deserialize<'de> for AppearanceSettings {
 pub struct PlaybackSettings {
     pub gapless_playback_enabled: bool,
     pub volume: f32,
+    pub use_custom_output: bool,
+    pub output_device_id: Option<String>,
     pub stream_mode: PlaybackStreamMode,
     pub metered_network_transcoding_enabled: bool,
     pub transcoding_bitrate_limit: u32,
@@ -64,6 +66,8 @@ impl Default for PlaybackSettings {
         Self {
             gapless_playback_enabled: true,
             volume: default_volume(),
+            use_custom_output: false,
+            output_device_id: None,
             stream_mode: PlaybackStreamMode::default(),
             metered_network_transcoding_enabled: false,
             transcoding_bitrate_limit: default_transcoding_bitrate_limit(),
@@ -195,6 +199,10 @@ impl<'de> Deserialize<'de> for PlaybackSettings {
             #[serde(default)]
             volume: Option<f32>,
             #[serde(default)]
+            use_custom_output: Option<bool>,
+            #[serde(default)]
+            output_device_id: Option<String>,
+            #[serde(default)]
             stream_mode: PlaybackStreamMode,
             #[serde(default)]
             metered_network_transcoding_enabled: bool,
@@ -207,11 +215,17 @@ impl<'de> Deserialize<'de> for PlaybackSettings {
         }
 
         let raw = RawPlaybackSettings::deserialize(deserializer)?;
+        let output_device_id = normalize_output_device_id(raw.output_device_id);
+        let use_custom_output = raw
+            .use_custom_output
+            .unwrap_or_else(|| output_device_id.is_some());
         Ok(Self {
             gapless_playback_enabled: raw
                 .gapless_playback_enabled
                 .unwrap_or_else(|| raw.prebuffer_strategy.as_deref() == Some("next_track")),
             volume: normalize_volume_option(raw.volume),
+            use_custom_output,
+            output_device_id,
             stream_mode: raw.stream_mode,
             metered_network_transcoding_enabled: raw.metered_network_transcoding_enabled,
             transcoding_bitrate_limit: normalize_transcoding_bitrate_limit(
@@ -229,6 +243,19 @@ pub fn normalize_volume(volume: f32) -> f32 {
     } else {
         default_volume()
     }
+}
+
+pub fn normalize_output_device_id(output_device_id: Option<String>) -> Option<String> {
+    output_device_id
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+pub fn effective_output_device_id(playback: &PlaybackSettings) -> Option<&str> {
+    playback
+        .use_custom_output
+        .then_some(playback.output_device_id.as_deref())
+        .flatten()
 }
 
 fn normalize_volume_option(volume: Option<f32>) -> f32 {
@@ -401,8 +428,8 @@ pub struct SettingsUpdateRequest {
 #[cfg(test)]
 mod tests {
     use super::{
-        resolve_effective_stream_settings, NetworkCostState, PlaybackSettings, PlaybackStreamMode,
-        PlaybackTranscodingCodec,
+        effective_output_device_id, resolve_effective_stream_settings, NetworkCostState,
+        PlaybackSettings, PlaybackStreamMode, PlaybackTranscodingCodec,
     };
 
     #[test]
@@ -452,5 +479,20 @@ mod tests {
         let effective = resolve_effective_stream_settings(&playback, NetworkCostState::Unmetered);
 
         assert_eq!(effective.stream_mode, PlaybackStreamMode::Raw);
+    }
+
+    #[test]
+    fn effective_output_device_id_uses_saved_id_only_when_custom_output_is_enabled() {
+        let mut playback = PlaybackSettings::default();
+        playback.output_device_id = Some("output:device-1".to_string());
+
+        assert_eq!(effective_output_device_id(&playback), None);
+
+        playback.use_custom_output = true;
+
+        assert_eq!(
+            effective_output_device_id(&playback),
+            Some("output:device-1")
+        );
     }
 }

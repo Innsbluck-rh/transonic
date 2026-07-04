@@ -125,7 +125,8 @@
     color-scheme: inherit;
   }
 
-  option {
+  option,
+  optgroup {
     @apply bg-primary-plane text-primary-text;
   }
   input:not([type]),

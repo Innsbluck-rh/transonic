@@ -1,6 +1,6 @@
 use std::{
     sync::{Arc, Mutex},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use futures_util::{SinkExt, StreamExt};
@@ -23,7 +23,7 @@ use crate::{
     models::{
         AuthInput, ConnectDevicePresence, ConnectPlaybackState, ConnectRuntimeStatus,
         ConnectSettings, ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectStateUpdated,
-        PlaybackStatus,
+        PlaybackStatus, PlayingState,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
@@ -34,6 +34,9 @@ const TYPE_PLAYBACK_SHARED_SNAPSHOT: &str = "playback.shared.snapshot";
 const TYPE_PLAYBACK_SHARED_UPDATED: &str = "playback.shared.updated";
 const UPDATE_REASON_SNAPSHOT: &str = "snapshot";
 const UPDATE_REASON_ACTIVE_OFFLINE: &str = "activeOffline";
+#[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+const ANDROID_RESUME_SYNC_COOLDOWN: Duration = Duration::from_secs(2);
+const ANDROID_RESUME_REPORT_MAX_AGE: Duration = Duration::from_secs(30);
 
 #[derive(Clone)]
 pub(crate) struct ConnectState(pub Arc<ConnectRuntime>);
@@ -58,6 +61,9 @@ struct ConnectRuntimeInner {
     devices: Vec<ConnectDevicePresence>,
     shared_playback: Option<ConnectSharedPlaybackState>,
     applying_shared_seq: Option<u32>,
+    #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+    last_android_resume_sync_at: Option<Instant>,
+    pending_android_resume_report: Option<PendingAndroidResumeReport>,
 }
 
 enum ConnectOutbound {
@@ -72,6 +78,12 @@ struct ConnectOutboundEnvelope {
     id: Option<String>,
     message_type: &'static str,
     payload: serde_json::Value,
+}
+
+struct PendingAndroidResumeReport {
+    state: ConnectPlaybackState,
+    captured_at: Instant,
+    allow_active_claim: bool,
 }
 
 struct SharedPlaybackUpdate {
@@ -317,6 +329,105 @@ impl ConnectRuntime {
         }
     }
 
+    #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+    fn mark_android_resume_sync_requested(&self) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        let now = Instant::now();
+        if inner
+            .last_android_resume_sync_at
+            .is_some_and(|last| now.duration_since(last) < ANDROID_RESUME_SYNC_COOLDOWN)
+        {
+            return false;
+        }
+
+        inner.last_android_resume_sync_at = Some(now);
+        true
+    }
+
+    #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+    fn queue_android_resume_report(&self, status: PlaybackStatus) {
+        let state = ConnectPlaybackState::from(status);
+        if !is_android_resume_reportable_state(&state) {
+            return;
+        }
+
+        let mut inner = self.inner.lock().unwrap();
+        inner.pending_android_resume_report = Some(PendingAndroidResumeReport {
+            allow_active_claim: state.playing_state == PlayingState::Playing,
+            state,
+            captured_at: Instant::now(),
+        });
+    }
+
+    fn should_preserve_pending_android_resume_snapshot(
+        &self,
+        generation: u64,
+        shared: &ConnectSharedPlaybackState,
+    ) -> bool {
+        let inner = self.inner.lock().unwrap();
+        if inner.generation != generation {
+            return false;
+        }
+        let Some(pending) = inner.pending_android_resume_report.as_ref() else {
+            return false;
+        };
+        if pending.captured_at.elapsed() > ANDROID_RESUME_REPORT_MAX_AGE {
+            return false;
+        }
+        let Some(device_id) = inner.device_id.as_deref() else {
+            return false;
+        };
+
+        pending.allow_active_claim
+            && shared.active_device_id.is_none()
+            && shared.updated_by_device_id.as_deref() == Some(device_id)
+    }
+
+    fn flush_pending_android_resume_report(&self, generation: u64) {
+        let outbound = {
+            let mut inner = self.inner.lock().unwrap();
+            if inner.generation != generation {
+                return;
+            }
+            let Some(pending) = inner.pending_android_resume_report.as_ref() else {
+                return;
+            };
+            if pending.captured_at.elapsed() > ANDROID_RESUME_REPORT_MAX_AGE {
+                inner.pending_android_resume_report = None;
+                return;
+            }
+            if !inner.status.connected {
+                return;
+            }
+            let Some(sender) = inner.sender.clone() else {
+                return;
+            };
+            let Some(device_id) = inner.device_id.as_deref() else {
+                return;
+            };
+            let Some(shared) = inner.shared_playback.as_ref() else {
+                return;
+            };
+
+            let is_active_device = shared.active_device_id.as_deref() == Some(device_id);
+            let can_reclaim_own_offline_snapshot = pending.allow_active_claim
+                && shared.active_device_id.is_none()
+                && shared.updated_by_device_id.as_deref() == Some(device_id);
+            if !is_active_device && !can_reclaim_own_offline_snapshot {
+                return;
+            }
+
+            let state = pending.state.clone();
+            let base_seq = shared.seq;
+            inner.pending_android_resume_report = None;
+            Some((sender, ConnectOutbound::PlaybackReport { base_seq, state }))
+        };
+
+        if let Some((sender, outbound)) = outbound {
+            let _ = sender.send(outbound);
+        }
+    }
+
     pub(crate) fn request_transfer_playback(&self, target_device_id: String) -> Result<(), String> {
         let target_device_id = target_device_id.trim().to_string();
         {
@@ -458,6 +569,34 @@ pub(crate) fn restart(app: &tauri::AppHandle) {
     tauri::async_runtime::spawn(async move {
         run_connect_loop(app, runtime, generation).await;
     });
+}
+
+#[cfg(target_os = "android")]
+pub(crate) fn sync_after_android_resume(
+    app: &tauri::AppHandle,
+    playback_status: Option<PlaybackStatus>,
+) {
+    let Some(runtime_state) = app.try_state::<ConnectState>() else {
+        return;
+    };
+    match should_sync_after_android_resume(app) {
+        Ok(true) => {}
+        Ok(false) => return,
+        Err(error) => {
+            log::warn!("connect: skipped android resume sync: {error}");
+            return;
+        }
+    }
+
+    let runtime = runtime_state.0.clone();
+    if !runtime.mark_android_resume_sync_requested() {
+        return;
+    }
+    if let Some(status) = playback_status {
+        runtime.queue_android_resume_report(status);
+    }
+    log::info!("connect: restarting after android resume");
+    restart(app);
 }
 
 async fn run_connect_loop(app: tauri::AppHandle, runtime: Arc<ConnectRuntime>, generation: u64) {
@@ -679,18 +818,22 @@ async fn handle_incoming_message(
                 .map_err(|error| format!("connect: shared playback decode failed: {error}"))?;
             if let Some(update) = runtime.set_shared_playback(generation, shared) {
                 emit_state_updated(app, update.snapshot.clone());
+                let should_preserve_android_resume_snapshot = runtime
+                    .should_preserve_pending_android_resume_snapshot(generation, &update.shared);
                 let is_active_device = runtime.device_id().as_deref().is_some_and(|device_id| {
                     update.shared.active_device_id.as_deref() == Some(device_id)
                 });
                 let should_preserve_active_snapshot =
                     is_active_device && should_preserve_active_connect_snapshot(app);
-                if should_apply_shared_playback_to_backend(
-                    message_type,
-                    &update.shared,
-                    update.should_apply,
-                    is_active_device,
-                    should_preserve_active_snapshot,
-                ) {
+                if !should_preserve_android_resume_snapshot
+                    && should_apply_shared_playback_to_backend(
+                        message_type,
+                        &update.shared,
+                        update.should_apply,
+                        is_active_device,
+                        should_preserve_active_snapshot,
+                    )
+                {
                     if let Err(error) = apply_shared_playback_state(
                         app.clone(),
                         runtime.clone(),
@@ -703,6 +846,7 @@ async fn handle_incoming_message(
                         log::warn!("connect: shared playback apply failed: {error}");
                     }
                 }
+                runtime.flush_pending_android_resume_report(generation);
             }
         }
         "playback.apply" => {
@@ -811,6 +955,56 @@ fn should_preserve_active_connect_snapshot(app: &tauri::AppHandle) -> bool {
         .is_some_and(|controller| {
             controller.can_preserve_active_connect_snapshot_for_profile(&active_profile_id)
         })
+}
+
+#[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
+fn is_android_resume_reportable_state(state: &ConnectPlaybackState) -> bool {
+    if !matches!(
+        state.playing_state,
+        PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+    ) {
+        return false;
+    }
+
+    let Some(current_index) = state.current_index else {
+        return false;
+    };
+    let Ok(current_index) = usize::try_from(current_index) else {
+        return false;
+    };
+    current_index < state.queue.len() && state.current_song_id.is_some()
+}
+
+#[cfg(target_os = "android")]
+fn should_sync_after_android_resume(app: &tauri::AppHandle) -> Result<bool, String> {
+    let settings = app
+        .try_state::<AppSettingsState>()
+        .ok_or_else(|| "settings state is unavailable".to_string())?
+        .0
+        .lock()
+        .map_err(|_| "settings state is unavailable".to_string())?
+        .snapshot()
+        .0
+        .connect;
+    if !settings.enabled || settings.device_id.trim().is_empty() {
+        return Ok(false);
+    }
+
+    let Some(active_session) = app
+        .try_state::<ActiveSessionState>()
+        .ok_or_else(|| "active session state is unavailable".to_string())?
+        .0
+        .lock()
+        .map_err(|_| "active session state is unavailable".to_string())?
+        .clone()
+    else {
+        return Ok(false);
+    };
+
+    Ok(
+        resolve_connect_server_url(&settings, Some(&active_session.normalized_server_url))?
+            .is_some(),
+    )
 }
 
 async fn execute_playback_apply(
@@ -1133,6 +1327,16 @@ mod tests {
         }
     }
 
+    fn playback_status(playing_state: PlayingState) -> PlaybackStatus {
+        let mut status = PlaybackStatus::empty();
+        status.playing_state = playing_state;
+        status.queue = vec![song("song-a")];
+        status.current_index = Some(0);
+        status.current_song_id = Some("song-a".to_string());
+        status.current_position_ms = 42_000;
+        status
+    }
+
     fn transfer_validation_inner(active_device_id: Option<&str>) -> ConnectRuntimeInner {
         let mut shared = shared_playback(Some("snapshot"));
         shared.active_device_id = active_device_id.map(ToOwned::to_owned);
@@ -1290,6 +1494,75 @@ mod tests {
             &settings,
             "http://subsonic.example:4533"
         ));
+    }
+
+    #[test]
+    fn android_resume_report_preserves_own_offline_snapshot() {
+        let runtime = ConnectRuntime::default();
+        runtime.queue_android_resume_report(playback_status(PlayingState::Playing));
+        {
+            let mut inner = runtime.inner.lock().unwrap();
+            inner.generation = 7;
+            inner.device_id = Some("device".to_string());
+        }
+        let mut shared = shared_playback(Some(UPDATE_REASON_SNAPSHOT));
+        shared.active_device_id = None;
+        shared.updated_by_device_id = Some("device".to_string());
+
+        assert!(runtime.should_preserve_pending_android_resume_snapshot(7, &shared));
+    }
+
+    #[test]
+    fn android_resume_report_does_not_preserve_other_active_snapshot() {
+        let runtime = ConnectRuntime::default();
+        runtime.queue_android_resume_report(playback_status(PlayingState::Playing));
+        {
+            let mut inner = runtime.inner.lock().unwrap();
+            inner.generation = 7;
+            inner.device_id = Some("device".to_string());
+        }
+        let mut shared = shared_playback(Some(UPDATE_REASON_SNAPSHOT));
+        shared.active_device_id = Some("other".to_string());
+        shared.updated_by_device_id = Some("other".to_string());
+
+        assert!(!runtime.should_preserve_pending_android_resume_snapshot(7, &shared));
+    }
+
+    #[test]
+    fn flush_android_resume_report_sends_for_active_device() {
+        let runtime = ConnectRuntime::default();
+        let (sender, mut receiver) = mpsc::unbounded_channel();
+        let mut shared = shared_playback(Some(UPDATE_REASON_SNAPSHOT));
+        shared.active_device_id = Some("device".to_string());
+        shared.seq = 11;
+        runtime.queue_android_resume_report(playback_status(PlayingState::Paused));
+        {
+            let mut inner = runtime.inner.lock().unwrap();
+            inner.generation = 7;
+            inner.status.connected = true;
+            inner.sender = Some(sender);
+            inner.device_id = Some("device".to_string());
+            inner.shared_playback = Some(shared);
+        }
+
+        runtime.flush_pending_android_resume_report(7);
+
+        match receiver.try_recv().unwrap() {
+            ConnectOutbound::PlaybackReport { base_seq, state } => {
+                assert_eq!(base_seq, 11);
+                assert_eq!(state.playing_state, PlayingState::Paused);
+                assert_eq!(state.current_position_ms, 42_000);
+            }
+            ConnectOutbound::Envelope(_) => panic!("unexpected envelope"),
+        }
+    }
+
+    #[test]
+    fn android_resume_sync_request_is_debounced() {
+        let runtime = ConnectRuntime::default();
+
+        assert!(runtime.mark_android_resume_sync_requested());
+        assert!(!runtime.mark_android_resume_sync_requested());
     }
 }
 

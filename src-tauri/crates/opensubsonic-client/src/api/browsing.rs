@@ -2,7 +2,12 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{client::OpenSubsonicClient, envelope::Envelope, error::ApiError};
+use crate::{
+    client::OpenSubsonicClient,
+    envelope::Envelope,
+    error::ApiError,
+    types::common::{opt_stringish, opt_u32ish, stringish, vec_or_single, Child},
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct GetMusicFoldersRequest {}
@@ -80,7 +85,7 @@ pub struct GetAlbumRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GetAlbumResponse {
     #[serde(rename = "album")]
-    pub album: Value,
+    pub album: AlbumWithSongs,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -91,7 +96,33 @@ pub struct GetSongRequest {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct GetSongResponse {
     #[serde(rename = "song")]
-    pub song: Value,
+    pub song: Child,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumWithSongs {
+    #[serde(deserialize_with = "stringish")]
+    pub id: String,
+    pub name: Option<String>,
+    pub artist: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub artist_id: Option<String>,
+    pub cover_art: Option<String>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub song_count: Option<u32>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub duration: Option<u32>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub play_count: Option<u32>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub created: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub starred: Option<String>,
+    #[serde(default, deserialize_with = "vec_or_single")]
+    pub song: Vec<Child>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

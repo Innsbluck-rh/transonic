@@ -1,44 +1,11 @@
-use opensubsonic_client::api::browsing::{BrowsingApi, GetAlbumRequest};
-use serde::Deserialize;
-use serde_json::Value;
+use opensubsonic_client::api::browsing::{AlbumWithSongs, BrowsingApi, GetAlbumRequest};
 use tauri::{AppHandle, State};
 
 use crate::{
-    commands::{
-        common::{client, format_api_error},
-        json::{opt_stringish, opt_u32ish, stringish, value_as, vec_or_single},
-    },
+    commands::common::{client, format_api_error},
     models::{AlbumSongsRequest, AlbumSongsResponse, SongResponse},
     ActiveSessionState,
 };
-
-use super::RawSong;
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RawAlbum {
-    #[serde(deserialize_with = "stringish")]
-    id: String,
-    name: Option<String>,
-    artist: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    artist_id: Option<String>,
-    cover_art: Option<String>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    song_count: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    duration: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    play_count: Option<u32>,
-    #[serde(default, deserialize_with = "opt_u32ish")]
-    year: Option<u32>,
-    genre: Option<String>,
-    created: Option<String>,
-    #[serde(default, deserialize_with = "opt_stringish")]
-    starred: Option<String>,
-    #[serde(default, deserialize_with = "vec_or_single")]
-    song: Vec<RawSong>,
-}
 
 #[tauri::command]
 #[specta::specta]
@@ -91,12 +58,10 @@ where
     )
     .await?;
 
-    parse_album(response.payload.album).map_err(opensubsonic_client::ApiError::Protocol)
+    Ok(parse_album(response.payload.album))
 }
 
-pub(crate) fn parse_album(payload: Value) -> Result<AlbumSongsResponse, String> {
-    let payload: RawAlbum =
-        value_as(payload).map_err(|error| format!("Failed to parse the album payload: {error}"))?;
+pub(crate) fn parse_album(payload: AlbumWithSongs) -> AlbumSongsResponse {
     let album_cover_art_id = payload.cover_art;
     let songs = payload
         .song
@@ -110,7 +75,7 @@ pub(crate) fn parse_album(payload: Value) -> Result<AlbumSongsResponse, String> 
         })
         .collect();
 
-    Ok(AlbumSongsResponse {
+    AlbumSongsResponse {
         id: payload.id,
         name: payload.name,
         artist: payload.artist,
@@ -124,18 +89,23 @@ pub(crate) fn parse_album(payload: Value) -> Result<AlbumSongsResponse, String> 
         created: payload.created,
         starred: payload.starred,
         songs,
-    })
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use opensubsonic_client::api::browsing::AlbumWithSongs;
     use serde_json::json;
 
     use super::parse_album;
 
+    fn parse_payload(value: serde_json::Value) -> AlbumWithSongs {
+        serde_json::from_value(value).unwrap()
+    }
+
     #[test]
     fn parse_album_preserves_album_metadata() {
-        let response = parse_album(json!({
+        let response = parse_album(parse_payload(json!({
             "id": "album-1",
             "name": "Album One",
             "artist": "Artist One",
@@ -163,8 +133,7 @@ mod tests {
                     "track": 2
                 }
             ]
-        }))
-        .unwrap();
+        })));
 
         assert_eq!(response.id, "album-1");
         assert_eq!(response.name.as_deref(), Some("Album One"));
@@ -192,34 +161,17 @@ mod tests {
 
     #[test]
     fn parse_album_accepts_single_song_objects() {
-        let response = parse_album(json!({
+        let response = parse_album(parse_payload(json!({
             "id": 1001,
             "song": {
                 "id": "song-1",
                 "title": "Song One"
             }
-        }))
-        .unwrap();
+        })));
 
         assert_eq!(response.id, "1001");
         assert_eq!(response.name, None);
         assert_eq!(response.songs.len(), 1);
         assert_eq!(response.songs[0].title, "Song One");
-    }
-
-    #[test]
-    fn parse_album_requires_song_title_without_fallback() {
-        let error = parse_album(json!({
-            "id": "album-1",
-            "song": [
-                {
-                    "id": "song-1",
-                    "name": "Song One"
-                }
-            ]
-        }))
-        .unwrap_err();
-
-        assert!(error.contains("title"));
     }
 }

@@ -2,6 +2,7 @@ use std::sync::{
     mpsc::{self, Sender},
     Mutex, OnceLock,
 };
+use std::time::Duration;
 
 use tauri::{AppHandle, Manager, Wry};
 
@@ -75,6 +76,26 @@ pub fn spawn_controller_process_native_events() {
         log::error!(
             "windows_runtime: failed to schedule native playback event processing: {error}"
         );
+    }
+}
+
+pub fn spawn_controller_process_native_events_after(delay: Duration) {
+    if delay.is_zero() {
+        spawn_controller_process_native_events();
+        return;
+    }
+    if cloned_app_handle().is_none() {
+        return;
+    }
+
+    if let Err(error) = std::thread::Builder::new()
+        .name("windows-playback-event-delay".into())
+        .spawn(move || {
+            std::thread::sleep(delay);
+            spawn_controller_process_native_events();
+        })
+    {
+        log::error!("windows_runtime: failed to spawn delayed playback event dispatch: {error}");
     }
 }
 

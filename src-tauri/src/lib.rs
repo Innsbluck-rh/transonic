@@ -1,5 +1,8 @@
+#![cfg_attr(test, allow(dead_code, unused_imports))]
+
 mod app_settings;
 mod artist_image_cache;
+#[cfg(not(test))]
 pub mod bindings;
 mod commands;
 mod connect;
@@ -11,15 +14,25 @@ mod playback_state;
 mod profiles;
 mod secrets;
 mod session;
-use std::sync::{Arc, Mutex};
+#[cfg(not(test))]
+use std::sync::Arc;
+use std::sync::Mutex;
 
+#[cfg(not(test))]
 use tauri::Manager;
 
-use app_settings::{app_settings_path, AppSettingsStore};
+#[cfg(not(test))]
+use app_settings::app_settings_path;
+use app_settings::AppSettingsStore;
 use artist_image_cache::ArtistImageCache;
 use cover_art_cache::CoverArtCache;
-use models::{resolve_effective_stream_settings, ActiveSession, NetworkCostState};
-use playback::{PlaybackController, PlaybackEventAppHandle};
+#[cfg(not(test))]
+use models::{effective_output_device_id, resolve_effective_stream_settings};
+use models::{ActiveSession, NetworkCostState};
+use playback::PlaybackController;
+#[cfg(not(test))]
+use playback::PlaybackEventAppHandle;
+#[cfg(not(test))]
 use playback_state::{playback_state_path, FilePlaybackStatePersister};
 
 pub(crate) struct ActiveSessionState(pub Mutex<Option<ActiveSession>>);
@@ -42,30 +55,35 @@ impl Default for NetworkCostStateState {
 }
 
 impl PlaybackControllerState {
+    #[cfg(not(test))]
     fn new(controller: PlaybackController) -> Self {
         Self(Mutex::new(controller))
     }
 }
 
 impl AppSettingsState {
+    #[cfg(not(test))]
     fn new(store: AppSettingsStore) -> Self {
         Self(Mutex::new(store))
     }
 }
 
 impl CoverArtCacheState {
+    #[cfg(not(test))]
     fn new(cache: CoverArtCache) -> Self {
         Self(cache)
     }
 }
 
 impl ArtistImageCacheState {
+    #[cfg(not(test))]
     fn new(cache: ArtistImageCache) -> Self {
         Self(cache)
     }
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
+#[cfg_attr(all(not(test), mobile), tauri::mobile_entry_point)]
+#[cfg(not(test))]
 pub fn run() {
     let specta_builder = bindings::builder();
 
@@ -126,6 +144,7 @@ pub fn run() {
                 persister,
                 initial_playback_settings.gapless_playback_enabled,
                 initial_playback_settings.volume,
+                effective_output_device_id(&initial_playback_settings).map(ToString::to_string),
             );
             let _ = controller.set_stream_settings(
                 initial_stream_settings.stream_mode,
@@ -162,9 +181,6 @@ pub fn run() {
             #[cfg(target_os = "windows")]
             playback::install_windows_app_handle(app.handle().clone());
 
-            #[cfg(mobile)]
-            app.handle().plugin(tauri_plugin_app_events::init())?;
-
             Ok(())
         })
         .build(tauri::generate_context!())
@@ -178,7 +194,10 @@ pub fn run() {
                 Err(_) => return,
             };
             controller.sync_and_persist();
-            log::info!("app exit: persisted playback state");
+            log::info!("app exit: persisted playback state and stopped backend");
         }
     });
 }
+
+#[cfg(test)]
+pub fn run() {}

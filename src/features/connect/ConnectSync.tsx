@@ -1,5 +1,4 @@
 import { createEffect, onCleanup } from 'solid-js';
-import { onResume } from 'tauri-plugin-app-events-api';
 import { refreshConnectServerStatus, startConnectStateSync } from '~/features/connect/service';
 import { settingsStore } from '~/features/settings/service';
 import { sessionStore } from '~/stores/SessionStore';
@@ -12,11 +11,6 @@ function ConnectSync() {
     settingsStore.connect.connectServerHost;
     settingsStore.connect.allowInsecureConnectServer;
     sessionStore.activeSession?.normalizedServerUrl;
-    void refreshConnectServerStatus();
-  });
-
-  // mobile resume sync
-  onResume(() => {
     void refreshConnectServerStatus();
   });
 

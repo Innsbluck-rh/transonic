@@ -2,7 +2,12 @@ use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{client::OpenSubsonicClient, envelope::Envelope, error::ApiError};
+use crate::{
+    client::OpenSubsonicClient,
+    envelope::Envelope,
+    error::ApiError,
+    types::common::{opt_stringish, opt_u32ish, stringish, vec_or_single, Child},
+};
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -78,7 +83,65 @@ pub struct Search3Request {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Search3Response {
     #[serde(rename = "searchResult3")]
-    pub search_result3: Value,
+    pub search_result3: SearchResult3,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult3 {
+    #[serde(default, deserialize_with = "vec_or_single")]
+    pub artist: Vec<SearchArtist>,
+    #[serde(default, deserialize_with = "vec_or_single")]
+    pub album: Vec<SearchAlbum>,
+    #[serde(default, deserialize_with = "vec_or_single")]
+    pub song: Vec<Child>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchArtist {
+    #[serde(deserialize_with = "stringish")]
+    pub id: String,
+    pub name: String,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub cover_art: Option<String>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub album_count: Option<u32>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub artist_image_url: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub starred: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub music_brainz_id: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub sort_name: Option<String>,
+    #[serde(default)]
+    pub roles: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchAlbum {
+    #[serde(deserialize_with = "stringish")]
+    pub id: String,
+    pub name: String,
+    pub artist: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub artist_id: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub cover_art: Option<String>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub song_count: Option<u32>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub duration: Option<u32>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub play_count: Option<u32>,
+    #[serde(default, deserialize_with = "opt_u32ish")]
+    pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub created: Option<String>,
+    #[serde(default, deserialize_with = "opt_stringish")]
+    pub starred: Option<String>,
 }
 
 #[async_trait]

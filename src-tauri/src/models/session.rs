@@ -119,6 +119,7 @@ pub struct ActiveSession {
 pub struct PlaybackCapabilities {
     pub gapless_playback: bool,
     pub transcoding_codecs: Vec<PlaybackTranscodingCodec>,
+    pub output_device_selection: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

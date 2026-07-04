@@ -139,6 +139,8 @@ impl AndroidPlaybackBackend {
             title: request.title,
             artist: request.artist,
             album: request.album,
+            source_content_type: request.source_content_type,
+            source_suffix: request.source_suffix,
             artwork_path: request.artwork_path,
             volume: self.volume,
         })
@@ -156,6 +158,7 @@ impl PlaybackBackend for AndroidPlaybackBackend {
                 PlaybackTranscodingCodec::Vorbis,
                 PlaybackTranscodingCodec::Opus,
             ],
+            output_device_selection: false,
         }
     }
 
@@ -272,6 +275,8 @@ mod tests {
     #[derive(Default)]
     struct MockAndroidPlaybackControl {
         loaded_media_ids: Vec<String>,
+        loaded_source_content_types: Vec<Option<String>>,
+        loaded_source_suffixes: Vec<Option<String>>,
         prepared_media_ids: Vec<String>,
         activated_autoplay: Vec<bool>,
         updated_artwork: Vec<AndroidUpdateMediaArtworkRequest>,
@@ -285,10 +290,14 @@ mod tests {
         }
 
         fn load_prepared_media(&self, payload: &AndroidPreparedMediaRequest) -> Result<(), String> {
-            self.lock()
-                .unwrap()
-                .loaded_media_ids
-                .push(payload.media_id.clone());
+            let mut state = self.lock().unwrap();
+            state.loaded_media_ids.push(payload.media_id.clone());
+            state
+                .loaded_source_content_types
+                .push(payload.source_content_type.clone());
+            state
+                .loaded_source_suffixes
+                .push(payload.source_suffix.clone());
             Ok(())
         }
 
@@ -362,6 +371,8 @@ mod tests {
             title: "Song".to_string(),
             artist: Some("Artist".to_string()),
             album: Some("Album".to_string()),
+            source_content_type: None,
+            source_suffix: None,
             artwork_path: None,
             absolute_start_position_ms: 0,
             local_start_position_ms: 0,
@@ -428,6 +439,25 @@ mod tests {
         let state = bridge.lock().unwrap();
         assert_eq!(state.loaded_media_ids.len(), 2);
         assert_ne!(state.loaded_media_ids[0], state.loaded_media_ids[1]);
+    }
+
+    #[test]
+    fn load_forwards_source_media_type_metadata() {
+        let bridge =
+            std::sync::Arc::new(std::sync::Mutex::new(MockAndroidPlaybackControl::default()));
+        let mut backend = AndroidPlaybackBackend::new(Box::new(bridge.clone()));
+        let mut request = load_request("song-a");
+        request.source_content_type = Some("audio/x-m4a".to_string());
+        request.source_suffix = Some("m4a".to_string());
+
+        backend.load(request).unwrap();
+
+        let state = bridge.lock().unwrap();
+        assert_eq!(
+            state.loaded_source_content_types,
+            vec![Some("audio/x-m4a".to_string())]
+        );
+        assert_eq!(state.loaded_source_suffixes, vec![Some("m4a".to_string())]);
     }
 
     #[test]

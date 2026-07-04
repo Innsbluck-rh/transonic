@@ -152,6 +152,14 @@ pub struct PlaybackActualStreamInfo {
     pub mime_type: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackOutputDevice {
+    pub id: String,
+    pub name: String,
+    pub device_name: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackStatus {

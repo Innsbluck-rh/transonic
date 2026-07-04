@@ -417,6 +417,7 @@ fn bootstrap_response(
         playback_capabilities: PlaybackCapabilities {
             gapless_playback: false,
             transcoding_codecs: vec![PlaybackTranscodingCodec::Mp3],
+            output_device_selection: false,
         },
         settings: AppSettings::default(),
         settings_origin: SettingsOrigin::Default,
