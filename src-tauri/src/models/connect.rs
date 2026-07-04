@@ -98,7 +98,7 @@ fn is_false(value: &bool) -> bool {
 /// Outbound `playback.command.request` payload sent to the Connect server.
 ///
 /// This is the single authoritative definition of the Connect queue command wire
-/// contract; the Go server's `playbackCommandPayload` is generated from it (see
+/// contract; the Go server's `ConnectPlaybackCommand` is generated from it (see
 /// `docs/known-issues.md` Tier 1). Only the fields relevant to a given `op` are
 /// populated; the rest are omitted from the wire. `command_id` and `base_seq` are
 /// filled in by `ConnectState::send_playback_command` just before sending.

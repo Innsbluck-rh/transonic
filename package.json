@@ -25,7 +25,9 @@
     "setup:media3-flac": "node scripts/setup-media3-flac.mjs",
     "setup:media3-ffmpeg": "node scripts/setup-media3-ffmpeg.mjs",
     "bindings:export": "cargo run --manifest-path src-tauri/Cargo.toml --bin export-bindings",
-    "bindings:check": "cargo run --manifest-path src-tauri/Cargo.toml --bin check-bindings"
+    "bindings:check": "cargo run --manifest-path src-tauri/Cargo.toml --bin check-bindings",
+    "go-types:export": "typeshare --lang go --config-file typeshare.toml --output-file server/internal/realtime/connect_types_gen.go src-tauri/src/models && gofmt -w server/internal/realtime/connect_types_gen.go",
+    "go-types:check": "pnpm go-types:export && git diff --exit-code -- server/internal/realtime/connect_types_gen.go"
   },
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^1.8.1",

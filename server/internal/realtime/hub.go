@@ -50,29 +50,10 @@ type Hub struct {
 	clients map[string]map[string]*Client
 }
 
-type playbackStateDoc struct {
-	PlayingState      string            `json:"playingState"`
-	Queue             []json.RawMessage `json:"queue"`
-	CurrentIndex      *int64            `json:"currentIndex"`
-	PlayNextQueueLen  int64             `json:"playNextQueueLen"`
-	CurrentPositionMs int64             `json:"currentPositionMs"`
-	CurrentSongID     *string           `json:"currentSongId"`
-}
-
-type playbackCommandPayload struct {
-	CommandID      string            `json:"commandId,omitempty"`
-	BaseSeq        *int64            `json:"baseSeq,omitempty"`
-	Op             string            `json:"op"`
-	Queue          []json.RawMessage `json:"queue,omitempty"`
-	Items          []json.RawMessage `json:"items,omitempty"`
-	CurrentIndex   *int64            `json:"currentIndex,omitempty"`
-	AutoPlay       bool              `json:"autoPlay,omitempty"`
-	Index          *int64            `json:"index,omitempty"`
-	FromIndex      *int64            `json:"fromIndex,omitempty"`
-	ToIndex        *int64            `json:"toIndex,omitempty"`
-	PositionMs     *int64            `json:"positionMs,omitempty"`
-	TargetDeviceID string            `json:"targetDeviceId,omitempty"`
-}
+// The shared playback state (ConnectPlaybackState) and command payload
+// (ConnectPlaybackCommand) types are generated from the Rust wire types into
+// connect_types_gen.go. Do not hand-define them here; regenerate with
+// `pnpm go-types:export`. See docs/known-issues.md Tier 1.
 
 func NewHub(store *store.Store, presenceTimeout time.Duration) *Hub {
 	return &Hub{
@@ -169,25 +150,29 @@ func (h *Hub) touchDevice(ctx context.Context, session store.Session) error {
 }
 
 func (h *Hub) handlePlaybackCommandRequest(ctx context.Context, client *Client, inbound Envelope) {
-	var command playbackCommandPayload
+	var command ConnectPlaybackCommand
 	if err := json.Unmarshal(inbound.Payload, &command); err != nil || command.Op == "" {
 		h.sendCommandError(client, inbound.ID, "", "playback.command.request requires op")
 		return
 	}
-	if command.CommandID == "" {
-		command.CommandID = inbound.ID
+	commandID := ""
+	if command.CommandID != nil {
+		commandID = *command.CommandID
 	}
-	if command.CommandID == "" {
-		command.CommandID = randomID()
+	if commandID == "" {
+		commandID = inbound.ID
+	}
+	if commandID == "" {
+		commandID = randomID()
 	}
 
 	current, err := h.sharedOrDefault(ctx, client.Session.UserKey)
 	if err != nil {
-		h.sendCommandError(client, inbound.ID, command.CommandID, "failed to load shared playback state")
+		h.sendCommandError(client, inbound.ID, commandID, "failed to load shared playback state")
 		return
 	}
 	if command.BaseSeq != nil && *command.BaseSeq != current.Seq {
-		h.sendCommandError(client, inbound.ID, command.CommandID, "shared playback state is stale")
+		h.sendCommandError(client, inbound.ID, commandID, "shared playback state is stale")
 		h.send(client, TypePlaybackSharedSnapshot, inbound.ID, sharedPayload(current, "stale"))
 		return
 	}
@@ -196,36 +181,36 @@ func (h *Hub) handlePlaybackCommandRequest(ctx context.Context, client *Client, 
 	case "setQueue", "insertAfterCurrent", "appendToQueue", "moveQueueIndex", "removeQueueIndex", "clearQueue":
 		next, err := reduceQueueCommand(current, command, client.Session.DeviceID)
 		if err != nil {
-			h.sendCommandError(client, inbound.ID, command.CommandID, err.Error())
+			h.sendCommandError(client, inbound.ID, commandID, err.Error())
 			return
 		}
 		if err := h.saveAndBroadcast(ctx, client.Session.UserKey, next, client.Session.DeviceID, "command"); err != nil {
-			h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save shared playback state")
+			h.sendCommandError(client, inbound.ID, commandID, "failed to save shared playback state")
 			return
 		}
-		if command.Op == "setQueue" && command.AutoPlay {
-			h.applyToActiveDevice(client, inbound.ID, command.CommandID, next.ActiveDeviceID, "play", nil)
+		if command.Op == "setQueue" && command.AutoPlay != nil && *command.AutoPlay {
+			h.applyToActiveDevice(client, inbound.ID, commandID, next.ActiveDeviceID, "play", nil)
 		}
 	case "transferPlayback":
 		next, err := h.reduceTransferCommand(ctx, client, current, command)
 		if err != nil {
-			h.sendCommandError(client, inbound.ID, command.CommandID, err.Error())
+			h.sendCommandError(client, inbound.ID, commandID, err.Error())
 			return
 		}
 		if err := h.saveAndBroadcast(ctx, client.Session.UserKey, next, client.Session.DeviceID, "transfer"); err != nil {
-			h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save shared playback state")
+			h.sendCommandError(client, inbound.ID, commandID, "failed to save shared playback state")
 		}
 	case "playQueueIndex":
 		next, err := reducePlayQueueIndexCommand(current, command, client.Session.DeviceID)
 		if err != nil {
-			h.sendCommandError(client, inbound.ID, command.CommandID, err.Error())
+			h.sendCommandError(client, inbound.ID, commandID, err.Error())
 			return
 		}
 		if err := h.saveAndBroadcast(ctx, client.Session.UserKey, next, client.Session.DeviceID, "command"); err != nil {
-			h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save shared playback state")
+			h.sendCommandError(client, inbound.ID, commandID, "failed to save shared playback state")
 			return
 		}
-		h.applyToActiveDevice(client, inbound.ID, command.CommandID, next.ActiveDeviceID, "play", nil)
+		h.applyToActiveDevice(client, inbound.ID, commandID, next.ActiveDeviceID, "play", nil)
 	case "play", "pause", "stop", "seek", "next", "prev":
 		next := *current
 		if next.ActiveDeviceID == "" {
@@ -234,15 +219,15 @@ func (h *Hub) handlePlaybackCommandRequest(ctx context.Context, client *Client, 
 			next.UpdatedAt = time.Now().UTC()
 			next.UpdatedByDeviceID = client.Session.DeviceID
 			if err := h.store.SaveSharedPlaybackState(ctx, next); err != nil {
-				h.sendCommandError(client, inbound.ID, command.CommandID, "failed to save active playback device")
+				h.sendCommandError(client, inbound.ID, commandID, "failed to save active playback device")
 				return
 			}
 			h.broadcast(client.Session.UserKey, TypePlaybackSharedUpdated, inbound.ID, sharedPayload(&next, "command"))
 		}
 		args := playbackApplyArgs(command)
-		h.applyToActiveDevice(client, inbound.ID, command.CommandID, next.ActiveDeviceID, command.Op, args)
+		h.applyToActiveDevice(client, inbound.ID, commandID, next.ActiveDeviceID, command.Op, args)
 	default:
-		h.sendCommandError(client, inbound.ID, command.CommandID, fmt.Sprintf("unsupported playback op %q", command.Op))
+		h.sendCommandError(client, inbound.ID, commandID, fmt.Sprintf("unsupported playback op %q", command.Op))
 	}
 }
 
@@ -302,7 +287,7 @@ func (h *Hub) handlePlaybackReport(ctx context.Context, client *Client, inbound 
 	}
 }
 
-func mergePlaybackReportState(currentState playbackStateDoc, reportState playbackStateDoc) (playbackStateDoc, bool) {
+func mergePlaybackReportState(currentState ConnectPlaybackState, reportState ConnectPlaybackState) (ConnectPlaybackState, bool) {
 	reportIndex := compatibleReportIndex(currentState.Queue, reportState.CurrentIndex, reportState.CurrentSongID)
 	if reportIndex == nil {
 		return currentState, false
@@ -347,11 +332,15 @@ func compatibleReportIndex(queue []json.RawMessage, reportIndex *int64, reportSo
 	return nil
 }
 
-func (h *Hub) reduceTransferCommand(ctx context.Context, client *Client, current *store.SharedPlaybackState, command playbackCommandPayload) (*store.SharedPlaybackState, error) {
-	if command.TargetDeviceID == "" {
+func (h *Hub) reduceTransferCommand(ctx context.Context, client *Client, current *store.SharedPlaybackState, command ConnectPlaybackCommand) (*store.SharedPlaybackState, error) {
+	targetDeviceID := ""
+	if command.TargetDeviceID != nil {
+		targetDeviceID = *command.TargetDeviceID
+	}
+	if targetDeviceID == "" {
 		return nil, errors.New("transferPlayback requires targetDeviceId")
 	}
-	if !h.isDeviceOnline(client.Session.UserKey, command.TargetDeviceID) {
+	if !h.isDeviceOnline(client.Session.UserKey, targetDeviceID) {
 		return nil, errors.New("target device is offline")
 	}
 	state, err := decodePlaybackState(current.State)
@@ -360,7 +349,7 @@ func (h *Hub) reduceTransferCommand(ctx context.Context, client *Client, current
 	}
 	if current.ActiveDeviceID == "" {
 		current.ActiveDeviceID = client.Session.DeviceID
-	} else if current.ActiveDeviceID == command.TargetDeviceID {
+	} else if current.ActiveDeviceID == targetDeviceID {
 		return nil, errors.New("target device is already active")
 	}
 	if len(state.Queue) == 0 {
@@ -374,14 +363,14 @@ func (h *Hub) reduceTransferCommand(ctx context.Context, client *Client, current
 	return &store.SharedPlaybackState{
 		UserKey:           client.Session.UserKey,
 		Seq:               current.Seq + 1,
-		ActiveDeviceID:    command.TargetDeviceID,
+		ActiveDeviceID:    targetDeviceID,
 		State:             raw,
 		UpdatedAt:         time.Now().UTC(),
 		UpdatedByDeviceID: client.Session.DeviceID,
 	}, nil
 }
 
-func reduceQueueCommand(current *store.SharedPlaybackState, command playbackCommandPayload, fallbackActiveDeviceID string) (*store.SharedPlaybackState, error) {
+func reduceQueueCommand(current *store.SharedPlaybackState, command ConnectPlaybackCommand, fallbackActiveDeviceID string) (*store.SharedPlaybackState, error) {
 	state, err := decodePlaybackState(current.State)
 	if err != nil {
 		return nil, err
@@ -468,7 +457,7 @@ func reduceQueueCommand(current *store.SharedPlaybackState, command playbackComm
 	}, nil
 }
 
-func reducePlayQueueIndexCommand(current *store.SharedPlaybackState, command playbackCommandPayload, fallbackActiveDeviceID string) (*store.SharedPlaybackState, error) {
+func reducePlayQueueIndexCommand(current *store.SharedPlaybackState, command ConnectPlaybackCommand, fallbackActiveDeviceID string) (*store.SharedPlaybackState, error) {
 	if command.Index == nil {
 		return nil, errors.New("playQueueIndex requires index")
 	}
@@ -512,7 +501,7 @@ func reducePlayQueueIndexCommand(current *store.SharedPlaybackState, command pla
 	}, nil
 }
 
-func moveQueueIndex(state *playbackStateDoc, fromIndex, toIndex int64) error {
+func moveQueueIndex(state *ConnectPlaybackState, fromIndex, toIndex int64) error {
 	if fromIndex < 0 || toIndex < 0 || fromIndex >= int64(len(state.Queue)) || toIndex >= int64(len(state.Queue)) {
 		return errors.New("playback queue index is out of range")
 	}
@@ -550,7 +539,7 @@ func moveQueueIndex(state *playbackStateDoc, fromIndex, toIndex int64) error {
 	return nil
 }
 
-func removeQueueIndex(state *playbackStateDoc, index int64) error {
+func removeQueueIndex(state *ConnectPlaybackState, index int64) error {
 	if index < 0 || index >= int64(len(state.Queue)) {
 		return errors.New("playback queue index is out of range")
 	}
@@ -620,7 +609,7 @@ func (h *Hub) applyToActiveDevice(client *Client, replyTo, commandID, activeDevi
 	}
 }
 
-func playbackApplyArgs(command playbackCommandPayload) map[string]any {
+func playbackApplyArgs(command ConnectPlaybackCommand) map[string]any {
 	args := map[string]any{}
 	if command.PositionMs != nil {
 		args["positionMs"] = *command.PositionMs
@@ -682,13 +671,13 @@ func (h *Hub) sharedOrDefault(ctx context.Context, userKey string) (*store.Share
 	}, nil
 }
 
-func decodePlaybackState(raw json.RawMessage) (playbackStateDoc, error) {
-	var state playbackStateDoc
+func decodePlaybackState(raw json.RawMessage) (ConnectPlaybackState, error) {
+	var state ConnectPlaybackState
 	if len(raw) == 0 {
 		return emptyPlaybackState(), nil
 	}
 	if err := json.Unmarshal(raw, &state); err != nil {
-		return playbackStateDoc{}, errors.New("state must be a JSON object compatible with PlaybackStatus")
+		return ConnectPlaybackState{}, errors.New("state must be a JSON object compatible with PlaybackStatus")
 	}
 	if state.PlayingState == "" {
 		state.PlayingState = "idle"
@@ -697,12 +686,12 @@ func decodePlaybackState(raw json.RawMessage) (playbackStateDoc, error) {
 		state.Queue = []json.RawMessage{}
 	}
 	if err := normalizePlaybackState(&state); err != nil {
-		return playbackStateDoc{}, err
+		return ConnectPlaybackState{}, err
 	}
 	return state, nil
 }
 
-func normalizePlaybackState(state *playbackStateDoc) error {
+func normalizePlaybackState(state *ConnectPlaybackState) error {
 	if state.CurrentPositionMs < 0 {
 		return errors.New("state.currentPositionMs must not be negative")
 	}
@@ -735,7 +724,7 @@ func normalizePlaybackState(state *playbackStateDoc) error {
 	return nil
 }
 
-func encodePlaybackState(state playbackStateDoc) (json.RawMessage, error) {
+func encodePlaybackState(state ConnectPlaybackState) (json.RawMessage, error) {
 	if state.Queue == nil {
 		state.Queue = []json.RawMessage{}
 	}
@@ -746,15 +735,15 @@ func encodePlaybackState(state playbackStateDoc) (json.RawMessage, error) {
 	return json.RawMessage(raw), err
 }
 
-func emptyPlaybackState() playbackStateDoc {
-	return playbackStateDoc{
+func emptyPlaybackState() ConnectPlaybackState {
+	return ConnectPlaybackState{
 		PlayingState:      "idle",
 		Queue:             []json.RawMessage{},
 		CurrentPositionMs: 0,
 	}
 }
 
-func stoppedOrIdle(queue []json.RawMessage) string {
+func stoppedOrIdle(queue []json.RawMessage) PlayingState {
 	if len(queue) == 0 {
 		return "idle"
 	}
@@ -774,6 +763,9 @@ func songIDAt(queue []json.RawMessage, index int64) *string {
 	return &entry.ID
 }
 
+// Play-next region math. This reducer is intentionally separate from the Rust
+// local-playback reducer; the one invariant both must preserve (what
+// playNextQueueLen means) is documented in docs/playback-queue-semantics.md.
 func playNextStartIndex(queueLen int, currentIndex *int64) int {
 	if currentIndex == nil {
 		return 0
@@ -800,7 +792,7 @@ func clampedPlayNextQueueLen(queueLen int, currentIndex *int64, playNextQueueLen
 	return playNextQueueLen
 }
 
-func playNextEndIndex(state playbackStateDoc) int {
+func playNextEndIndex(state ConnectPlaybackState) int {
 	start := playNextStartIndex(len(state.Queue), state.CurrentIndex)
 	end := start + int(clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, state.PlayNextQueueLen))
 	if end > len(state.Queue) {
@@ -809,7 +801,7 @@ func playNextEndIndex(state playbackStateDoc) int {
 	return end
 }
 
-func clampPlayNextQueueLen(state *playbackStateDoc) {
+func clampPlayNextQueueLen(state *ConnectPlaybackState) {
 	state.PlayNextQueueLen = clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, state.PlayNextQueueLen)
 }
 
@@ -898,7 +890,7 @@ func sharedPayload(shared *store.SharedPlaybackState, reason string) json.RawMes
 	})
 }
 
-func estimatedPosition(shared *store.SharedPlaybackState, state playbackStateDoc) int64 {
+func estimatedPosition(shared *store.SharedPlaybackState, state ConnectPlaybackState) int64 {
 	if state.PlayingState != "playing" {
 		return state.CurrentPositionMs
 	}

@@ -108,7 +108,7 @@ func TestPlaybackCommandRoutesToActiveDevice(t *testing.T) {
 
 func TestInsertAfterCurrentAppendsToPlayNextQueueArea(t *testing.T) {
 	zero := int64(0)
-	raw, err := encodePlaybackState(playbackStateDoc{
+	raw, err := encodePlaybackState(ConnectPlaybackState{
 		PlayingState:      "stopped",
 		Queue:             []json.RawMessage{json.RawMessage(`{"id":"song-a"}`), json.RawMessage(`{"id":"song-b"}`)},
 		CurrentIndex:      &zero,
@@ -123,14 +123,14 @@ func TestInsertAfterCurrentAppendsToPlayNextQueueArea(t *testing.T) {
 		State:   raw,
 	}
 
-	next, err := reduceQueueCommand(current, playbackCommandPayload{
+	next, err := reduceQueueCommand(current, ConnectPlaybackCommand{
 		Op:    "insertAfterCurrent",
 		Items: []json.RawMessage{json.RawMessage(`{"id":"song-x"}`)},
 	}, "device")
 	if err != nil {
 		t.Fatal(err)
 	}
-	next, err = reduceQueueCommand(next, playbackCommandPayload{
+	next, err = reduceQueueCommand(next, ConnectPlaybackCommand{
 		Op:    "insertAfterCurrent",
 		Items: []json.RawMessage{json.RawMessage(`{"id":"song-y"}`)},
 	}, "device")
@@ -171,7 +171,7 @@ func TestInsertAfterCurrentIntoEmptyQueueInitializesPlayNextArea(t *testing.T) {
 		State:   raw,
 	}
 
-	next, err := reduceQueueCommand(current, playbackCommandPayload{
+	next, err := reduceQueueCommand(current, ConnectPlaybackCommand{
 		Op:    "insertAfterCurrent",
 		Items: []json.RawMessage{json.RawMessage(`{"id":"song-x"}`), json.RawMessage(`{"id":"song-y"}`)},
 	}, "device")

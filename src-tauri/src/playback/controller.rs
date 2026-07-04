@@ -2954,6 +2954,10 @@ fn current_queue_entry(
     entries.get(index)
 }
 
+// Play-next region math. This local reducer is intentionally separate from the
+// Go Connect reducer (server/internal/realtime/hub.go); the one invariant both
+// must preserve (what play_next_queue_len means) is documented in
+// docs/playback-queue-semantics.md.
 fn play_next_start_index(queue_len: usize, current_index: Option<u32>) -> usize {
     let Some(current_index) = current_index.and_then(|value| usize::try_from(value).ok()) else {
         return 0;

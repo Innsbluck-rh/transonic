@@ -22,6 +22,12 @@ Set `sessionSigningSecret` in `config.json` to the value printed by
 server will use a temporary signing secret and existing sessions will stop
 working after restart.
 
+`internal/realtime/connect_types_gen.go` is **generated** from the Rust wire
+types (the source of truth) — do not hand-edit it. Regenerate from the repo root
+with `pnpm go-types:export` and verify with `pnpm go-types:check` (needs
+`cargo install typeshare-cli --features go`). See `../docs/known-issues.md`
+(解決済み) and `../docs/playback-queue-semantics.md`.
+
 ## API
 
 - `GET /healthz`

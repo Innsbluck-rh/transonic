@@ -23,28 +23,6 @@ TODOの「量」ではなく、**先送りするほど複利的にコストが�
 
 ## Tier 1
 
-### Connect shared playbackのqueue意味論がGo/Rust/TSに三重化
-状態: 方針決定済・未実装（2026-07-04） / 元: adr/20 #8
-
-`playNextQueueLen`・`currentIndex`・`insertAfterCurrent`・`moveQueueIndex`・`removeQueueIndex`・`playQueueIndex`の意味論が`server/internal/realtime/hub.go`・`src-tauri/src/playback/controller.rs`・`src/features/playback/usePlayback.ts`の3箇所に独立実装されている。共有プロトコル/ドメインモデルがないため、queue関連の変更は常に3箇所を見る必要がある。
-
-対応方針メモ（2026-07-04 決定）: 「振る舞いの統合」はしない。調査の結果、実態は次のように分解できる。
-
-- 実装は3つあるが、性質が違う。TS（`usePlayback.ts`の`isPlayNextQueueIndex`）は`status`を読むだけの**表示専用**で状態遷移（reducer）を持たない。整合性を保証すべきreducerはGo（`hub.go`）とRust（`controller.rs`）の**2つだけ**。
-- その2つはLocal時（Connect無効→Rustローカルreducer）とConnect有効時（サーバ側Go reducerが計算し、Rustは結果を丸ごと採用）という**別文脈に対応**しており、大半は文脈固有。両者が同時に走ることはない。振る舞いは**分離したままでよい**。
-- 型のシェイプ・ドリフトと、導出可能な項目（`currentSongId = queue[currentIndex].id`など）は**型を共有すれば自動的に揃う**。ドリフト面積の大半はここ。
-- backend間で唯一一致が要るのは`playNextQueueLen`の**読み側の意味**（`region = [currentIndex+1, currentIndex+1+playNextQueueLen)`）。producerは2つ（Rust/Go）だがdecoderはフロントの`isPlayNextQueueIndex`1つなので、この不変条件がズレるとUIが片方のモードで誤表示になる。ただしこの定義は極小かつ滅多に触らない。
-
-方針:
-
-1. **型はRust権威でGoへ生成し、drift checkで確約する**（typeshare等。`bindings.ts`/`bindings:check`と同型の「生成＋チェック」をserverビルドに追加）。対象はワイヤ契約2本:
-   - 共有状態エンベロープ: `ConnectPlaybackState`/`ConnectSharedPlaybackState`（`src-tauri/src/models/connect.rs`）は既に権威型が存在。Goの手写し`playbackStateDoc`を生成物へ差し替える。queue要素（`SongResponse`）はserverがメディアに触れない設計のため**共有せず**、エンベロープのみ共有してqueueはGo側で不透明（`[]json.RawMessage`）のまま。
-   - コマンドペイロード: Rust側は`connect.rs`の`send_playback_command`にad-hocな`serde_json::json!`で組んでおり**権威structが無い**。まずRustにコマンドstructを導入し、ad-hoc構築をそれ経由に通す。その後Goの手写し`playbackCommandPayload`を生成物へ差し替える。
-2. reducerの振る舞い（Go/Rustの状態遷移ロジック）は**変更しない**。
-3. `playNextQueueLen`の読み側の意味を1箇所に明文化し、Go/Rust両reducerからそこへ1行で参照させる（共有すべき契約はこれ1個だけ）。フローティングJSONやwasmでのreducer共有は不要と判断した。
-
-着手順: (1) Rustコマンドstruct導入 → (2) 既存2型にGo生成を掛ける → (3) Goの手写し2 structを生成物へ差し替え → (4) drift check追加。
-
 ### Android playbackのmedia slot状態が三重管理
 状態: 未着手 / 元: adr/20 #6
 
@@ -147,4 +125,12 @@ Android実装の主要部分（Kotlin）が生成物ツリー配下にあり、�
 
 ## 解決済み
 
-（まだ無し）
+### Connect shared playbackのqueue意味論の型を統合（2026-07-04 / 元: adr/20 #8, Tier 1）
+
+型（shape）ドリフトをRust権威のコード生成で根絶。振る舞い（reducer）はLocal/Connectで**意図的に分離のまま**とし、共有すべき不変条件だけを明文化した。
+
+- Rustに権威型 `ConnectPlaybackCommand`（`models/connect.rs`）を追加し、`commands/playback.rs`・`connect.rs` の ad-hoc `serde_json::json!` 構築を全てそれ経由に統一。
+- `ConnectPlaybackState`/`ConnectPlaybackCommand`/`PlayingState` を `#[typeshare]` 注釈し、`typeshare` + `typeshare.toml` で Go 構造体を `server/internal/realtime/connect_types_gen.go` へ生成。`pnpm go-types:export` / `go-types:check`（バージョン行を正規化して比較するドリフトチェック）を追加。要 `cargo install typeshare-cli --features go`。
+- Go の手写し `playbackStateDoc`/`playbackCommandPayload` を生成型へ差し替え（reducer アルゴリズムは不変）。
+- 唯一の共有不変条件（`playNextQueueLen` の意味 = `[currentIndex+1, +len)`）を `docs/playback-queue-semantics.md` に明文化し、Go/Rust 両 reducer からコメントで参照。
+- スコープ外（別タスク）: `ConnectQueueResolveDialog` の push/pull、push/pull 用ワイヤ op 追加。
