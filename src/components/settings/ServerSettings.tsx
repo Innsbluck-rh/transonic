@@ -1,4 +1,5 @@
 import { Icon } from '@iconify-icon/solid';
+import { useNavigate } from '@solidjs/router';
 import { createSignal, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import { loadBootstrapToStore } from '~/features/session/service';
@@ -7,9 +8,36 @@ import Heading3 from '../common/text/Heading3';
 import SettingSection from './SettingSection';
 
 function ServerSettings() {
+  const navigate = useNavigate();
   const activeSession = () => sessionStore.activeSession;
   const [backupMessage, setBackupMessage] = createSignal<string | null>(null);
   const [backupBusy, setBackupBusy] = createSignal(false);
+  const [logoutConfirm, setLogoutConfirm] = createSignal(false);
+  const [logoutBusy, setLogoutBusy] = createSignal(false);
+  const [logoutError, setLogoutError] = createSignal<string | null>(null);
+
+  const logout = async () => {
+    const session = activeSession();
+    if (!session) {
+      return;
+    }
+    setLogoutBusy(true);
+    setLogoutError(null);
+    try {
+      const result = await commands.deleteServerProfile({ profileId: session.profileId });
+      if (result.status === 'error') {
+        setLogoutError(result.error);
+        return;
+      }
+      await loadBootstrapToStore(result.data);
+      setLogoutConfirm(false);
+      navigate('/init_login', { replace: true });
+    } catch (error) {
+      setLogoutError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setLogoutBusy(false);
+    }
+  };
 
   const exportBackup = async () => {
     setBackupBusy(true);
@@ -72,6 +100,10 @@ function ServerSettings() {
               <Icon icon='material-symbols:account-circle' class='text-xl' />
               <p>{session().username}</p>
             </div>
+            <button type='button' class='flex w-fit items-center gap-1 text-red-500' onClick={() => setLogoutConfirm(true)}>
+              <Icon icon='material-symbols:logout' />
+              <span>Logout</span>
+            </button>
           </div>
         )}
       </Show>
@@ -87,6 +119,34 @@ function ServerSettings() {
       </div>
       <p class='text-secondary-text text-xs leading-5'>Backup includes server credentials. Keep the exported JSON private.</p>
       <Show when={backupMessage()}>{(message) => <p class='text-secondary-text text-xs leading-5'>{message()}</p>}</Show>
+
+      <Show when={logoutConfirm()}>
+        <div class='fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4' role='presentation'>
+          <section
+            class='border-primary-border bg-primary-plane text-primary-text flex w-full max-w-md flex-col gap-4 rounded border p-4 shadow-xl'
+            role='alertdialog'
+            aria-modal='true'
+            aria-labelledby='logout-title'
+          >
+            <h2 id='logout-title' class='flex items-center gap-2 text-base'>
+              <Icon icon='material-symbols:logout' class='text-red-500' />
+              Logout
+            </h2>
+            <p class='text-secondary-text text-sm leading-5'>
+              This removes the saved credentials and cached data for this server from this device. You will need to sign in again.
+            </p>
+            <Show when={logoutError()}>{(error) => <p class='text-xs leading-5 text-red-500'>{error()}</p>}</Show>
+            <div class='flex justify-end gap-2'>
+              <button type='button' disabled={logoutBusy()} onClick={() => setLogoutConfirm(false)}>
+                Cancel
+              </button>
+              <button type='button' class='text-red-500' disabled={logoutBusy()} onClick={logout}>
+                {logoutBusy() ? 'Logging out…' : 'Logout'}
+              </button>
+            </div>
+          </section>
+        </div>
+      </Show>
     </SettingSection>
   );
 }

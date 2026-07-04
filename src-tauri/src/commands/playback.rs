@@ -8,7 +8,8 @@ use crate::{
     commands::common::{client, format_api_error},
     connect::ConnectState,
     models::{
-        CapabilityMatrix, PlaybackAppendToQueueRequest, PlaybackInsertAfterCurrentRequest,
+        CapabilityMatrix, ConnectPlaybackCommand, PlaybackAppendToQueueRequest,
+        PlaybackInsertAfterCurrentRequest,
         PlaybackMoveQueueIndexRequest, PlaybackOutputDevice, PlaybackPlayQueueIndexRequest,
         PlaybackRemoveQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
         PlaybackSetQueueRequest, PlaybackSetVolumeRequest, PlaybackStatus, QueueSource,
@@ -20,12 +21,11 @@ use crate::{
 
 fn send_connect_playback_command(
     app: &AppHandle,
-    op: &'static str,
-    payload: serde_json::Value,
+    command: ConnectPlaybackCommand,
 ) -> Result<bool, String> {
     app.state::<ConnectState>()
         .0
-        .send_playback_command(op, payload)
+        .send_playback_command(command)
 }
 
 fn active_capability_matrix(state: &ActiveSessionState) -> Result<CapabilityMatrix, String> {
@@ -192,12 +192,13 @@ pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> R
 
             if send_connect_playback_command(
                 &app,
-                "setQueue",
-                serde_json::json!({
-                    "queue": songs.clone(),
-                    "currentIndex": current_index,
-                    "autoPlay": payload.auto_play,
-                }),
+                ConnectPlaybackCommand {
+                    op: "setQueue".to_string(),
+                    queue: Some(songs.clone()),
+                    current_index,
+                    auto_play: payload.auto_play,
+                    ..Default::default()
+                },
             )? {
                 return Ok(());
             }
@@ -248,7 +249,13 @@ pub fn playback_set_queue(app: AppHandle, payload: PlaybackSetQueueRequest) -> R
 #[tauri::command]
 #[specta::specta]
 pub fn playback_clear_queue(app: AppHandle) -> Result<(), String> {
-    if send_connect_playback_command(&app, "clearQueue", serde_json::json!({}))? {
+    if send_connect_playback_command(
+        &app,
+        ConnectPlaybackCommand {
+            op: "clearQueue".to_string(),
+            ..Default::default()
+        },
+    )? {
         return Ok(());
     }
 
@@ -312,8 +319,11 @@ pub fn playback_insert_after_current(
 
             if send_connect_playback_command(
                 &app,
-                "insertAfterCurrent",
-                serde_json::json!({ "items": songs.clone() }),
+                ConnectPlaybackCommand {
+                    op: "insertAfterCurrent".to_string(),
+                    items: Some(songs.clone()),
+                    ..Default::default()
+                },
             )? {
                 return Ok(());
             }
@@ -346,8 +356,11 @@ pub fn playback_append_to_queue(
 
             if send_connect_playback_command(
                 &app,
-                "appendToQueue",
-                serde_json::json!({ "items": songs.clone() }),
+                ConnectPlaybackCommand {
+                    op: "appendToQueue".to_string(),
+                    items: Some(songs.clone()),
+                    ..Default::default()
+                },
             )? {
                 return Ok(());
             }
@@ -376,8 +389,11 @@ pub fn playback_play_queue_index(
 ) -> Result<(), String> {
     if send_connect_playback_command(
         &app,
-        "playQueueIndex",
-        serde_json::json!({ "index": payload.index }),
+        ConnectPlaybackCommand {
+            op: "playQueueIndex".to_string(),
+            index: Some(payload.index),
+            ..Default::default()
+        },
     )? {
         return Ok(());
     }
@@ -423,8 +439,11 @@ pub fn playback_remove_queue_index(
 ) -> Result<(), String> {
     if send_connect_playback_command(
         &app,
-        "removeQueueIndex",
-        serde_json::json!({ "index": payload.index }),
+        ConnectPlaybackCommand {
+            op: "removeQueueIndex".to_string(),
+            index: Some(payload.index),
+            ..Default::default()
+        },
     )? {
         return Ok(());
     }
@@ -488,11 +507,12 @@ pub fn playback_move_queue_index(
 ) -> Result<(), String> {
     if send_connect_playback_command(
         &app,
-        "moveQueueIndex",
-        serde_json::json!({
-            "fromIndex": payload.from_index,
-            "toIndex": payload.to_index,
-        }),
+        ConnectPlaybackCommand {
+            op: "moveQueueIndex".to_string(),
+            from_index: Some(payload.from_index),
+            to_index: Some(payload.to_index),
+            ..Default::default()
+        },
     )? {
         return Ok(());
     }
@@ -524,8 +544,11 @@ pub fn playback_set_position(
 ) -> Result<(), String> {
     if send_connect_playback_command(
         &app,
-        "seek",
-        serde_json::json!({ "positionMs": payload.position_ms }),
+        ConnectPlaybackCommand {
+            op: "seek".to_string(),
+            position_ms: Some(payload.position_ms),
+            ..Default::default()
+        },
     )? {
         return Ok(());
     }
@@ -563,7 +586,13 @@ pub fn playback_set_volume(
 #[tauri::command]
 #[specta::specta]
 pub fn playback_play(app: AppHandle) -> Result<(), String> {
-    if send_connect_playback_command(&app, "play", serde_json::json!({}))? {
+    if send_connect_playback_command(
+        &app,
+        ConnectPlaybackCommand {
+            op: "play".to_string(),
+            ..Default::default()
+        },
+    )? {
         return Ok(());
     }
 
@@ -603,7 +632,13 @@ pub fn playback_play(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_pause(app: AppHandle) -> Result<(), String> {
-    if send_connect_playback_command(&app, "pause", serde_json::json!({}))? {
+    if send_connect_playback_command(
+        &app,
+        ConnectPlaybackCommand {
+            op: "pause".to_string(),
+            ..Default::default()
+        },
+    )? {
         return Ok(());
     }
 
@@ -659,7 +694,13 @@ pub fn playback_pause(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_stop(app: AppHandle) -> Result<(), String> {
-    if send_connect_playback_command(&app, "stop", serde_json::json!({}))? {
+    if send_connect_playback_command(
+        &app,
+        ConnectPlaybackCommand {
+            op: "stop".to_string(),
+            ..Default::default()
+        },
+    )? {
         return Ok(());
     }
 
@@ -717,8 +758,11 @@ pub fn playback_stop(app: AppHandle) -> Result<(), String> {
 pub fn playback_seek(app: AppHandle, payload: PlaybackSeekRequest) -> Result<(), String> {
     if send_connect_playback_command(
         &app,
-        "seek",
-        serde_json::json!({ "positionMs": payload.position_ms }),
+        ConnectPlaybackCommand {
+            op: "seek".to_string(),
+            position_ms: Some(payload.position_ms),
+            ..Default::default()
+        },
     )? {
         return Ok(());
     }
@@ -759,7 +803,13 @@ pub fn playback_seek(app: AppHandle, payload: PlaybackSeekRequest) -> Result<(),
 #[tauri::command]
 #[specta::specta]
 pub fn playback_next(app: AppHandle) -> Result<(), String> {
-    if send_connect_playback_command(&app, "next", serde_json::json!({}))? {
+    if send_connect_playback_command(
+        &app,
+        ConnectPlaybackCommand {
+            op: "next".to_string(),
+            ..Default::default()
+        },
+    )? {
         return Ok(());
     }
 
@@ -799,7 +849,13 @@ pub fn playback_next(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 #[specta::specta]
 pub fn playback_prev(app: AppHandle) -> Result<(), String> {
-    if send_connect_playback_command(&app, "prev", serde_json::json!({}))? {
+    if send_connect_playback_command(
+        &app,
+        ConnectPlaybackCommand {
+            op: "prev".to_string(),
+            ..Default::default()
+        },
+    )? {
         return Ok(());
     }
 

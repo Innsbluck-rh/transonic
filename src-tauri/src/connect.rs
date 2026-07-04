@@ -21,9 +21,9 @@ use tokio_tungstenite::{
 use crate::{
     commands::{common::service, playback::active_runtime_parts},
     models::{
-        AuthInput, ConnectDevicePresence, ConnectPlaybackState, ConnectRuntimeStatus,
-        ConnectSettings, ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectStateUpdated,
-        PlaybackStatus, PlayingState,
+        AuthInput, ConnectDevicePresence, ConnectPlaybackCommand, ConnectPlaybackState,
+        ConnectRuntimeStatus, ConnectSettings, ConnectSharedPlaybackState, ConnectStateSnapshot,
+        ConnectStateUpdated, PlaybackStatus, PlayingState,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
@@ -435,10 +435,11 @@ impl ConnectRuntime {
             Self::validate_transfer_playback_target(&inner, &target_device_id)?;
         }
 
-        if !self.send_playback_command(
-            "transferPlayback",
-            serde_json::json!({ "targetDeviceId": target_device_id }),
-        )? {
+        if !self.send_playback_command(ConnectPlaybackCommand {
+            op: "transferPlayback".to_string(),
+            target_device_id: Some(target_device_id),
+            ..Default::default()
+        })? {
             return Err("connect: websocket is not connected".to_string());
         }
         Ok(())
@@ -446,8 +447,7 @@ impl ConnectRuntime {
 
     pub(crate) fn send_playback_command(
         &self,
-        op: &'static str,
-        payload: serde_json::Value,
+        mut command: ConnectPlaybackCommand,
     ) -> Result<bool, String> {
         let (sender, base_seq) = {
             let inner = self.inner.lock().unwrap();
@@ -466,24 +466,16 @@ impl ConnectRuntime {
             (sender, base_seq)
         };
 
-        let mut command = match payload {
-            serde_json::Value::Object(map) => map,
-            _ => serde_json::Map::new(),
-        };
-        command.insert(
-            "commandId".to_string(),
-            serde_json::json!(connect_message_id(op)),
-        );
-        command.insert("baseSeq".to_string(), serde_json::json!(base_seq));
-        command.insert("op".to_string(), serde_json::json!(op));
+        let command_id = connect_message_id(&command.op);
+        command.command_id = Some(command_id.clone());
+        command.base_seq = Some(base_seq);
+        let payload = serde_json::to_value(&command)
+            .map_err(|_| "connect: failed to serialize playback command".to_string())?;
         sender
             .send(ConnectOutbound::Envelope(ConnectOutboundEnvelope {
-                id: command
-                    .get("commandId")
-                    .and_then(|value| value.as_str())
-                    .map(ToOwned::to_owned),
+                id: Some(command_id),
                 message_type: "playback.command.request",
-                payload: serde_json::Value::Object(command),
+                payload,
             }))
             .map_err(|_| "connect: websocket writer is not available".to_string())?;
         Ok(true)

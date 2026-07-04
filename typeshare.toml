@@ -1,0 +1,17 @@
+# Config for generating the Connect wire types consumed by the Go server.
+# Rust is the single source of truth; see docs/known-issues.md Tier 1.
+# Generate with `pnpm go-types:export`, verify with `pnpm go-types:check`.
+
+[go]
+package = "realtime"
+uppercase_acronyms = ["ID"]
+# Command queue/items are optional but should stay non-pointer slices on the Go side.
+no_pointer_slice = true
+
+[go.type_mappings]
+# The server never touches media: keep queue entries opaque instead of importing
+# the full SongResponse shape.
+SongResponse = "json.RawMessage"
+# The Go reducer does signed index arithmetic; map Rust's u32 to Go int64 so the
+# generated types are a drop-in for the existing hand-written structs.
+u32 = "int64"

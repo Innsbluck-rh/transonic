@@ -1,8 +1,18 @@
 import { useLocation, useNavigate } from '@solidjs/router';
 import { createSignal, onMount, ParentComponent, Show } from 'solid-js';
 import { commands } from '~/bindings';
+import LoadCircle from '~/components/common/LoadCircle';
 import { resolveBootstrapRoute } from '~/features/session/bootstrap';
 import { loadBootstrapToStore } from '~/features/session/service';
+
+function BootstrapLoading() {
+  return (
+    <div class='bg-primary-surface flex h-dvh w-dvw flex-col items-center justify-center gap-12'>
+      <p class={`archivo-black origin-centert w-fit scale-x-150 text-2xl font-black tracking-tighter italic`}>Transonic</p>
+      <LoadCircle />
+    </div>
+  );
+}
 
 const InitLoad: ParentComponent = (props) => {
   const location = useLocation();
@@ -34,7 +44,11 @@ const InitLoad: ParentComponent = (props) => {
     }
   });
 
-  return <Show when={loaded()}>{props.children}</Show>;
+  return (
+    <Show when={loaded()} fallback={<BootstrapLoading />}>
+      {props.children}
+    </Show>
+  );
 };
 
 export default InitLoad;

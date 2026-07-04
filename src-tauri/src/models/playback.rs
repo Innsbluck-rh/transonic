@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use tauri_specta::Event;
+use typeshare::typeshare;
 
 use super::{PlaybackStreamMode, SongResponse};
 
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "snake_case")]
 pub enum PlayingState {

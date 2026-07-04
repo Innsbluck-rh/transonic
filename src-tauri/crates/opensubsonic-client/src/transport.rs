@@ -13,6 +13,12 @@ use crate::{
 
 const JSON_TIMEOUT_SECONDS: u64 = 10;
 const BINARY_TIMEOUT_SECONDS: u64 = 60;
+/// Timeout for the TCP/TLS connection phase only. Kept short so an unreachable
+/// server (e.g. a home server behind a VPN that is currently disconnected)
+/// fails fast instead of hanging on the full request timeout. A healthy server
+/// completes the handshake well under this budget, so normal requests are
+/// unaffected.
+const CONNECT_TIMEOUT_SECONDS: u64 = 5;
 
 #[derive(Debug, Clone)]
 pub struct ReqwestTransport {
@@ -30,10 +36,12 @@ impl ReqwestTransport {
     pub fn new() -> Result<Self, ApiError> {
         let json_client = Client::builder()
             .timeout(Duration::from_secs(JSON_TIMEOUT_SECONDS))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECONDS))
             .build()
             .map_err(|error| ApiError::ClientBuild(error.to_string()))?;
         let binary_client = Client::builder()
             .timeout(Duration::from_secs(BINARY_TIMEOUT_SECONDS))
+            .connect_timeout(Duration::from_secs(CONNECT_TIMEOUT_SECONDS))
             .build()
             .map_err(|error| ApiError::ClientBuild(error.to_string()))?;
 

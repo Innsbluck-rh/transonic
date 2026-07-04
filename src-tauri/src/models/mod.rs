@@ -30,8 +30,9 @@ pub use browse::{
 };
 #[allow(unused_imports)]
 pub use connect::{
-    ConnectDevicePresence, ConnectPlaybackState, ConnectRuntimeStatus, ConnectSharedPlaybackState,
-    ConnectStateSnapshot, ConnectStateUpdated, ConnectTransferPlaybackRequest,
+    ConnectDevicePresence, ConnectPlaybackCommand, ConnectPlaybackState, ConnectRuntimeStatus,
+    ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectStateUpdated,
+    ConnectTransferPlaybackRequest,
 };
 #[allow(unused_imports)]
 pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};

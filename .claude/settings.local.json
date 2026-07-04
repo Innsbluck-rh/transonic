@@ -1,5 +1,14 @@
 {
   "permissions": {
-    "allow": ["Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")"]
+    "allow": [
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__query-docs",
+      "Bash(xargs grep -l \"check-bindings\\\\|export.*bindings\\\\|fn main\")",
+      "PowerShell(pnpm cargo:check)",
+      "PowerShell(pnpm exec tsc --noEmit)",
+      "PowerShell(pnpm cargo:test --% -p opensubsonic-client)",
+      "PowerShell(pnpm exec prettier --write src/components/settings/ServerSettings.tsx src/routes/init_load.tsx)"
+    ]
   }
 }
