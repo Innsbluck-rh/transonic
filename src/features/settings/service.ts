@@ -1,14 +1,21 @@
 import { createStore } from 'solid-js/store';
 import { commands, type AppSettings, type SettingsOrigin } from '~/bindings';
 
-const SETTINGS_STORAGE_KEY = 'transonic.settings.v1';
+// Pre-Rust settings blob persisted by very old builds directly in localStorage.
+// Migration/normalization of its contents is Rust's job (see `readRawLegacySettings`).
+const LEGACY_SETTINGS_STORAGE_KEY = 'transonic.settings.v1';
 
+// Pre-hydration placeholder only. Rust is the single source of truth for
+// defaults/normalization/migration (`src-tauri/src/models/settings.rs`,
+// `src-tauri/src/app_settings.rs`); `hydrateSettings` overwrites this store with
+// Rust-provided values at startup. Keep these in sync with the Rust `Default` impls,
+// but never re-derive or normalize settings on the TS side.
 const DEFAULT_SETTINGS: AppSettings = {
   appearance: {
     albumDisplayMode: 'grid',
   },
   playback: {
-    gaplessPlaybackEnabled: false,
+    gaplessPlaybackEnabled: true,
     volume: 1,
     useCustomOutput: false,
     outputDeviceId: null,
@@ -30,117 +37,6 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 export const [settingsStore, setSettingsStore] = createStore<AppSettings>(DEFAULT_SETTINGS);
-
-function normalizeAppearanceSettings(raw: Partial<AppSettings['appearance']> | null | undefined): AppSettings['appearance'] {
-  return {
-    albumDisplayMode: raw?.albumDisplayMode === 'list' ? 'list' : 'grid',
-  };
-}
-
-function normalizePlaybackSettings(raw: Partial<AppSettings['playback']> | null | undefined): AppSettings['playback'] {
-  const legacyGaplessStrategy = raw && 'prebufferStrategy' in raw ? (raw as Partial<{ prebufferStrategy: unknown }>).prebufferStrategy : null;
-  const legacyGaplessEnabled = raw && 'prebufferEnabled' in raw ? (raw as Partial<{ prebufferEnabled: unknown }>).prebufferEnabled : null;
-  const volume = typeof raw?.volume === 'number' && Number.isFinite(raw.volume) ? Math.min(Math.max(raw.volume, 0), 1) : 1;
-  const outputDeviceId = normalizeOutputDeviceId(raw?.outputDeviceId);
-
-  return {
-    gaplessPlaybackEnabled:
-      typeof raw?.gaplessPlaybackEnabled === 'boolean'
-        ? raw.gaplessPlaybackEnabled
-        : typeof legacyGaplessEnabled === 'boolean'
-          ? legacyGaplessEnabled
-          : legacyGaplessStrategy === 'next_track',
-    volume,
-    useCustomOutput: typeof raw?.useCustomOutput === 'boolean' ? raw.useCustomOutput : outputDeviceId !== null,
-    outputDeviceId,
-    streamMode: normalizePlaybackStreamMode(raw?.streamMode),
-    meteredNetworkTranscodingEnabled: raw?.meteredNetworkTranscodingEnabled === true,
-    transcodingBitrateLimit: normalizeTranscodingBitrateLimit(raw?.transcodingBitrateLimit),
-    useCustomTranscodingCodec: raw?.useCustomTranscodingCodec === true,
-    transcodingCodec: normalizePlaybackTranscodingCodec(raw?.transcodingCodec),
-  };
-}
-
-function normalizeOutputDeviceId(raw: unknown): AppSettings['playback']['outputDeviceId'] {
-  return typeof raw === 'string' && raw.trim().length > 0 ? raw.trim() : null;
-}
-
-function normalizePlaybackStreamMode(raw: unknown): AppSettings['playback']['streamMode'] {
-  return raw === 'transcoding' ? 'transcoding' : 'raw';
-}
-
-function normalizeTranscodingBitrateLimit(raw: unknown): AppSettings['playback']['transcodingBitrateLimit'] {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) {
-    return 320;
-  }
-  const bitrate = Math.trunc(raw);
-  return bitrate > 0 ? bitrate : 320;
-}
-
-function normalizePlaybackTranscodingCodec(raw: unknown): AppSettings['playback']['transcodingCodec'] {
-  switch (raw) {
-    case 'mp3':
-    case 'flac':
-    case 'aac':
-    case 'alac':
-    case 'vorbis':
-    case 'opus':
-      return raw;
-    default:
-      return 'auto';
-  }
-}
-
-function normalizeSettings(raw: unknown): AppSettings {
-  const candidate = typeof raw === 'object' && raw !== null ? (raw as Partial<AppSettings>) : null;
-  return {
-    appearance: normalizeAppearanceSettings(candidate?.appearance),
-    playback: normalizePlaybackSettings(candidate?.playback),
-    connect: normalizeConnectSettings(candidate?.connect),
-  };
-}
-
-function normalizeConnectSettings(raw: Partial<AppSettings['connect']> | null | undefined): AppSettings['connect'] {
-  const hasConnectServerHost = typeof raw?.connectServerHost === 'string' && raw.connectServerHost.trim().length > 0;
-  const legacyServerUrl = raw && 'serverUrl' in raw && typeof raw.serverUrl === 'string' ? raw.serverUrl : null;
-  const splitSource = hasConnectServerHost ? raw.connectServerHost : legacyServerUrl;
-  const split = splitUrlHostAndPort(splitSource);
-  const rawPort = raw?.connectServerPort;
-  const normalizedRawPort = typeof rawPort === 'number' && Number.isInteger(rawPort) && rawPort > 0 && rawPort <= 65535 ? rawPort : null;
-  const connectServerPort = hasConnectServerHost ? (normalizedRawPort ?? split.port ?? 4747) : (split.port ?? normalizedRawPort ?? 4747);
-
-  return {
-    enabled: typeof raw?.enabled === 'boolean' ? raw.enabled : false,
-    useSubsonicServerHost: typeof raw?.useSubsonicServerHost === 'boolean' ? raw.useSubsonicServerHost : true,
-    connectServerPort,
-    connectServerHost: split.host.length > 0 ? split.host : null,
-    deviceId: typeof raw?.deviceId === 'string' ? raw.deviceId : '',
-    deviceName: typeof raw?.deviceName === 'string' && raw.deviceName.trim().length > 0 ? raw.deviceName : null,
-    allowInsecureConnectServer: typeof raw?.allowInsecureConnectServer === 'boolean' ? raw.allowInsecureConnectServer : false,
-  };
-}
-
-function splitUrlHostAndPort(rawUrl: string | null | undefined) {
-  const trimmed = rawUrl?.trim();
-  if (!trimmed) {
-    return { host: '', port: null as number | null };
-  }
-
-  try {
-    const parsed = new URL(trimmed);
-    const port = parsed.port ? Number(parsed.port) : null;
-    parsed.pathname = '';
-    parsed.search = '';
-    parsed.hash = '';
-    parsed.port = '';
-    return {
-      host: parsed.toString().replace(/\/$/, ''),
-      port: Number.isInteger(port) && port !== null ? port : null,
-    };
-  } catch {
-    return { host: trimmed, port: null };
-  }
-}
 
 function generateDeviceId() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
@@ -172,21 +68,23 @@ async function ensureConnectDeviceId(settings: AppSettings) {
   return result.data;
 }
 
-function readLegacySettings(): AppSettings | null {
+// Returns the raw parsed legacy blob (unknown shape) so Rust can migrate/normalize it.
+// The TS side intentionally does not normalize. Returns null when absent or unparseable.
+function readRawLegacySettings(): unknown {
   if (typeof window === 'undefined') {
     return null;
   }
 
-  const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+  const raw = window.localStorage.getItem(LEGACY_SETTINGS_STORAGE_KEY);
   if (!raw) {
     return null;
   }
 
   try {
-    return normalizeSettings(JSON.parse(raw));
+    return JSON.parse(raw);
   } catch (error) {
     console.error('failed to parse stored settings', error);
-    window.localStorage.removeItem(SETTINGS_STORAGE_KEY);
+    window.localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY);
     return null;
   }
 }
@@ -196,28 +94,29 @@ function clearLegacySettings() {
     return;
   }
 
-  window.localStorage.removeItem(SETTINGS_STORAGE_KEY);
+  window.localStorage.removeItem(LEGACY_SETTINGS_STORAGE_KEY);
 }
 
 export async function hydrateSettings(settings: AppSettings, settingsOrigin: SettingsOrigin) {
-  const normalizedSettings = normalizeSettings(settings);
-  setSettingsStore(normalizedSettings);
+  // `settings` is already normalized/migrated by Rust; apply it verbatim.
+  setSettingsStore(settings);
 
   if (settingsOrigin !== 'default') {
-    await ensureConnectDeviceId(normalizedSettings);
+    await ensureConnectDeviceId(settings);
     return;
   }
 
-  const legacySettings = readLegacySettings();
-  if (!legacySettings) {
-    await ensureConnectDeviceId(normalizedSettings);
+  const legacySettings = readRawLegacySettings();
+  if (legacySettings === null) {
+    await ensureConnectDeviceId(settings);
     return;
   }
 
-  setSettingsStore(legacySettings);
-  const result = await commands.settingsUpdate({ settings: legacySettings });
+  // Hand the raw legacy blob to Rust, which owns migration + normalization + persistence.
+  const result = await commands.settingsUpdate({ settings: legacySettings as AppSettings });
   if (result.status === 'error') {
     console.error(result.error);
+    await ensureConnectDeviceId(settings);
     return;
   }
 
@@ -357,7 +256,8 @@ export async function setConnectSettings(connect: AppSettings['connect']) {
     playback: {
       ...settingsStore.playback,
     },
-    connect: normalizeConnectSettings(connect),
+    // Sent as-is; Rust normalizes and returns the canonical value in `result.data`.
+    connect,
   };
 
   setSettingsStore(nextSettings);

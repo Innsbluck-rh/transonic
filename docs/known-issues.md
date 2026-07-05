@@ -41,13 +41,6 @@ Rust (`prepared_generation`・`media_instance_id`)、Kotlin `AndroidPlaybackPlug
 
 対応方針メモ: 「即完了系command」と「fire-and-forget系command」を型で区別する/component からの直呼びをfacade経由に統一する、の2つは分離して着手できる。
 
-### settingsの正本がTypeScriptとRustに分裂
-状態: 未着手 / 元: adr/20 #2
-
-default・normalize・legacy migration・optimistic update・rollbackが`src/features/settings/service.ts`と`src-tauri/src/models/settings.rs`等の両方にある。CLAUDE.mdで既に「Rust側を正本にする」という方針は明文化済み（`adr/20`本文にも同旨の記載あり）。つまりここは方針決定は済んでおり、実装への反映だけが残っている。
-
-対応方針メモ: Tier 2の中では最も「やることが決まっている」項目。着手コストが見積もりやすい。
-
 ### remote Connect shared playbackがlocal PlaybackStatusに偽装されている
 状態: 未着手 / 元: adr/20 #3
 
@@ -100,14 +93,6 @@ Android実装の主要部分（Kotlin）が生成物ツリー配下にあり、�
 
 追補(ins):実は結構根深い問題と思われる。state管理としてのcomponentスタイリングを宣言しているものの、実情としてglobal cssファイルの過剰な一元管理と適当なmodulecss利用により宣言自体の清さと実情の汚さのギャップが激しい。state/affordanceなスタイル管理自体はtransonicにふさわしいが、実装や配備の方法は現状考慮が浅い状態と言わざるを得ない。要するに、この問題の裏にはtransonic全体のstate<->designの対応をどういうものにするかという方針の決定の必要性が隠れている。
 
-### pnpm packageの未使用・配置違い
-状態: 着手済み(ins) / 元: adr/20 小ゴミ
-
-`@testing-library/jest-dom`・`@vitest/browser-playwright`・`@vitest/coverage-v8`・`playwright`・`@tauri-apps/plugin-opener`は現状未使用。`jsdom`・`prettier-plugin-tailwindcss`は`devDependencies`が自然。
-
-対応方針メモ: 機械的に削れる。手が空いたタイミングでいつでも着手可能。
-→ 2026/7/4 着手済みのはず。別件の調査であれこれを見た者は軽くpackage.jsonをチェックしてから、消しても問題なさそうかの可否を報告すること。(ins)
-
 ### 意味が弱いテストと重複fixture
 状態: 未着手 / 元: adr/20 小ゴミ
 
@@ -120,8 +105,7 @@ Android実装の主要部分（Kotlin）が生成物ツリー配下にあり、�
 
 ## 別件メモ（今回の整理中に見つかった、負債とは性質が異なるもの）
 
-- `docs/roadmap-mermaid.md`は2026-03-23時点のPhase計画で、記載されているPhase 1〜4は現状すべて実装済み。内容が現状と乖離しているため、要不要を判断して整理する余地がある（本ファイルの対象外として扱う）。
-→ これ、最初期にとりあえずで作ったゴミに近い...いや、ゴミであると思われる。消してよければタイミングで消すべき。(ins)
+（現時点で未対応の別件メモなし）
 
 ## 解決済み
 
@@ -134,3 +118,26 @@ Android実装の主要部分（Kotlin）が生成物ツリー配下にあり、�
 - Go の手写し `playbackStateDoc`/`playbackCommandPayload` を生成型へ差し替え（reducer アルゴリズムは不変）。
 - 唯一の共有不変条件（`playNextQueueLen` の意味 = `[currentIndex+1, +len)`）を `docs/playback-queue-semantics.md` に明文化し、Go/Rust 両 reducer からコメントで参照。
 - スコープ外（別タスク）: `ConnectQueueResolveDialog` の push/pull、push/pull 用ワイヤ op 追加。
+
+### settingsの正本をRustに一本化（2026-07-05 / 元: adr/20 #2, Tier 2）
+
+TS側の default/normalize/legacy-migration の重複実装を撤去し、Rust を唯一の正本にした。
+
+- `src/features/settings/service.ts` から `normalizeSettings`/`normalizePlaybackSettings`/`normalizeConnectSettings`/`normalizeAppearanceSettings` と内部 `splitUrlHostAndPort`・各 `normalize*` ヘルパーを削除。TS は正規化・移行を一切行わない。
+- 旧 localStorage (`transonic.settings.v1`) の移行は、生JSONをそのまま Rust の `settings_update` に渡して正規化+移行+永続化させる方式に変更（`readRawLegacySettings`）。Rust 側 (`models/settings.rs` の custom `Deserialize` = `prebufferStrategy`→gapless / `serverUrl`→host+port 等) が既に移行を担っており、TS の二重実装は不要。
+- `hydrateSettings` は Rust 由来の settings をそのまま信頼（再normalizeを撤去）。`setConnectSettings` の送信前 normalize も撤去（Rust が `result.data` で正規化済みを返す）。optimistic update + rollback は UI 側の関心として維持。
+- driftしていた TS 側 default `gaplessPlaybackEnabled: false` を Rust default (`true`) に合わせて修正（プレースホルダとして残す `DEFAULT_SETTINGS` は「hydration前のみ」とコメント明記）。
+- TS側の正規化を固定していた `service.test.ts` の3テスト（metered/output-device/legacy-migration）を、新しい振る舞い（Rust出力の verbatim 適用 / legacy blob の Rust 転送）のテストに置き換え。Rust 側は `app_settings.rs` に同等の移行テストが既存。
+
+### pnpm package 整理のクローズと誤削除の是正（2026-07-05 / 元: adr/20 小ゴミ）
+
+2026/7/4 の削除可否を検証。結果、大半は安全だったが `@testing-library/jest-dom` の削除は誤りだった。
+
+- `@testing-library/jest-dom` は「未使用」ではなく `vite-plugin-solid` のテスト統合が `test.setupFiles` に自動注入する暗黙の必須依存。削除により pnpm strict linking 下でルートから解決できず「Cannot find module '@testing-library/jest-dom/vitest'」で **全 vitest suite がロード不能**になっていた。→ `devDependencies` に `@testing-library/jest-dom ^6.9.1` を復活。
+- `vitest.shims.d.ts`（`/// <reference types="@vitest/browser-playwright" />`）は削除済みパッケージを参照し `tsc` を壊していた。browser モードは未使用のため file ごと削除。
+- 残り（`@vitest/coverage-v8`・`playwright`・`@vitest/browser-playwright`・JS側 `@tauri-apps/plugin-opener`）の削除は問題なし。
+- 併せて、queue意味論統合コミット (`da639e1`) 由来の既存 tsc break（`playbackDevice.test.ts` の fixture に `playNextQueueLen` 欠落）を修正。`pnpm test`(70) と `tsc --noEmit` はグリーン。
+
+### roadmap-mermaid.md を削除（2026-07-05）
+
+2026-03-23 時点の Phase 1〜4 計画で、記載内容は現状すべて実装済み。乖離したゴミとして `docs/roadmap-mermaid.md` を削除。

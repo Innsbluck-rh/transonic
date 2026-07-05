@@ -23,6 +23,7 @@ function sharedPlayback(activeDeviceId: string | null): ConnectSharedPlaybackSta
       currentIndex: null,
       currentPositionMs: 0,
       currentSongId: null,
+      playNextQueueLen: 0,
     },
     updatedAt: '2026-05-25T00:00:00Z',
     updatedByDeviceId: activeDeviceId,
