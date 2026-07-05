@@ -38,6 +38,11 @@ pub struct PlaybackRuntimeContext<'a> {
 const HANDLED_PLAYBACK_ERROR_PREFIX: &str = "[transonic-handled-playback-error]";
 const OUTPUT_DEVICE_ERROR_PREFIX: &str = "Audio output device error:";
 const OUTPUT_STREAM_RECOVERY_MAX_ATTEMPTS: u8 = 3;
+/// Standard "previous" UX threshold: if playback has progressed past this many
+/// milliseconds into the current track, `prev` restarts the current track from the
+/// beginning instead of moving to the previous track. Mirrors the de-facto industry
+/// default (Media3's `maxSeekToPreviousPositionMs`, Spotify/Apple Music, etc.).
+const PREV_RESTART_THRESHOLD_MS: u32 = 3000;
 
 fn output_stream_recovery_delay(attempt: u8) -> Duration {
     #[cfg(test)]
@@ -1272,8 +1277,23 @@ impl PlaybackController {
 
     pub fn prev(&mut self, context: &PlaybackRuntimeContext<'_>) -> Result<PlaybackStatus, String> {
         let current_index = self.ensure_current_index()?;
-        if current_index == 0 {
-            return Err("Already at the beginning of the playback queue.".to_string());
+
+        // Sync the real position first so the threshold decision below is based on the
+        // backend's actual playback position rather than a stale reported value.
+        if matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused
+        ) {
+            self.sync_current_position_from_backend()?;
+        }
+
+        // Standard "previous" behavior: near the head of the track, jump to the previous
+        // track; once playback has progressed past the threshold — or there is no previous
+        // track (first entry) — restart the current track from the beginning instead.
+        if current_index == 0 || self.status.current_position_ms > PREV_RESTART_THRESHOLD_MS {
+            let state = self.seek(context, 0)?;
+            self.persist_state();
+            return Ok(state);
         }
 
         let prev_index = current_index - 1;
@@ -3079,6 +3099,7 @@ mod tests {
     use super::{
         current_song_id, playback_error_from_load_failure, PlaybackController,
         PlaybackRuntimeContext, PlaybackStatus, HANDLED_PLAYBACK_ERROR_PREFIX,
+        PREV_RESTART_THRESHOLD_MS,
     };
     use crate::{
         models::{
@@ -4036,12 +4057,44 @@ mod tests {
             .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
             .unwrap();
 
-        let prev_result = controller.prev(&runtime_context);
-        assert!(prev_result.is_err());
+        // `prev` at the first entry no longer errors; it restarts the current track from the
+        // beginning (there is no previous track to move to).
+        let prev_result = controller.prev(&runtime_context).unwrap();
+        assert_eq!(prev_result.current_index, Some(0));
+        assert_eq!(prev_result.current_position_ms, 0);
 
         controller.next(&runtime_context).unwrap();
         let next_result = controller.next(&runtime_context);
         assert!(next_result.is_err());
+    }
+
+    #[test]
+    fn prev_restarts_current_track_past_threshold_and_steps_back_near_head() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["song-a", "song-b"]), Some(0))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        controller.next(&runtime_context).unwrap();
+        assert_eq!(controller.state().current_index, Some(1));
+
+        // Past the threshold: `prev` restarts the current track (index unchanged, seek to 0).
+        backend_state.lock().unwrap().current_position_ms = PREV_RESTART_THRESHOLD_MS + 2_000;
+        let restarted = controller.prev(&runtime_context).unwrap();
+        assert_eq!(restarted.current_index, Some(1));
+        assert_eq!(restarted.pending_seek_position_ms, Some(0));
+
+        // Near the head: `prev` steps back to the previous track.
+        backend_state.lock().unwrap().current_position_ms = PREV_RESTART_THRESHOLD_MS - 2_000;
+        let stepped = controller.prev(&runtime_context).unwrap();
+        assert_eq!(stepped.current_index, Some(0));
     }
 
     #[test]

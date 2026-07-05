@@ -1379,6 +1379,12 @@ fn active_worker_main(
     let mut session: Option<ActiveSession> = None;
     let mut volume = 1.0_f32;
     let mut output_device_id: Option<String> = None;
+    // Silent, always-on output stream that keeps the selected DAC awake for the
+    // lifetime of the worker so power-managed USB/BT DACs never auto-mute and
+    // wake with an audible de-pop fade-in on the first track. Opened on the
+    // default device at startup (pre-warm) and moved to follow SetOutputDevice.
+    let mut keep_alive: Option<cpal::Stream> = None;
+    refresh_keep_alive_stream(&mut keep_alive, output_device_id.as_deref());
 
     while let Ok(job) = rx.recv() {
         match job {
@@ -1500,7 +1506,13 @@ fn active_worker_main(
                 output_device_id: next_output_device_id,
                 reply,
             } => {
-                output_device_id = normalize_output_device_id(next_output_device_id);
+                let next_output_device_id = normalize_output_device_id(next_output_device_id);
+                if next_output_device_id != output_device_id {
+                    output_device_id = next_output_device_id;
+                    // Move the keep-alive stream onto the newly selected device
+                    // so the DAC we're about to play through stays awake.
+                    refresh_keep_alive_stream(&mut keep_alive, output_device_id.as_deref());
+                }
                 let _ = reply.send(Ok(()));
             }
 
@@ -2373,6 +2385,75 @@ mod tests {
 // ---------------------------------------------------------------------------
 // cpal output stream
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// Keep-alive output stream
+//
+// A silent, always-on cpal output stream held for the whole lifetime of the
+// audio worker.  It keeps the selected WASAPI endpoint continuously streaming
+// so that power-managed USB/Bluetooth DACs (e.g. Shanling UP4 / ESS Sabre)
+// never fall into their idle auto-mute state.  Such DACs apply a de-pop volume
+// ramp when they wake on the first buffer of a fresh playback stream, which is
+// audible as a fade-in at the start of a track.  Studio interfaces that stay
+// powered (e.g. Audient iD14) never showed this, and browsers avoid it by
+// holding their render stream open across silence — this mirrors that.
+//
+// Full-lifetime keep-alive is the intended *default*: the DAC is deliberately
+// never allowed to sleep while the app runs (playback freshness > device
+// power-saving).  A power-saving opt-out (pre-roll / idle release) may be added
+// later but must never be the default.
+// ---------------------------------------------------------------------------
+
+fn build_keep_alive_stream(output_device_id: Option<&str>) -> Result<cpal::Stream, String> {
+    let device = resolve_cpal_output_device(output_device_id)?;
+    let config = device
+        .default_output_config()
+        .map_err(|error| {
+            format!("Audio output device error: failed to query default output config: {error}")
+        })?
+        .config();
+
+    log::info!(
+        "symphonia-cpal keep-alive: opening silent stream ch={} sr={}",
+        config.channels,
+        config.sample_rate,
+    );
+
+    let stream = device
+        .build_output_stream(
+            config,
+            move |data: &mut [f32], _info: &cpal::OutputCallbackInfo| {
+                for sample in data.iter_mut() {
+                    *sample = 0.0;
+                }
+            },
+            move |error| {
+                log::warn!("symphonia-cpal keep-alive stream error: {error}");
+            },
+            None,
+        )
+        .map_err(|error| {
+            format!("Audio output device error: failed to build keep-alive stream: {error}")
+        })?;
+
+    stream.play().map_err(|error| {
+        format!("Audio output device error: failed to start keep-alive stream: {error}")
+    })?;
+
+    Ok(stream)
+}
+
+/// (Re)open the keep-alive stream on `output_device_id`, replacing any existing
+/// one.  Best-effort: a failure is logged, not fatal — playback still works
+/// without it (only the fade-in mitigation is absent).
+fn refresh_keep_alive_stream(keep_alive: &mut Option<cpal::Stream>, output_device_id: Option<&str>) {
+    // Drop the previous stream first so we don't briefly hold two on one device.
+    *keep_alive = None;
+    match build_keep_alive_stream(output_device_id) {
+        Ok(stream) => *keep_alive = Some(stream),
+        Err(error) => log::warn!("symphonia-cpal keep-alive: {error}"),
+    }
+}
 
 fn build_cpal_stream(
     stream_router: Arc<StreamRouter>,
