@@ -5,6 +5,8 @@ mod queue_sync;
 mod reporting;
 mod server_reporting;
 #[cfg(all(target_os = "windows", not(test)))]
+mod smtc_windows;
+#[cfg(all(target_os = "windows", not(test)))]
 mod windows_runtime;
 use crate::models::{normalize_output_device_id, PlaybackOutputDevice};
 #[cfg(not(test))]
@@ -88,11 +90,23 @@ pub(crate) fn create_playback_controller(
     initial_volume: f32,
     initial_output_device_id: Option<String>,
 ) -> PlaybackController {
+    #[cfg_attr(not(target_os = "windows"), allow(unused_mut))]
+    let mut reporters: Vec<Box<dyn reporting::PlaybackReporter>> = vec![
+        Box::new(TauriPlaybackReporter::new(app_handle)),
+        Box::new(crate::connect::ConnectPlaybackReporter::from_app(_app)),
+    ];
+    // Windows SMTC: mirror playback into the OS media session. Best-effort — if
+    // the session can't be created the app still runs without it. Wired here at
+    // the composition root (the designed per-platform dispatch point) rather
+    // than by scattering `#[cfg]` into the reporter layer.
+    #[cfg(target_os = "windows")]
+    {
+        if let Some(smtc_reporter) = smtc_windows::init(_app) {
+            reporters.push(Box::new(smtc_reporter));
+        }
+    }
     let reporter: Box<dyn reporting::PlaybackReporter> =
-        Box::new(CompositePlaybackReporter::new(vec![
-            Box::new(TauriPlaybackReporter::new(app_handle)),
-            Box::new(crate::connect::ConnectPlaybackReporter::from_app(_app)),
-        ]));
+        Box::new(CompositePlaybackReporter::new(reporters));
 
     #[cfg(target_os = "android")]
     {

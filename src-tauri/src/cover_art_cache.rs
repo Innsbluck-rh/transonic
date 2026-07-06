@@ -330,6 +330,16 @@ impl CoverArtCache {
             )
         })?;
 
+        // Normalize non-JPEG raster cover art to JPEG so every cached image is
+        // in the single format all cover-art consumers accept — notably Windows
+        // SMTC, whose thumbnail pipeline only renders JPEG. JPEG passes through
+        // untouched; SVG and anything that fails to decode are stored as-is.
+        let transcoded = maybe_transcode_to_jpeg(content_type, bytes);
+        let (content_type, bytes) = match transcoded.as_ref() {
+            Some(jpeg) => ("image/jpeg", jpeg.as_slice()),
+            None => (content_type, bytes),
+        };
+
         let extension = extension_from_content_type(content_type)?;
         let version = current_time_ns();
         let file_name = format!("art.{version}.{extension}");
@@ -474,6 +484,53 @@ fn fetch_binary_response(
         .map_err(|error| format!("Failed to read binary response bytes: {error}"))?
         .to_vec();
     Ok((content_type, bytes))
+}
+
+/// Transcode non-JPEG raster cover art to JPEG. Returns `None` (leave the
+/// original untouched) when the input is already JPEG, is SVG/non-raster, or
+/// fails to decode — so an undecodable image is never lost.
+fn maybe_transcode_to_jpeg(content_type: &str, bytes: &[u8]) -> Option<Vec<u8>> {
+    let subtype = content_type.strip_prefix("image/")?;
+    if matches!(subtype, "jpeg" | "jpg" | "svg+xml") {
+        return None;
+    }
+    match transcode_to_jpeg(bytes) {
+        Ok(jpeg) => Some(jpeg),
+        Err(error) => {
+            log::warn!(
+                "cover_art_cache: JPEG transcode failed for {content_type}, storing original: {error}"
+            );
+            None
+        }
+    }
+}
+
+/// Decode `bytes` (PNG/WebP/GIF/…), flatten any alpha over white, and re-encode
+/// as JPEG (quality 85).
+fn transcode_to_jpeg(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    let decoded =
+        image::load_from_memory(bytes).map_err(|error| format!("decode failed: {error}"))?;
+    let rgb = flatten_over_white(&decoded);
+    let mut output = std::io::Cursor::new(Vec::new());
+    image::codecs::jpeg::JpegEncoder::new_with_quality(&mut output, 85)
+        .encode_image(&rgb)
+        .map_err(|error| format!("encode failed: {error}"))?;
+    Ok(output.into_inner())
+}
+
+/// Composite an image onto a solid white background, dropping the alpha channel.
+fn flatten_over_white(source: &image::DynamicImage) -> image::RgbImage {
+    let rgba = source.to_rgba8();
+    let (width, height) = rgba.dimensions();
+    let mut rgb = image::RgbImage::new(width, height);
+    for (x, y, pixel) in rgba.enumerate_pixels() {
+        let [r, g, b, a] = pixel.0;
+        let alpha = f32::from(a) / 255.0;
+        let blend =
+            |channel: u8| (f32::from(channel) * alpha + 255.0 * (1.0 - alpha)).round() as u8;
+        rgb.put_pixel(x, y, image::Rgb([blend(r), blend(g), blend(b)]));
+    }
+    rgb
 }
 
 fn extension_from_content_type(content_type: &str) -> Result<String, String> {
@@ -693,6 +750,33 @@ mod tests {
     fn size_segment_uses_full_for_missing_size() {
         assert_eq!(size_segment(None), "full");
         assert_eq!(size_segment(Some(128)), "128");
+    }
+
+    #[test]
+    fn transcodes_png_with_alpha_to_jpeg() {
+        let mut source = image::RgbaImage::new(2, 2);
+        source.put_pixel(0, 0, image::Rgba([255, 0, 0, 255]));
+        source.put_pixel(1, 0, image::Rgba([0, 255, 0, 128]));
+        source.put_pixel(0, 1, image::Rgba([0, 0, 255, 0])); // fully transparent
+        source.put_pixel(1, 1, image::Rgba([255, 255, 0, 255]));
+        let mut png = std::io::Cursor::new(Vec::new());
+        image::DynamicImage::ImageRgba8(source)
+            .write_to(&mut png, image::ImageFormat::Png)
+            .unwrap();
+
+        let jpeg = super::maybe_transcode_to_jpeg("image/png", &png.into_inner())
+            .expect("png should transcode to jpeg");
+        assert_eq!(&jpeg[..2], &[0xFF, 0xD8], "output should start with JPEG SOI");
+        let decoded = image::load_from_memory(&jpeg).expect("output should decode");
+        assert_eq!((decoded.width(), decoded.height()), (2, 2));
+    }
+
+    #[test]
+    fn jpeg_svg_and_undecodable_pass_through() {
+        assert!(super::maybe_transcode_to_jpeg("image/jpeg", b"anything").is_none());
+        assert!(super::maybe_transcode_to_jpeg("image/svg+xml", b"<svg/>").is_none());
+        // Undecodable bytes claiming to be png fall back to the original.
+        assert!(super::maybe_transcode_to_jpeg("image/png", b"not-a-real-png").is_none());
     }
 
     #[test]
