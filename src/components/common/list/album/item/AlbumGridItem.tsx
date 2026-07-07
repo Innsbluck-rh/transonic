@@ -75,7 +75,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
       </div>
       <Show when={!props.inline}>
         <div class='mt-1 flex flex-col'>
-          <p class='text-md truncate font-bold' title={props.album.name ?? '[unknown]'}>
+          <p class='truncate font-bold' title={props.album.name ?? '[unknown]'}>
             {props.album.name}
           </p>
           <Show when={!props.noArtistName}>

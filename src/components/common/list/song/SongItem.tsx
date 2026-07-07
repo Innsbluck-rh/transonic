@@ -56,7 +56,7 @@ const SongItem: Component<SongItemProps> = (props) => {
           <Show when={props.playNext}>
             <Icon class='text-secondary-text text-xs' icon='material-symbols:next-plan' />
           </Show>
-          <p class='song-item-title text-md min-w-0 flex-1 truncate' classList={{ 'font-bold': props.emphasizeTitle }} title={props.song.title}>
+          <p class='song-item-title archivo min-w-0 flex-1 truncate' classList={{ 'font-bold': props.emphasizeTitle }} title={props.song.title}>
             {props.song.title}
           </p>
         </div>

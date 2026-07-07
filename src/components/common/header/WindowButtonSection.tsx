@@ -46,7 +46,7 @@ const WindowButtonSection: Component = () => {
         }}
         onClick={() => getCurrentWindow().minimize()}
       >
-        <Icon class='text-primary-text text-md' icon='material-symbols:minimize' />
+        <Icon class='text-primary-text' icon='material-symbols:minimize' />
       </div>
       <div
         data-tauri-drag-exclude
@@ -66,7 +66,7 @@ const WindowButtonSection: Component = () => {
         }}
         onClick={() => getCurrentWindow().close()}
       >
-        <Icon class='text-primary-text text-md group-hover:text-red-500' icon='material-symbols:close' />
+        <Icon class='text-primary-text group-hover:text-red-500' icon='material-symbols:close' />
       </div>
     </div>
   );
