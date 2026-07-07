@@ -2,7 +2,7 @@ import { Icon } from '@iconify-icon/solid';
 import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { commands, type AlbumSongsResponse } from '~/bindings';
-import SongList from '~/components/common/list/song/SongList';
+import AlbumTrackList from '~/components/common/list/song/AlbumTrackList';
 import LoadCircle from '~/components/common/LoadCircle';
 import Heading3 from '~/components/common/text/Heading3';
 import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
@@ -94,7 +94,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
       <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
         <Icon
           icon='material-symbols:arrow-back'
-          class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl'
+          class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
           onClick={() => {
             navigate(-1);
           }}
@@ -177,7 +177,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
             'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
           }}
         >
-          <SongList songs={album()?.songs} />
+          <AlbumTrackList songs={album()?.songs} />
         </div>
       </div>
     </div>

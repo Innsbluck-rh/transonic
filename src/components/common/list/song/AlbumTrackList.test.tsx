@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectSharedPlaybackState, PlaybackStatus, SongResponse } from '~/bindings';
 import { setConnectStore } from '~/stores/ConnectStore';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
-import SongList from './SongList';
+import AlbumTrackList from './AlbumTrackList';
 
 vi.mock('@iconify-icon/solid', () => ({
   Icon: () => null,
@@ -117,7 +117,7 @@ function resetStores() {
   });
 }
 
-describe('SongList', () => {
+describe('AlbumTrackList', () => {
   let container: HTMLDivElement;
   let dispose: () => void;
 
@@ -147,7 +147,7 @@ describe('SongList', () => {
     setConnectStore('sharedPlayback', sharedPlayback(remoteSongs, 1));
     setConnectStore('sharedPlaybackReceivedAtMs', 100);
 
-    dispose = render(() => <SongList songs={[staleLocalSong, ...remoteSongs]} />, container);
+    dispose = render(() => <AlbumTrackList songs={[staleLocalSong, ...remoteSongs]} />, container);
 
     const rows = container.querySelectorAll('.song-item');
     expect(rows[0].getAttribute('data-current')).toBeNull();

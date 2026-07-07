@@ -3,15 +3,14 @@ import { draggable, dropTargetForElements, type ElementDragPayload } from '@atla
 import { Icon } from '@iconify-icon/solid';
 import { Component, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
+import SongItem from '~/components/common/list/song/SongItem';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArtMap } from '~/features/albums/useCoverArtMap';
-import { resolveSongItemConditions, songItemConditionAttrs } from '~/features/items/SongItemConditions';
+import { resolveSongItemConditions } from '~/features/items/SongItemConditions';
 import { buildQueueItemMenuItems } from '~/features/menu';
-import useContextMenu from '~/features/menu/useContextMenu';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { hasPlaybackCommandError } from '~/features/playback/service';
 import { usePlayback } from '~/features/playback/usePlayback';
-import { formatCompactDuration } from '~/utils/duration';
 
 interface QueueListProps {
   queue: SongResponse[];
@@ -278,7 +277,6 @@ const QueueList: Component<QueueListProps> = (props) => {
               index: i(),
             });
           };
-          const contextMenuProps = useContextMenu(buildQueueItemMenuItems(entry, i, navigate));
           const conditions = () =>
             resolveSongItemConditions({
               playbackStatus: playbackStatus(),
@@ -287,55 +285,37 @@ const QueueList: Component<QueueListProps> = (props) => {
             });
 
           return (
-            <div
-              ref={setItemElement}
-              class='song-item ripple border-secondary-border relative flex h-auto cursor-pointer flex-row items-center overflow-x-hidden border-b px-4 py-2'
-              onClick={onClickEntry}
-              {...songItemConditionAttrs(conditions())}
-              {...contextMenuProps}
-            >
-              <Show when={dropIndicatorEdge()}>
-                {(edge) => (
-                  <div
-                    class='bg-accent pointer-events-none absolute right-0 left-0 z-20 h-0.5'
-                    classList={{
-                      'top-0': edge() === 'top',
-                      'bottom-0': edge() === 'bottom',
-                    }}
-                  />
-                )}
-              </Show>
-              <div class='flex w-7 flex-row items-start'>
-                <Show
-                  when={!conditions().current}
-                  fallback={<Icon class='song-item-leading -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />}
-                >
-                  <p class='song-item-leading archivo text-xs font-bold'>{i() + 1}</p>
-                </Show>
-              </div>
-
-              <Show
-                when={coverArtMap.src(coverArtId())}
-                fallback={<div class='border-secondary-border mr-3 aspect-square max-h-8 w-8 rounded-md border' />}
+            <div class='border-secondary-border border-b'>
+              <SongItem
+                ref={setItemElement}
+                song={entry}
+                leadingContent={
+                  conditions().current ? (
+                    <Icon class='song-item-leading -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />
+                  ) : (
+                    String(i() + 1)
+                  )
+                }
+                coverArt
+                coverArtUrl={coverArtMap.src(coverArtId())}
+                emphasizeTitle
+                playNext={isPlayNextQueueIndex(i())}
+                conditions={conditions()}
+                menuItems={buildQueueItemMenuItems(entry, i, navigate)}
+                onClick={onClickEntry}
               >
-                {(assetUrl) => <img src={assetUrl()} class='mr-3 aspect-square max-h-8 w-8 rounded-md' loading='lazy' decoding='async' />}
-              </Show>
-
-              <div class='flex min-w-0 flex-1 flex-col gap-0'>
-                <div class='flex items-center gap-1'>
-                  <Show when={isPlayNextQueueIndex(i())}>
-                    <Icon class='text-secondary-text text-xs' icon='material-symbols:next-plan' />
-                  </Show>
-                  <p class='song-item-title archivo text-md gap-1 truncate font-bold' title={entry.title}>
-                    {entry.title}
-                  </p>
-                </div>
-                <p class='song-item-meta archivo truncate text-[11px]' title={entry.artist ?? '[unknown artist]'}>
-                  {entry.artist}
-                </p>
-              </div>
-
-              <p class='song-item-meta archivo ml-2 text-xs'>{formatCompactDuration(entry.duration ?? 0)}</p>
+                <Show when={dropIndicatorEdge()}>
+                  {(edge) => (
+                    <div
+                      class='bg-accent pointer-events-none absolute right-0 left-0 z-20 h-0.5'
+                      classList={{
+                        'top-0': edge() === 'top',
+                        'bottom-0': edge() === 'bottom',
+                      }}
+                    />
+                  )}
+                </Show>
+              </SongItem>
             </div>
           );
         }}

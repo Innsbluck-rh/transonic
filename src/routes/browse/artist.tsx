@@ -148,7 +148,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
           <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
             <Icon
               icon='material-symbols:arrow-back'
-              class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl'
+              class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
               onClick={() => {
                 navigate(-1);
               }}

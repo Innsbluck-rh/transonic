@@ -3,7 +3,7 @@ import { Component, createMemo, createSignal, onMount, Show } from 'solid-js';
 import { commands, type SearchResponse } from '~/bindings';
 import AlbumList from '~/components/common/list/album/AlbumList';
 import BrowseList, { type BrowseListItem } from '~/components/common/list/index/BrowseList';
-import SongList from '~/components/common/list/song/SongList';
+import SearchSongList from '~/components/common/list/search/SearchSongList';
 import LoadCircle from '~/components/common/LoadCircle';
 import Heading3 from '~/components/common/text/Heading3';
 import RouteHeader from '~/components/common/text/RouteHeader';
@@ -117,7 +117,7 @@ const Search: Component = () => {
             <div class='bg-primary-bg border-secondary-border border-b p-2'>
               <Heading3>songs</Heading3>
             </div>
-            <SongList songs={results()?.songs ?? []} />
+            <SearchSongList songs={results()?.songs ?? []} />
           </section>
         </Show>
       </div>
