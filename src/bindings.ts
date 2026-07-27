@@ -493,7 +493,15 @@ export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number
  * which is not what someone who has not asked for it should get.
  */
 useAsioOutput: boolean; outputDeviceId: string | null; streamMode: PlaybackStreamMode; meteredNetworkTranscodingEnabled: boolean; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
-export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId: string | null; playbackError: PlaybackError | null; activeStreamInfo: PlaybackStreamInfo | null; preparedStreamInfo: PlaybackStreamInfo | null; lastStreamRequest: PlaybackStreamInfo | null; actualStreamInfo: PlaybackActualStreamInfo | null }
+export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId: string | null; 
+/**
+ * Audio API the currently applied output device is reached through.
+ * 
+ * `None` for the system default and for platforms without output device
+ * selection. Reported because ASIO and WASAPI are otherwise indistinguishable
+ * from the outside: the same device sounds the same either way.
+ */
+outputHost: PlaybackOutputHost | null; playbackError: PlaybackError | null; activeStreamInfo: PlaybackStreamInfo | null; preparedStreamInfo: PlaybackStreamInfo | null; lastStreamRequest: PlaybackStreamInfo | null; actualStreamInfo: PlaybackActualStreamInfo | null }
 export type PlaybackStreamInfo = { requestKind: PlaybackStreamRequestKind; songId: string; songPath: string | null; sourceContentType: string | null; sourceSuffix: string | null; sourceBitRate: number | null; sourceSize: number | null; streamMode: PlaybackStreamMode; rawStream: boolean; streamFormat: string | null; streamMaxBitRate: number | null; streamOffsetSeconds: number | null; requestedPositionMs: number; localStartPositionMs: number; autoplay: boolean; streamEndpoint: string; streamUrl: string }
 export type PlaybackStreamMode = "raw" | "transcoding"
 export type PlaybackStreamRequestKind = "load" | "prepare" | "activate_prepared"

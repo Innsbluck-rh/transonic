@@ -97,7 +97,7 @@ function PlaybackSettings() {
   });
 
   return (
-    <SettingSection title='Playback'>
+    <SettingSection title='Playback' sectionId='playback'>
       <Show when={isWindows && sessionStore.playbackCapabilities.outputDeviceSelection}>
         <form class='flex flex-col gap-3'>
           <Heading3 class='mb-3'>Output Device</Heading3>

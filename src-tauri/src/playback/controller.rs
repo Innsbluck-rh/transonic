@@ -10,7 +10,8 @@ use crate::{
     models::{
         normalize_output_device_id, normalize_volume, CapabilityMatrix, ConnectPlaybackState,
         GaplessState, GaplessStatus, InterruptReason, PlaybackCapabilities, PlaybackError,
-        PlaybackStatus, PlaybackStreamInfo, PlaybackStreamMode, PlaybackStreamRequestKind,
+        PlaybackOutputHost, PlaybackStatus, PlaybackStreamInfo, PlaybackStreamMode,
+        PlaybackStreamRequestKind,
         PlaybackTranscodingCodec, PlayingState, SongResponse,
     },
     playback_state::{PlaybackStateFile, PlaybackStatePersister},
@@ -422,7 +423,7 @@ impl PlaybackController {
     }
 
     pub fn state(&mut self) -> PlaybackStatus {
-        self.update_gapless_status();
+        self.refresh_derived_status();
         self.status.clone()
     }
 
@@ -2856,8 +2857,21 @@ impl PlaybackController {
         );
     }
 
-    fn report_status(&mut self) {
+    /// Refresh the parts of `status` that mirror controller state held elsewhere.
+    ///
+    /// Recomputed on every read rather than written when the source changes, so
+    /// the two cannot drift apart: `reset` replaces `status` wholesale, and the
+    /// output device rollback paths restore a previous value.
+    fn refresh_derived_status(&mut self) {
         self.update_gapless_status();
+        self.status.output_host = self
+            .output_device_id
+            .as_deref()
+            .and_then(PlaybackOutputHost::from_output_device_id);
+    }
+
+    fn report_status(&mut self) {
+        self.refresh_derived_status();
         let _ = self.reporter.report_state(&self.status);
     }
 }
@@ -3097,7 +3111,7 @@ mod tests {
     use opensubsonic_client::{normalize_base_url, Auth, ClientConfig};
 
     use super::{
-        current_song_id, playback_error_from_load_failure, PlaybackController,
+        current_song_id, playback_error_from_load_failure, PlaybackController, PlaybackOutputHost,
         PlaybackRuntimeContext, PlaybackStatus, HANDLED_PLAYBACK_ERROR_PREFIX,
         PREV_RESTART_THRESHOLD_MS,
     };
@@ -6580,6 +6594,50 @@ mod tests {
         assert_eq!(
             backend_state.lock().unwrap().volume_calls,
             vec![1.0, 0.42, 1.0]
+        );
+    }
+
+    #[test]
+    fn status_reports_the_output_host_of_the_applied_device() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["song-a"]), Some(0))
+            .unwrap();
+
+        // System default carries no id, so there is no host to report.
+        assert_eq!(controller.state().output_host, None);
+
+        controller
+            .set_output_device(Some("wasapi:{0.0.0.00000000}.{device}".to_string()), None)
+            .unwrap();
+        assert_eq!(
+            controller.state().output_host,
+            Some(PlaybackOutputHost::Wasapi)
+        );
+
+        controller
+            .set_output_device(Some("asio:Audient USB Audio ASIO Driver".to_string()), None)
+            .unwrap();
+        assert_eq!(
+            controller.state().output_host,
+            Some(PlaybackOutputHost::Asio)
+        );
+    }
+
+    #[test]
+    fn reset_does_not_strip_the_reported_output_host() {
+        // `reset` replaces the whole status, so a host written at device-change
+        // time would be lost here while the device itself stays applied.
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_output_device(Some("asio:Audient USB Audio ASIO Driver".to_string()), None)
+            .unwrap();
+
+        controller.reset();
+
+        assert_eq!(
+            controller.state().output_host,
+            Some(PlaybackOutputHost::Asio)
         );
     }
 

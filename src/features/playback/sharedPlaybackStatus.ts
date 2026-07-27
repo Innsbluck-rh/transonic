@@ -18,6 +18,7 @@ function emptyPlaybackStatus(): PlaybackStatus {
     playNextQueueLen: 0,
     currentPositionMs: 0,
     currentSongId: null,
+    outputHost: null,
     playbackError: null,
     activeStreamInfo: null,
     preparedStreamInfo: null,
@@ -26,11 +27,14 @@ function emptyPlaybackStatus(): PlaybackStatus {
   };
 }
 
+// The output host describes this machine's audio path, so it belongs with the
+// other diagnostics that are dropped while another device is the one playing.
 function remotePlaybackDiagnosticsStatus(): Pick<
   PlaybackStatus,
   | 'interruptReason'
   | 'pendingSeekPositionMs'
   | 'gaplessStatus'
+  | 'outputHost'
   | 'playbackError'
   | 'activeStreamInfo'
   | 'preparedStreamInfo'
@@ -41,6 +45,7 @@ function remotePlaybackDiagnosticsStatus(): Pick<
     interruptReason: null,
     pendingSeekPositionMs: null,
     gaplessStatus: unavailableGaplessStatus('gapless: remote playback diagnostics unavailable'),
+    outputHost: null,
     playbackError: null,
     activeStreamInfo: null,
     preparedStreamInfo: null,
@@ -79,6 +84,7 @@ export function mergePlaybackStatusWithSharedPlayback(
     playNextQueueLen: state.playNextQueueLen ?? stateFallback.playNextQueueLen,
     currentPositionMs: state.currentPositionMs ?? stateFallback.currentPositionMs,
     currentSongId: state.currentSongId === undefined ? stateFallback.currentSongId : state.currentSongId,
+    outputHost: diagnostics.outputHost,
     playbackError: diagnostics.playbackError,
     activeStreamInfo: diagnostics.activeStreamInfo,
     preparedStreamInfo: diagnostics.preparedStreamInfo,

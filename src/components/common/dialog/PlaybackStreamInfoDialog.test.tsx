@@ -89,6 +89,7 @@ function playbackStatus(overrides: Partial<PlaybackStatus> = {}): PlaybackStatus
     playNextQueueLen: 0,
     currentPositionMs: 0,
     currentSongId: 'local-song',
+    outputHost: null,
     playbackError: null,
     activeStreamInfo: null,
     preparedStreamInfo: null,

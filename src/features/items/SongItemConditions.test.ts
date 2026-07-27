@@ -15,6 +15,7 @@ function createPlaybackStatus(overrides: Partial<PlaybackStatus> = {}): Playback
     playNextQueueLen: 0,
     currentPositionMs: 0,
     currentSongId: null,
+    outputHost: null,
     playbackError: null,
     activeStreamInfo: null,
     preparedStreamInfo: null,

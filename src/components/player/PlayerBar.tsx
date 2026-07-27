@@ -90,8 +90,9 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
         {(assetUrl) => <img class='absolute size-full object-cover object-center' src={assetUrl()} loading='lazy' decoding='async' />}
       </Show>
       <div class='absolute z-0 size-full backdrop-blur-[2px]'></div>
-      <div class='bg-primary-plane absolute z-0 size-full opacity-50'></div>
-      <div class='from-primary-plane absolute z-0 size-full bg-linear-to-r to-transparent'></div>
+      <div class='bg-primary-plane absolute z-0 size-full opacity-25'></div>
+      <div class='from-primary-plane absolute z-0 h-full w-[75%] bg-linear-to-r to-transparent'></div>
+      <div class='from-primary-plane/75 absolute right-0 z-0 h-full w-[50%] bg-linear-to-l to-transparent'></div>
 
       <div class='relative z-10 flex size-full flex-row items-center gap-2.5 px-3.5 shadow-xl lg:px-4'>
         <div class='z-10 flex flex-row items-center gap-2'>

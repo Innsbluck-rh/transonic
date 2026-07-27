@@ -274,11 +274,11 @@ pub fn effective_output_device_id(playback: &PlaybackSettings) -> Option<&str> {
 }
 
 /// Whether a saved output device id refers to an ASIO device.
-///
-/// Ids are persisted in cpal's `"<host>:<device>"` form, so the host prefix is
-/// part of the stored value and can be recognised without a cpal dependency here.
 pub fn is_asio_output_device_id(output_device_id: &str) -> bool {
-    output_device_id.starts_with("asio:")
+    matches!(
+        super::playback::PlaybackOutputHost::from_output_device_id(output_device_id),
+        Some(super::playback::PlaybackOutputHost::Asio)
+    )
 }
 
 fn normalize_volume_option(volume: Option<f32>) -> f32 {
