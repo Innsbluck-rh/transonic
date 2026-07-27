@@ -1,7 +1,7 @@
 import { Icon } from '@iconify-icon/solid';
 import { platform } from '@tauri-apps/plugin-os';
 import { createEffect, createMemo, createResource, For, Show } from 'solid-js';
-import { commands, type PlaybackTranscodingCodec } from '~/bindings';
+import { commands, type PlaybackOutputDevice, type PlaybackTranscodingCodec } from '~/bindings';
 import { setPlaybackSetting, setPlaybackSettings, settingsStore } from '~/features/settings/service';
 import { sessionStore } from '~/stores/SessionStore';
 import Heading3 from '../common/text/Heading3';
@@ -26,10 +26,21 @@ function PlaybackSettings() {
   const isAndroid = platform() === 'android';
   const isWindows = platform() === 'windows';
   let outputDeviceSelect: HTMLSelectElement | undefined;
-  const outputDeviceSource = () =>
-    isWindows && sessionStore.playbackCapabilities.outputDeviceSelection && settingsStore.playback.useCustomOutput ? 'windows' : null;
-  const [outputDevices] = createResource(outputDeviceSource, async () => {
-    const result = await commands.playbackGetOutputDevices();
+  // The backend only enumerates ASIO devices when the saved setting asks for it,
+  // so that setting is part of the resource key: without it the list would keep
+  // whatever was fetched when custom output was switched on, and turning ASIO on
+  // would never produce ASIO devices.
+  const outputDeviceSource = () => {
+    if (!isWindows || !sessionStore.playbackCapabilities.outputDeviceSelection || !settingsStore.playback.useCustomOutput) {
+      return null;
+    }
+    return settingsStore.playback.useAsioOutput ? 'windows+asio' : 'windows';
+  };
+  // The request is derived from the source value rather than read from the store
+  // again, so the fetch always asks for exactly what the key that triggered it
+  // described.
+  const [outputDevices] = createResource(outputDeviceSource, async (source) => {
+    const result = await commands.playbackGetOutputDevices(source === 'windows+asio');
     if (result.status === 'error') {
       console.error(result.error);
       return [];
@@ -46,15 +57,34 @@ function PlaybackSettings() {
   });
   const selectedTranscodingCodec = (): PlaybackTranscodingCodec =>
     settingsStore.playback.useCustomTranscodingCodec ? settingsStore.playback.transcodingCodec : 'mp3';
-  const customOutputDevices = createMemo(() => outputDevices() ?? []);
+  const asioOutputAvailable = () => isWindows && sessionStore.playbackCapabilities.asioOutput;
+  // The backend already leaves ASIO devices out unless asked, so this filter only
+  // covers the window between toggling ASIO off and the refetch resolving, where
+  // the previous list is still what `outputDevices()` holds.
+  const customOutputDevices = createMemo(() =>
+    (outputDevices() ?? []).filter((device) => device.host !== 'asio' || settingsStore.playback.useAsioOutput)
+  );
+  const outputDeviceLabel = (device: PlaybackOutputDevice) => (device.host === 'asio' ? `ASIO: ${device.name}` : device.name);
   const selectedOutputDeviceId = () => settingsStore.playback.outputDeviceId ?? '';
   const selectedOutputDeviceMissing = () => {
     const selected = settingsStore.playback.outputDeviceId;
-    return !!selected && !(outputDevices() ?? []).some((device) => device.id === selected);
+    return !!selected && !customOutputDevices().some((device) => device.id === selected);
   };
+  // ASIO is a sub-option of custom output, so it is reset alongside it. Leaving it
+  // set while custom output is off would hide an enabled ASIO toggle and then
+  // silently restore it the next time custom output is switched back on.
   const setUseCustomOutput = async (enabled: boolean) => {
     await setPlaybackSettings({
       useCustomOutput: enabled,
+      useAsioOutput: false,
+      outputDeviceId: null,
+    });
+  };
+  // Turning ASIO off has to drop the selection too, otherwise a device that is
+  // no longer listed stays saved and playback keeps using it.
+  const setUseAsioOutput = async (enabled: boolean) => {
+    await setPlaybackSettings({
+      useAsioOutput: enabled,
       outputDeviceId: null,
     });
   };
@@ -67,7 +97,7 @@ function PlaybackSettings() {
   });
 
   return (
-    <SettingSection title='Playback'>
+    <SettingSection title='Playback' sectionId='playback'>
       <Show when={isWindows && sessionStore.playbackCapabilities.outputDeviceSelection}>
         <form class='flex flex-col gap-3'>
           <Heading3 class='mb-3'>Output Device</Heading3>
@@ -79,6 +109,16 @@ function PlaybackSettings() {
               onChange={(event) => setUseCustomOutput(event.currentTarget.checked)}
             />
           </label>
+          <Show when={settingsStore.playback.useCustomOutput && asioOutputAvailable()}>
+            <label class='flex items-center justify-between gap-4'>
+              <span>Use ASIO Output</span>
+              <input
+                type='checkbox'
+                checked={settingsStore.playback.useAsioOutput}
+                onChange={(event) => setUseAsioOutput(event.currentTarget.checked)}
+              />
+            </label>
+          </Show>
           <Show when={settingsStore.playback.useCustomOutput}>
             <label class='flex items-center justify-between gap-4'>
               <span>Custom Output</span>
@@ -94,7 +134,7 @@ function PlaybackSettings() {
                 <Show when={selectedOutputDeviceMissing()}>
                   <option value={settingsStore.playback.outputDeviceId ?? ''}>Unavailable output</option>
                 </Show>
-                <For each={customOutputDevices()}>{(device) => <option value={device.id}>{device.name}</option>}</For>
+                <For each={customOutputDevices()}>{(device) => <option value={device.id}>{outputDeviceLabel(device)}</option>}</For>
               </select>
             </label>
           </Show>

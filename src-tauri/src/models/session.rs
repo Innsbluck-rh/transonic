@@ -120,6 +120,10 @@ pub struct PlaybackCapabilities {
     pub gapless_playback: bool,
     pub transcoding_codecs: Vec<PlaybackTranscodingCodec>,
     pub output_device_selection: bool,
+    /// Whether this build can list and open ASIO output devices at all. ASIO is
+    /// an opt-in Cargo feature, so most builds report `false` and the UI then
+    /// hides every ASIO control rather than offering something that cannot work.
+    pub asio_output: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

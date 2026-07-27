@@ -173,10 +173,23 @@ pub fn playback_get_state(
     }
 }
 
+/// ASIO devices are only enumerated when asked for, because enumeration loads
+/// every registered ASIO driver in turn: it costs seconds and briefly hands
+/// control of unrelated audio hardware to drivers nobody selected.
+///
+/// This is a query parameter rather than a read of the saved setting on purpose.
+/// The caller updates its settings store optimistically and only then awaits the
+/// settings command, so reading the stored value here answered from the previous
+/// state and the list stayed without ASIO devices until something else forced a
+/// refetch. Whether an ASIO device may actually be *played* is a separate
+/// question, still decided against the saved setting by
+/// `effective_output_device_id`.
 #[tauri::command]
 #[specta::specta]
-pub fn playback_get_output_devices() -> Result<Vec<PlaybackOutputDevice>, String> {
-    crate::playback::list_output_devices()
+pub fn playback_get_output_devices(
+    include_asio: bool,
+) -> Result<Vec<PlaybackOutputDevice>, String> {
+    crate::playback::list_output_devices(include_asio)
 }
 
 #[tauri::command]

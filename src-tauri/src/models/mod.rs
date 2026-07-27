@@ -40,7 +40,8 @@ pub use cover_art::{CoverArtCacheStatus, CoverArtRequest, CoverArtResponse};
 pub use playback::{
     GaplessState, GaplessStatus, InterruptReason, MediaNotificationTap, PlaybackActualStreamInfo,
     PlaybackAppendToQueueRequest, PlaybackError, PlaybackInsertAfterCurrentRequest,
-    PlaybackMoveQueueIndexRequest, PlaybackOutputDevice, PlaybackPlayQueueIndexRequest,
+    PlaybackMoveQueueIndexRequest, PlaybackOutputDevice, PlaybackOutputHost,
+    PlaybackPlayQueueIndexRequest,
     PlaybackRemoveQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
     PlaybackSetQueueRequest, PlaybackSetVolumeRequest, PlaybackStatus, PlaybackStreamInfo,
     PlaybackStreamRequestKind, PlayingState, QueueSource,

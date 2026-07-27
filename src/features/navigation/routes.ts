@@ -21,8 +21,9 @@ export function resolveSearchRoute(target?: RouteTarget) {
   return resolveRouteTarget(target) === 'sp' ? '/sp/search' : '/search';
 }
 
-export function resolveSettingsRoute(target?: RouteTarget) {
-  return resolveRouteTarget(target) === 'sp' ? '/sp/settings' : '/settings';
+export function resolveSettingsRoute(target?: RouteTarget, anchor?: string) {
+  const route = resolveRouteTarget(target) === 'sp' ? '/sp/settings' : '/settings';
+  return anchor ? `${route}#${anchor}` : route;
 }
 
 export function resolveArtistRoute(artistId: string, target?: RouteTarget) {

@@ -339,6 +339,37 @@ mod tests {
     }
 
     #[test]
+    fn playback_use_asio_output_defaults_to_false_for_settings_without_it() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"outputDeviceId\": \"output:device-1\"\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, _) = store.snapshot();
+        assert!(!settings.playback.use_asio_output);
+    }
+
+    #[test]
+    fn playback_use_asio_output_loads_from_settings() {
+        let dir = tempdir().unwrap();
+        let path = app_settings_path(dir.path());
+        std::fs::write(
+            &path,
+            "{\n  \"version\": 1,\n  \"playback\": {\n    \"useAsioOutput\": true\n  }\n}\n",
+        )
+        .unwrap();
+
+        let store = AppSettingsStore::load(path).unwrap();
+        let (settings, origin) = store.snapshot();
+        assert!(settings.playback.use_asio_output);
+        assert_eq!(origin, crate::models::SettingsOrigin::Stored);
+    }
+
+    #[test]
     fn empty_playback_output_device_id_loads_as_none() {
         let dir = tempdir().unwrap();
         let path = app_settings_path(dir.path());

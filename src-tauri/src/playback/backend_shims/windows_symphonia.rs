@@ -31,7 +31,7 @@ use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 
 use crate::models::{
     normalize_output_device_id, normalize_volume, PlaybackActualStreamInfo, PlaybackCapabilities,
-    PlaybackOutputDevice, PlaybackTranscodingCodec,
+    PlaybackOutputDevice, PlaybackOutputHost, PlaybackTranscodingCodec,
 };
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
@@ -326,10 +326,23 @@ pub fn validate_output_device_id(output_device_id: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn list_output_devices() -> Result<Vec<PlaybackOutputDevice>, String> {
+pub fn list_output_devices(include_asio: bool) -> Result<Vec<PlaybackOutputDevice>, String> {
     let mut devices = Vec::new();
     append_windows_output_devices(&mut devices);
+    sort_output_devices(&mut devices);
 
+    // ASIO devices are appended after the WASAPI block rather than mixed into
+    // it, because they are a separate output path and the UI labels them as such.
+    if include_asio {
+        let mut asio_devices = asio_output_devices();
+        sort_output_devices(&mut asio_devices);
+        devices.append(&mut asio_devices);
+    }
+
+    Ok(devices)
+}
+
+fn sort_output_devices(devices: &mut [PlaybackOutputDevice]) {
     devices.sort_by(|left, right| {
         left.name
             .to_lowercase()
@@ -341,7 +354,65 @@ pub fn list_output_devices() -> Result<Vec<PlaybackOutputDevice>, String> {
             })
             .then_with(|| left.id.cmp(&right.id))
     });
-    Ok(devices)
+}
+
+/// ASIO output devices, enumerated at most once per process.
+///
+/// Enumeration loads and initialises every registered ASIO driver in turn, which
+/// is slow (drivers whose hardware is absent take time to fail) and hands brief
+/// control of unrelated audio hardware to drivers the user never selected. Worse,
+/// ASIO permits only one loaded driver at a time, so enumerating while playback
+/// is running through an ASIO device returns a truncated list. Caching the first
+/// result avoids all of that; the cost is that a device attached after launch is
+/// not picked up until the app restarts.
+#[cfg(feature = "windows-asio")]
+fn asio_output_devices() -> Vec<PlaybackOutputDevice> {
+    static CACHE: OnceLock<Vec<PlaybackOutputDevice>> = OnceLock::new();
+    CACHE.get_or_init(enumerate_asio_output_devices).clone()
+}
+
+#[cfg(not(feature = "windows-asio"))]
+fn asio_output_devices() -> Vec<PlaybackOutputDevice> {
+    Vec::new()
+}
+
+#[cfg(feature = "windows-asio")]
+fn enumerate_asio_output_devices() -> Vec<PlaybackOutputDevice> {
+    let host_id = cpal::HostId::Asio;
+    let host = match cpal::host_from_id(host_id) {
+        Ok(host) => host,
+        Err(error) => {
+            log::warn!("cpal: output host {host_id} is unavailable: {error}");
+            return Vec::new();
+        }
+    };
+    let devices = match host.output_devices() {
+        Ok(devices) => devices,
+        Err(error) => {
+            log::warn!("cpal: failed to enumerate {host_id} output devices: {error}");
+            return Vec::new();
+        }
+    };
+
+    let mut output = Vec::new();
+    for device in devices {
+        let id = match device.id() {
+            Ok(id) => id,
+            Err(error) => {
+                log::warn!("cpal: failed to read {host_id} output device id: {error}");
+                continue;
+            }
+        };
+        let (name, device_name) = output_device_names(&device, &id);
+        output.push(PlaybackOutputDevice {
+            id: id.to_string(),
+            name,
+            device_name,
+            host: PlaybackOutputHost::Asio,
+        });
+    }
+    log::info!("cpal: enumerated {} ASIO output device(s)", output.len());
+    output
 }
 
 fn append_windows_output_devices(output: &mut Vec<PlaybackOutputDevice>) {
@@ -374,6 +445,7 @@ fn append_windows_output_devices(output: &mut Vec<PlaybackOutputDevice>) {
             id: id.to_string(),
             name,
             device_name,
+            host: PlaybackOutputHost::Wasapi,
         });
     }
 }
@@ -439,17 +511,86 @@ fn resolve_cpal_output_device(output_device_id: Option<&str>) -> Result<cpal::De
     let device_id = cpal::DeviceId::from_str(output_device_id.as_str())
         .map_err(|error| format!("Audio output device error: invalid output device id: {error}"))?;
     let host_id = device_id.host();
-    if host_id != cpal::HostId::Wasapi {
+    if !is_supported_output_host(host_id) {
         return Err(format!(
             "Audio output device error: only listed Windows output devices are supported: {output_device_id}"
         ));
     }
+    #[cfg(feature = "windows-asio")]
+    if host_id == cpal::HostId::Asio {
+        return resolve_asio_output_device(output_device_id.as_str(), &device_id);
+    }
+
     let host = cpal::host_from_id(host_id).map_err(|error| {
         format!("Audio output device error: output host {host_id} is unavailable: {error}")
     })?;
     host.device_by_id(&device_id).ok_or_else(|| {
         format!("Audio output device error: output device is unavailable: {output_device_id}")
     })
+}
+
+/// Resolve an ASIO device, reusing the previous result for the same id.
+///
+/// Resolution loads and initialises the driver, which some drivers take seconds
+/// to do (measured: ~0.5ms for Audient, but 1.9-2.6s for ASIO4ALL), and it runs on
+/// every track load. ASIO device metadata does not change while the process runs,
+/// and reusing one device across successive streams is safe now that dropping a
+/// stream releases its buffer slot. The lock is deliberately held across the
+/// resolve: ASIO permits only one loaded driver at a time, so overlapping
+/// resolves would fail anyway.
+#[cfg(feature = "windows-asio")]
+fn resolve_asio_output_device(
+    output_device_id: &str,
+    device_id: &cpal::DeviceId,
+) -> Result<cpal::Device, String> {
+    static CACHE: OnceLock<Mutex<std::collections::HashMap<String, cpal::Device>>> = OnceLock::new();
+
+    let mut cache = CACHE
+        .get_or_init(|| Mutex::new(std::collections::HashMap::new()))
+        .lock()
+        .map_err(|_| "Audio output device error: ASIO device cache is poisoned.".to_string())?;
+    if let Some(device) = cache.get(output_device_id) {
+        return Ok(device.clone());
+    }
+
+    let host = cpal::host_from_id(cpal::HostId::Asio).map_err(|error| {
+        format!(
+            "Audio output device error: output host {} is unavailable: {error}",
+            cpal::HostId::Asio
+        )
+    })?;
+    let device = host.device_by_id(device_id).ok_or_else(|| {
+        format!("Audio output device error: output device is unavailable: {output_device_id}")
+    })?;
+    cache.insert(output_device_id.to_string(), device.clone());
+    Ok(device)
+}
+
+fn is_supported_output_host(host_id: cpal::HostId) -> bool {
+    #[cfg(feature = "windows-asio")]
+    {
+        matches!(host_id, cpal::HostId::Wasapi | cpal::HostId::Asio)
+    }
+
+    #[cfg(not(feature = "windows-asio"))]
+    {
+        host_id == cpal::HostId::Wasapi
+    }
+}
+
+fn is_asio_device(device_id: Option<&str>) -> bool {
+    #[cfg(feature = "windows-asio")]
+    {
+        device_id
+            .and_then(|value| cpal::DeviceId::from_str(value).ok())
+            .is_some_and(|device_id| device_id.host() == cpal::HostId::Asio)
+    }
+
+    #[cfg(not(feature = "windows-asio"))]
+    {
+        let _ = device_id;
+        false
+    }
 }
 
 fn symphonia_codec_registry() -> &'static symphonia::core::codecs::registry::CodecRegistry {
@@ -743,6 +884,7 @@ impl PlaybackBackend for SymphoniaPlaybackBackend {
                 PlaybackTranscodingCodec::Opus,
             ],
             output_device_selection: true,
+            asio_output: cfg!(feature = "windows-asio"),
         }
     }
 
@@ -2367,6 +2509,19 @@ mod tests {
     }
 
     #[test]
+    fn asio_output_channels_never_opens_a_mono_stream_on_a_stereo_capable_device() {
+        // A mono source must still reach both outputs; ASIO has no mixer to do it.
+        assert_eq!(asio_output_channels(1, 6), 2);
+        assert_eq!(asio_output_channels(1, 2), 2);
+        // Stereo and wider sources are passed through, bounded by the device.
+        assert_eq!(asio_output_channels(2, 6), 2);
+        assert_eq!(asio_output_channels(6, 6), 6);
+        assert_eq!(asio_output_channels(6, 2), 2);
+        // A genuinely mono-only device is still usable.
+        assert_eq!(asio_output_channels(2, 1), 1);
+    }
+
+    #[test]
     fn output_channel_mapping_handles_mono_downmix_and_extra_channels() {
         let mut mono = [0.0];
         map_source_frame(&[1.0, -1.0], &[1.0, -1.0], 0.0, &mut mono, 1.0);
@@ -2446,9 +2601,22 @@ fn build_keep_alive_stream(output_device_id: Option<&str>) -> Result<cpal::Strea
 /// (Re)open the keep-alive stream on `output_device_id`, replacing any existing
 /// one.  Best-effort: a failure is logged, not fatal — playback still works
 /// without it (only the fade-in mitigation is absent).
+///
+/// ASIO devices are skipped, for two reasons. An ASIO driver permits a single
+/// output stream, so a second one for keep-alive cannot be opened alongside the
+/// playback stream at all. And it is unnecessary: an ASIO driver switches buffers
+/// continuously for as long as its stream exists, and a paused stream writes
+/// silence into them, so the device is already held awake the way this stream
+/// holds a WASAPI endpoint awake. The device can still idle before the first
+/// track and after teardown, which is accepted: ASIO hardware is typically
+/// mains-powered rather than the power-managed USB/Bluetooth DACs this mitigates.
 fn refresh_keep_alive_stream(keep_alive: &mut Option<cpal::Stream>, output_device_id: Option<&str>) {
     // Drop the previous stream first so we don't briefly hold two on one device.
     *keep_alive = None;
+    if is_asio_device(output_device_id) {
+        log::info!("symphonia-cpal keep-alive: skipped for ASIO output device");
+        return;
+    }
     match build_keep_alive_stream(output_device_id) {
         Ok(stream) => *keep_alive = Some(stream),
         Err(error) => log::warn!("symphonia-cpal keep-alive: {error}"),
@@ -2464,11 +2632,22 @@ fn build_cpal_stream(
     output_device_id: Option<&str>,
 ) -> Result<cpal::Stream, String> {
     let device = resolve_cpal_output_device(output_device_id)?;
-    let sample_format = cpal::SampleFormat::F32;
-    let config = cpal::StreamConfig {
-        channels,
-        sample_rate,
-        buffer_size: cpal::BufferSize::Default,
+
+    // WASAPI runs in shared mode, so the source format can be requested verbatim
+    // and the Windows mixer adapts. ASIO has no mixer: the driver dictates the
+    // sample format and the channel count, and the requested rate reconfigures
+    // the device clock, so the config has to be negotiated against the driver.
+    let (config, sample_format) = if is_asio_device(output_device_id) {
+        select_asio_stream_config(&device, channels, sample_rate)?
+    } else {
+        (
+            cpal::StreamConfig {
+                channels,
+                sample_rate,
+                buffer_size: cpal::BufferSize::Default,
+            },
+            cpal::SampleFormat::F32,
+        )
     };
 
     log::info!(
@@ -2480,7 +2659,114 @@ fn build_cpal_stream(
         sample_format,
     );
 
-    build_cpal_stream_typed::<f32>(&device, config, stream_router, event_hub, active_tx)
+    // The output writer renders f32 internally and converts on the way out, so
+    // any of these formats resamples and remaps channels through the same path.
+    match sample_format {
+        cpal::SampleFormat::F32 => {
+            build_cpal_stream_typed::<f32>(&device, config, stream_router, event_hub, active_tx)
+        }
+        cpal::SampleFormat::I32 => {
+            build_cpal_stream_typed::<i32>(&device, config, stream_router, event_hub, active_tx)
+        }
+        cpal::SampleFormat::I24 => {
+            build_cpal_stream_typed::<cpal::I24>(&device, config, stream_router, event_hub, active_tx)
+        }
+        cpal::SampleFormat::I16 => {
+            build_cpal_stream_typed::<i16>(&device, config, stream_router, event_hub, active_tx)
+        }
+        other => Err(format!(
+            "Audio output device error: unsupported output sample format: {other}"
+        )),
+    }
+}
+
+/// Channel count to open an ASIO stream with for a given source.
+///
+/// Never fewer than two while the device has them, even for a mono source. ASIO
+/// has no mixer to spread a single channel across the outputs, so a one-channel
+/// stream would be heard from the first hardware output alone. WASAPI plays mono
+/// through both speakers because the Windows mixer upmixes it, and playback
+/// should not depend on which output path is selected. The output writer already
+/// duplicates a mono source across the channels it is given.
+// Kept out of the ASIO cfg so the rule stays covered by the default test run.
+#[cfg_attr(not(feature = "windows-asio"), allow(dead_code))]
+fn asio_output_channels(source_channels: u16, device_channels: u16) -> u16 {
+    source_channels.max(2).min(device_channels).max(1)
+}
+
+/// Negotiate a stream config against an ASIO driver.
+///
+/// ASIO accepts only the driver's own sample format, at most as many channels as
+/// it exposes, and only sample rates it reports as supported. Requesting the
+/// track's own rate is preferred because cpal switches the device clock to match,
+/// which keeps the signal path free of resampling.
+#[cfg(feature = "windows-asio")]
+fn select_asio_stream_config(
+    device: &cpal::Device,
+    source_channels: u16,
+    source_sample_rate: u32,
+) -> Result<(cpal::StreamConfig, cpal::SampleFormat), String> {
+    let default_config = device.default_output_config().map_err(|error| {
+        format!("Audio output device error: failed to query ASIO output config: {error}")
+    })?;
+    let sample_format = default_config.sample_format();
+    let device_channels = default_config.channels();
+    if device_channels == 0 {
+        return Err(
+            "Audio output device error: ASIO device reports no output channels.".to_string(),
+        );
+    }
+    let channels = asio_output_channels(source_channels, device_channels);
+
+    let supported: Vec<cpal::SupportedStreamConfigRange> = device
+        .supported_output_configs()
+        .map_err(|error| {
+            format!("Audio output device error: failed to query ASIO output configs: {error}")
+        })?
+        .filter(|range| range.channels() == channels)
+        .collect();
+
+    let supports = |rate: u32| {
+        supported
+            .iter()
+            .any(|range| range.min_sample_rate() <= rate && rate <= range.max_sample_rate())
+    };
+
+    let sample_rate = if supports(source_sample_rate) {
+        source_sample_rate
+    } else {
+        // Deliberately not `default_output_config().sample_rate()`: some drivers
+        // report 0 until a stream is running, and the value shifts whenever
+        // anything switches the device clock. The supported list is filtered by
+        // the driver's own can-do check, so pick the nearest rate from it.
+        supported
+            .iter()
+            .map(|range| range.max_sample_rate())
+            .min_by_key(|rate| rate.abs_diff(source_sample_rate))
+            .ok_or_else(|| {
+                format!(
+                    "Audio output device error: ASIO device supports no output config with {channels} channel(s)."
+                )
+            })?
+    };
+
+    Ok((
+        cpal::StreamConfig {
+            channels,
+            sample_rate,
+            buffer_size: cpal::BufferSize::Default,
+        },
+        sample_format,
+    ))
+}
+
+#[cfg(not(feature = "windows-asio"))]
+fn select_asio_stream_config(
+    _device: &cpal::Device,
+    _source_channels: u16,
+    _source_sample_rate: u32,
+) -> Result<(cpal::StreamConfig, cpal::SampleFormat), String> {
+    Err("Audio output device error: this build has no ASIO support.".to_string())
 }
 
 fn build_cpal_stream_typed<T>(

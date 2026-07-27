@@ -154,12 +154,40 @@ pub struct PlaybackActualStreamInfo {
     pub mime_type: Option<String>,
 }
 
+/// Audio API an output device is reached through.
+///
+/// ASIO devices are listed alongside WASAPI ones but are never interchangeable
+/// with them: they bypass the Windows mixer, so the UI labels them separately
+/// and system default only ever means WASAPI.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackOutputHost {
+    Wasapi,
+    Asio,
+}
+
+impl PlaybackOutputHost {
+    /// Host an output device id refers to.
+    ///
+    /// Ids are persisted in cpal's `"<host>:<device>"` form, so the host is part
+    /// of the stored value. `None` covers the system default, which has no id at
+    /// all, as well as ids naming a host this build does not know.
+    pub fn from_output_device_id(output_device_id: &str) -> Option<Self> {
+        match output_device_id.split_once(':')?.0 {
+            "wasapi" => Some(Self::Wasapi),
+            "asio" => Some(Self::Asio),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackOutputDevice {
     pub id: String,
     pub name: String,
     pub device_name: String,
+    pub host: PlaybackOutputHost,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]
@@ -174,6 +202,12 @@ pub struct PlaybackStatus {
     pub play_next_queue_len: u32,
     pub current_position_ms: u32,
     pub current_song_id: Option<String>,
+    /// Audio API the currently applied output device is reached through.
+    ///
+    /// `None` for the system default and for platforms without output device
+    /// selection. Reported because ASIO and WASAPI are otherwise indistinguishable
+    /// from the outside: the same device sounds the same either way.
+    pub output_host: Option<PlaybackOutputHost>,
     pub playback_error: Option<PlaybackError>,
     pub active_stream_info: Option<PlaybackStreamInfo>,
     pub prepared_stream_info: Option<PlaybackStreamInfo>,
@@ -211,6 +245,7 @@ impl PlaybackStatus {
             play_next_queue_len: 0,
             current_position_ms: 0,
             current_song_id: None,
+            output_host: None,
             playback_error: None,
             active_stream_info: None,
             prepared_stream_info: None,

@@ -1,5 +1,6 @@
 import { Component, createMemo, Show } from 'solid-js';
 import type { PlaybackActualStreamInfo } from '~/bindings';
+import { resolveSettingsRoute } from '~/features/navigation/routes';
 import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 
 interface PlaybackStatusTextProps {
@@ -58,6 +59,10 @@ const PlaybackStatusText: Component<PlaybackStatusTextProps> = (props) => {
     const info = actualStreamInfo();
     return info ? codecLabel(info) : null;
   });
+  // Only ASIO is named. The rest of this line describes the audio itself, which
+  // sounds identical whichever output path carries it, so the output path is
+  // worth calling out exactly when it is the one that bypasses the OS mixer.
+  const asioOutput = createMemo(() => playbackStatus()?.outputHost === 'asio');
 
   return (
     <Show when={actualStreamInfo()}>
@@ -67,6 +72,12 @@ const PlaybackStatusText: Component<PlaybackStatusTextProps> = (props) => {
           <Show when={codec()}>&nbsp;|&nbsp;</Show>
         </Show>
         <span class='text-secondary-text text-xs font-bold'>{codec() ?? 'unknown'}</span>
+        <Show when={asioOutput()}>
+          &nbsp;|&nbsp;
+          <a href={resolveSettingsRoute(undefined, 'playback')} class='text-accent text-xs font-bold'>
+            ASIO
+          </a>
+        </Show>
       </p>
     </Show>
   );

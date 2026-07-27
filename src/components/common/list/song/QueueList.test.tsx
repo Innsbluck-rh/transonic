@@ -81,6 +81,7 @@ function playbackStatus(queue: SongResponse[], currentIndex: number | null, over
     playNextQueueLen: 0,
     currentPositionMs: 0,
     currentSongId: currentIndex === null ? null : (queue[currentIndex]?.id ?? null),
+    outputHost: null,
     playbackError: null,
     activeStreamInfo: null,
     preparedStreamInfo: null,

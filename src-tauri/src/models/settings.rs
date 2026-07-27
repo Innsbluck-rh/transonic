@@ -53,6 +53,10 @@ pub struct PlaybackSettings {
     pub gapless_playback_enabled: bool,
     pub volume: f32,
     pub use_custom_output: bool,
+    /// Whether ASIO devices are offered in the custom output list. Off by default:
+    /// ASIO takes exclusive control of the device and bypasses the Windows mixer,
+    /// which is not what someone who has not asked for it should get.
+    pub use_asio_output: bool,
     pub output_device_id: Option<String>,
     pub stream_mode: PlaybackStreamMode,
     pub metered_network_transcoding_enabled: bool,
@@ -67,6 +71,7 @@ impl Default for PlaybackSettings {
             gapless_playback_enabled: true,
             volume: default_volume(),
             use_custom_output: false,
+            use_asio_output: false,
             output_device_id: None,
             stream_mode: PlaybackStreamMode::default(),
             metered_network_transcoding_enabled: false,
@@ -201,6 +206,8 @@ impl<'de> Deserialize<'de> for PlaybackSettings {
             #[serde(default)]
             use_custom_output: Option<bool>,
             #[serde(default)]
+            use_asio_output: bool,
+            #[serde(default)]
             output_device_id: Option<String>,
             #[serde(default)]
             stream_mode: PlaybackStreamMode,
@@ -225,6 +232,7 @@ impl<'de> Deserialize<'de> for PlaybackSettings {
                 .unwrap_or_else(|| raw.prebuffer_strategy.as_deref() == Some("next_track")),
             volume: normalize_volume_option(raw.volume),
             use_custom_output,
+            use_asio_output: raw.use_asio_output,
             output_device_id,
             stream_mode: raw.stream_mode,
             metered_network_transcoding_enabled: raw.metered_network_transcoding_enabled,
@@ -252,10 +260,25 @@ pub fn normalize_output_device_id(output_device_id: Option<String>) -> Option<St
 }
 
 pub fn effective_output_device_id(playback: &PlaybackSettings) -> Option<&str> {
-    playback
+    let output_device_id = playback
         .use_custom_output
         .then_some(playback.output_device_id.as_deref())
-        .flatten()
+        .flatten()?;
+    // A saved ASIO device is only honoured while ASIO output is enabled, so a
+    // settings file that still names one after the toggle was turned off does not
+    // quietly keep playing through it.
+    if !playback.use_asio_output && is_asio_output_device_id(output_device_id) {
+        return None;
+    }
+    Some(output_device_id)
+}
+
+/// Whether a saved output device id refers to an ASIO device.
+pub fn is_asio_output_device_id(output_device_id: &str) -> bool {
+    matches!(
+        super::playback::PlaybackOutputHost::from_output_device_id(output_device_id),
+        Some(super::playback::PlaybackOutputHost::Asio)
+    )
 }
 
 fn normalize_volume_option(volume: Option<f32>) -> f32 {
@@ -493,6 +516,34 @@ mod tests {
         assert_eq!(
             effective_output_device_id(&playback),
             Some("output:device-1")
+        );
+    }
+
+    #[test]
+    fn effective_output_device_id_ignores_asio_device_while_asio_output_is_disabled() {
+        let mut playback = PlaybackSettings::default();
+        playback.use_custom_output = true;
+        playback.output_device_id = Some("asio:Audient USB Audio ASIO Driver".to_string());
+
+        assert_eq!(effective_output_device_id(&playback), None);
+
+        playback.use_asio_output = true;
+
+        assert_eq!(
+            effective_output_device_id(&playback),
+            Some("asio:Audient USB Audio ASIO Driver")
+        );
+    }
+
+    #[test]
+    fn effective_output_device_id_keeps_wasapi_device_while_asio_output_is_disabled() {
+        let mut playback = PlaybackSettings::default();
+        playback.use_custom_output = true;
+        playback.output_device_id = Some("wasapi:{0.0.0.00000000}.{device}".to_string());
+
+        assert_eq!(
+            effective_output_device_id(&playback),
+            Some("wasapi:{0.0.0.00000000}.{device}")
         );
     }
 }

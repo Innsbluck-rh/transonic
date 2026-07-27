@@ -217,9 +217,22 @@ async playbackGetState() : Promise<Result<PlaybackStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async playbackGetOutputDevices() : Promise<Result<PlaybackOutputDevice[], string>> {
+/**
+ * ASIO devices are only enumerated when asked for, because enumeration loads
+ * every registered ASIO driver in turn: it costs seconds and briefly hands
+ * control of unrelated audio hardware to drivers nobody selected.
+ * 
+ * This is a query parameter rather than a read of the saved setting on purpose.
+ * The caller updates its settings store optimistically and only then awaits the
+ * settings command, so reading the stored value here answered from the previous
+ * state and the list stayed without ASIO devices until something else forced a
+ * refetch. Whether an ASIO device may actually be *played* is a separate
+ * question, still decided against the saved setting by
+ * `effective_output_device_id`.
+ */
+async playbackGetOutputDevices(includeAsio: boolean) : Promise<Result<PlaybackOutputDevice[], string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("playback_get_output_devices") };
+    return { status: "ok", data: await TAURI_INVOKE("playback_get_output_devices", { includeAsio }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -448,19 +461,47 @@ export type MusicFoldersResponse = { musicFolders: MusicFolderSummary[] }
 export type OpenSubsonicExtension = { name: string; versions: number[] }
 export type PlaybackActualStreamInfo = { codec: string | null; codecProfile: string | null; sampleRate: number | null; channels: number | null; bitDepth: number | null; bitrate: number | null; sampleFormat: string | null; mimeType: string | null }
 export type PlaybackAppendToQueueRequest = { items: QueueSource[] }
-export type PlaybackCapabilities = { gaplessPlayback: boolean; transcodingCodecs: PlaybackTranscodingCodec[]; outputDeviceSelection: boolean }
+export type PlaybackCapabilities = { gaplessPlayback: boolean; transcodingCodecs: PlaybackTranscodingCodec[]; outputDeviceSelection: boolean; 
+/**
+ * Whether this build can list and open ASIO output devices at all. ASIO is
+ * an opt-in Cargo feature, so most builds report `false` and the UI then
+ * hides every ASIO control rather than offering something that cannot work.
+ */
+asioOutput: boolean }
 export type PlaybackError = { message: string; handled: boolean }
 export type PlaybackInsertAfterCurrentRequest = { items: QueueSource[] }
 export type PlaybackMoveQueueIndexRequest = { fromIndex: number; toIndex: number }
-export type PlaybackOutputDevice = { id: string; name: string; deviceName: string }
+export type PlaybackOutputDevice = { id: string; name: string; deviceName: string; host: PlaybackOutputHost }
+/**
+ * Audio API an output device is reached through.
+ * 
+ * ASIO devices are listed alongside WASAPI ones but are never interchangeable
+ * with them: they bypass the Windows mixer, so the UI labels them separately
+ * and system default only ever means WASAPI.
+ */
+export type PlaybackOutputHost = "wasapi" | "asio"
 export type PlaybackPlayQueueIndexRequest = { index: number }
 export type PlaybackRemoveQueueIndexRequest = { index: number }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetPositionRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { items: QueueSource[]; currentIndex: number | null; autoPlay: boolean }
 export type PlaybackSetVolumeRequest = { volume: number }
-export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number; useCustomOutput: boolean; outputDeviceId: string | null; streamMode: PlaybackStreamMode; meteredNetworkTranscodingEnabled: boolean; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
-export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId: string | null; playbackError: PlaybackError | null; activeStreamInfo: PlaybackStreamInfo | null; preparedStreamInfo: PlaybackStreamInfo | null; lastStreamRequest: PlaybackStreamInfo | null; actualStreamInfo: PlaybackActualStreamInfo | null }
+export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number; useCustomOutput: boolean; 
+/**
+ * Whether ASIO devices are offered in the custom output list. Off by default:
+ * ASIO takes exclusive control of the device and bypasses the Windows mixer,
+ * which is not what someone who has not asked for it should get.
+ */
+useAsioOutput: boolean; outputDeviceId: string | null; streamMode: PlaybackStreamMode; meteredNetworkTranscodingEnabled: boolean; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
+export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId: string | null; 
+/**
+ * Audio API the currently applied output device is reached through.
+ * 
+ * `None` for the system default and for platforms without output device
+ * selection. Reported because ASIO and WASAPI are otherwise indistinguishable
+ * from the outside: the same device sounds the same either way.
+ */
+outputHost: PlaybackOutputHost | null; playbackError: PlaybackError | null; activeStreamInfo: PlaybackStreamInfo | null; preparedStreamInfo: PlaybackStreamInfo | null; lastStreamRequest: PlaybackStreamInfo | null; actualStreamInfo: PlaybackActualStreamInfo | null }
 export type PlaybackStreamInfo = { requestKind: PlaybackStreamRequestKind; songId: string; songPath: string | null; sourceContentType: string | null; sourceSuffix: string | null; sourceBitRate: number | null; sourceSize: number | null; streamMode: PlaybackStreamMode; rawStream: boolean; streamFormat: string | null; streamMaxBitRate: number | null; streamOffsetSeconds: number | null; requestedPositionMs: number; localStartPositionMs: number; autoplay: boolean; streamEndpoint: string; streamUrl: string }
 export type PlaybackStreamMode = "raw" | "transcoding"
 export type PlaybackStreamRequestKind = "load" | "prepare" | "activate_prepared"

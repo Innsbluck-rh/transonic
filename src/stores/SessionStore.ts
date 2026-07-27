@@ -14,6 +14,7 @@ const DEFAULT_SESSION_STORE: SessionStore = {
     gaplessPlayback: false,
     transcodingCodecs: ['mp3'],
     outputDeviceSelection: false,
+    asioOutput: false,
   },
 };
 
