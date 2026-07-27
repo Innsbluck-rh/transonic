@@ -1,6 +1,8 @@
 [workspace]
 members = ["crates/opensubsonic-client"]
-exclude = ["crates/asio-sys"]
+# Vendored patch crate, not a member: kept excluded so `cargo test`/`cargo run
+# --example` can be run inside `crates/cpal` while verifying local ASIO changes.
+exclude = ["crates/cpal"]
 resolver = "2"
 
 [workspace.dependencies]
@@ -32,7 +34,6 @@ default-run = "transonic"
 windows-asio = ["cpal/asio"]
 
 [patch.crates-io]
-asio-sys = { path = "crates/asio-sys" }
 cpal = { path = "crates/cpal" }
 
 [lib]

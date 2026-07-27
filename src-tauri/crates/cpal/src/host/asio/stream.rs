@@ -79,6 +79,8 @@ pub struct Stream {
     state: Arc<AtomicU8>,
     driver: Arc<sys::Driver>,
     asio_streams: Arc<Mutex<sys::AsioStreams>>,
+    /// Which slot of `asio_streams` this stream owns, so `Drop` can release it.
+    is_input: bool,
     callback_id: sys::BufferCallbackId,
     driver_event_callback_id: sys::DriverEventCallbackId,
     time_base: Arc<TimeBase>,
@@ -448,6 +450,7 @@ impl Device {
             state,
             driver,
             asio_streams,
+            is_input: true,
             callback_id,
             driver_event_callback_id,
             time_base: Arc::clone(&time_base),
@@ -543,11 +546,6 @@ impl Device {
         let time_base_cb = Arc::clone(&time_base);
 
         let callback_id = driver.add_callback(move |callback_info| unsafe {
-            // If not playing, return early.
-            if StreamState::load(&state_cb, Ordering::Acquire) != StreamState::Playing {
-                return;
-            }
-
             // Guard against non-conformant drivers (e.g. Focusrite USB ASIO, ReaRoute) that
             // fire the buffer callback multiple times per buffer cycle with the same buffer
             // index.
@@ -575,10 +573,6 @@ impl Device {
                 );
             }
 
-            let hardware_output_latency = hardware_output_latency.load(Ordering::Relaxed) as usize;
-
-            let callback_instant = time_base_cb.to_stream_instant(callback_info.system_time);
-
             // Silence the ASIO buffer that is about to be used.
             //
             // Check if any other callbacks have already silenced the buffer associated with
@@ -589,6 +583,28 @@ impl Device {
             if silence {
                 current_callback_flag.store(callback_info.callback_flag, Ordering::Release);
             }
+
+            // A paused stream must keep writing silence rather than return early.
+            // The driver goes on switching between its two buffers for as long as
+            // it is started, so buffers left untouched are played again, and the
+            // last audible frames are heard looping at the buffer-switch rate.
+            // Silencing is still routed through the flag above so that another
+            // stream playing into the same output buffers is not overwritten.
+            if StreamState::load(&state_cb, Ordering::Acquire) != StreamState::Playing {
+                if silence {
+                    silence_asio_output_buffers(
+                        asio_stream,
+                        callback_info.buffer_index as usize,
+                        num_channels as usize,
+                        sample_format,
+                    );
+                }
+                return;
+            }
+
+            let hardware_output_latency = hardware_output_latency.load(Ordering::Relaxed) as usize;
+
+            let callback_instant = time_base_cb.to_stream_instant(callback_info.system_time);
 
             /// 1. Render the given callback to the given buffer of interleaved samples.
             /// 2. If required, silence the ASIO buffer.
@@ -831,6 +847,7 @@ impl Device {
             state,
             driver,
             asio_streams,
+            is_input: false,
             callback_id,
             driver_event_callback_id,
             time_base: Arc::clone(&time_base),
@@ -1086,6 +1103,19 @@ impl Drop for Stream {
         self.driver.remove_callback(self.callback_id);
         self.driver
             .remove_event_callback(self.driver_event_callback_id);
+
+        // Release the buffer slot this stream owned. ASIO buffers are disposed
+        // when the driver is destroyed, so leaving them recorded on the device
+        // makes the next stream built from that same device treat them as live:
+        // buffer creation is skipped and `start` then fails. This mirrors the
+        // rollback the `start` failure path already performs.
+        if let Ok(mut streams) = self.asio_streams.lock() {
+            if self.is_input {
+                streams.input = None;
+            } else {
+                streams.output = None;
+            }
+        }
     }
 }
 
@@ -1207,6 +1237,23 @@ unsafe fn asio_channel_slice<T>(
     let buff_ptr: *const T =
         asio_stream.buffer_infos[channel_index].buffers[buffer_index] as *const _;
     std::slice::from_raw_parts(buff_ptr, channel_length)
+}
+
+/// Fill the ASIO output buffers selected by `buffer_index` with silence.
+///
+/// A zero bit pattern is silence for every sample type ASIO can report, and for
+/// either endianness, so this can work on raw bytes without knowing the format.
+unsafe fn silence_asio_output_buffers(
+    asio_stream: &mut sys::AsioStream,
+    buffer_index: usize,
+    n_channels: usize,
+    sample_format: SampleFormat,
+) {
+    let len_bytes = asio_stream.buffer_size as usize * sample_format.sample_size();
+    for channel_index in 0..n_channels {
+        asio_channel_slice_mut::<u8>(asio_stream, buffer_index, channel_index, Some(len_bytes))
+            .fill(0);
+    }
 }
 
 /// Shorthand for retrieving the asio buffer slice associated with a channel.

@@ -60,6 +60,25 @@ impl HostTrait for Host {
         Devices::new(self.asio.clone())
     }
 
+    /// Load only the requested driver instead of walking the whole driver list.
+    ///
+    /// The default trait implementation enumerates, which for ASIO means loading
+    /// and destroying every driver until the id matches. That is slow (drivers
+    /// for absent hardware take time to fail) and it briefly hands control of
+    /// unrelated audio hardware to drivers the caller never asked for. An ASIO
+    /// `DeviceId` carries the driver name, so the driver can be loaded directly.
+    fn device_by_id(&self, id: &DeviceId) -> Option<Self::Device> {
+        if id.host() != crate::platform::HostId::Asio {
+            return None;
+        }
+        com::com_initialized();
+        let name = id.id();
+        // `load_driver` matches on the exact name enumeration reported, so an id
+        // from a different host or a stale saved id simply fails to load here.
+        let driver = self.asio.load_driver(name).ok()?;
+        Device::from_loaded_driver(name.to_string(), &driver)
+    }
+
     fn default_input_device(&self) -> Option<Self::Device> {
         // ASIO has no concept of a default device, so just use the first.
         self.input_devices().ok().and_then(|mut ds| ds.next())
