@@ -3539,6 +3539,7 @@ mod tests {
             gapless_playback,
             transcoding_codecs,
             output_device_selection: false,
+            asio_output: false,
         }
     }
 

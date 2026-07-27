@@ -35,6 +35,7 @@ function settings(overrides: Partial<AppSettings['playback']> = {}): AppSettings
       gaplessPlaybackEnabled: false,
       volume: 1,
       useCustomOutput: false,
+      useAsioOutput: false,
       outputDeviceId: null,
       streamMode: 'raw',
       meteredNetworkTranscodingEnabled: false,
@@ -139,11 +140,13 @@ describe('PlaybackSettings', () => {
           id: 'output:speakers',
           name: 'Speakers (Realtek Audio)',
           deviceName: 'Realtek Audio',
+          host: 'wasapi',
         },
         {
           id: 'output:headphones',
           name: 'Headphones',
           deviceName: 'USB DAC',
+          host: 'wasapi',
         },
       ],
     });
@@ -198,6 +201,119 @@ describe('PlaybackSettings', () => {
       }),
     });
     expect(findCustomOutputSelect(root)).toBeUndefined();
+  });
+
+  it('offers ASIO devices only once ASIO output is enabled and labels them', async () => {
+    osMocks.platform.mockReturnValue('windows');
+    setSessionStore('playbackCapabilities', {
+      gaplessPlayback: false,
+      transcodingCodecs: ['mp3'],
+      outputDeviceSelection: true,
+      asioOutput: true,
+    });
+    // Mirrors the backend, which leaves ASIO devices out unless the request asks
+    // for them. A mock that always returns them would pass even if enabling ASIO
+    // never triggered a refetch, which is exactly the bug this covers.
+    vi.mocked(commands.playbackGetOutputDevices).mockImplementation(async (includeAsio) => ({
+      status: 'ok',
+      data: [
+        {
+          id: 'wasapi:speakers',
+          name: 'Speakers (Realtek Audio)',
+          deviceName: 'Realtek Audio',
+          host: 'wasapi' as const,
+        },
+        ...(includeAsio
+          ? [
+              {
+                id: 'asio:Audient USB Audio ASIO Driver',
+                name: 'Audient USB Audio ASIO Driver',
+                deviceName: 'Audient USB Audio ASIO Driver',
+                host: 'asio' as const,
+              },
+            ]
+          : []),
+      ],
+    }));
+
+    const root = renderPlaybackSettings(settings({ useCustomOutput: true }));
+    await flushPromises();
+    await flushPromises();
+
+    const optionLabels = () => Array.from(findCustomOutputSelect(root)!.options).map((option) => option.textContent);
+    expect(optionLabels()).toEqual(['System Default', 'Speakers (Realtek Audio)']);
+
+    const asioCheckbox = Array.from(root.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')).find((input) =>
+      input.parentElement?.textContent?.includes('Use ASIO Output')
+    );
+    expect(asioCheckbox).toBeDefined();
+
+    asioCheckbox!.checked = true;
+    asioCheckbox!.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(commands.settingsUpdate).toHaveBeenLastCalledWith({
+      settings: expect.objectContaining({
+        playback: expect.objectContaining({
+          useAsioOutput: true,
+          outputDeviceId: null,
+        }),
+      }),
+    });
+    expect(optionLabels()).toEqual(['System Default', 'Speakers (Realtek Audio)', 'ASIO: Audient USB Audio ASIO Driver']);
+
+    // Turning it back off has to drop them again, which likewise needs a refetch.
+    asioCheckbox!.checked = false;
+    asioCheckbox!.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushPromises();
+    await flushPromises();
+
+    expect(optionLabels()).toEqual(['System Default', 'Speakers (Realtek Audio)']);
+  });
+
+  it('resets ASIO output when custom output is switched off', async () => {
+    osMocks.platform.mockReturnValue('windows');
+    setSessionStore('playbackCapabilities', {
+      gaplessPlayback: false,
+      transcodingCodecs: ['mp3'],
+      outputDeviceSelection: true,
+      asioOutput: true,
+    });
+
+    const root = renderPlaybackSettings(settings({ useCustomOutput: true, useAsioOutput: true }));
+    await flushPromises();
+
+    const useCustomOutput = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    useCustomOutput!.checked = false;
+    useCustomOutput!.dispatchEvent(new Event('change', { bubbles: true }));
+    await flushPromises();
+
+    expect(commands.settingsUpdate).toHaveBeenLastCalledWith({
+      settings: expect.objectContaining({
+        playback: expect.objectContaining({
+          useCustomOutput: false,
+          useAsioOutput: false,
+          outputDeviceId: null,
+        }),
+      }),
+    });
+  });
+
+  it('hides the ASIO output toggle when the build has no ASIO support', async () => {
+    osMocks.platform.mockReturnValue('windows');
+    setSessionStore('playbackCapabilities', {
+      gaplessPlayback: false,
+      transcodingCodecs: ['mp3'],
+      outputDeviceSelection: true,
+      asioOutput: false,
+    });
+
+    const root = renderPlaybackSettings(settings({ useCustomOutput: true }));
+    await flushPromises();
+
+    expect(root.textContent).toContain('Use Custom Output');
+    expect(root.textContent).not.toContain('Use ASIO Output');
   });
 
   it('keeps the custom output checkbox interactive while devices are loading', async () => {

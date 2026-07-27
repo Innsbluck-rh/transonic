@@ -164,14 +164,17 @@ pub(crate) fn create_playback_controller(
     panic!("Android playback runtime state was not registered before controller setup.")
 }
 
-pub(crate) fn list_output_devices() -> Result<Vec<PlaybackOutputDevice>, String> {
+pub(crate) fn list_output_devices(
+    include_asio: bool,
+) -> Result<Vec<PlaybackOutputDevice>, String> {
     #[cfg(target_os = "windows")]
     {
-        return backend_shims::list_output_devices();
+        return backend_shims::list_output_devices(include_asio);
     }
 
     #[cfg(not(target_os = "windows"))]
     {
+        let _ = include_asio;
         Ok(Vec::new())
     }
 }

@@ -154,12 +154,25 @@ pub struct PlaybackActualStreamInfo {
     pub mime_type: Option<String>,
 }
 
+/// Audio API an output device is reached through.
+///
+/// ASIO devices are listed alongside WASAPI ones but are never interchangeable
+/// with them: they bypass the Windows mixer, so the UI labels them separately
+/// and system default only ever means WASAPI.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PlaybackOutputHost {
+    Wasapi,
+    Asio,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct PlaybackOutputDevice {
     pub id: String,
     pub name: String,
     pub device_name: String,
+    pub host: PlaybackOutputHost,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type, Event)]

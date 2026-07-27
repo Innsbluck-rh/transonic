@@ -163,6 +163,7 @@ impl PlaybackBackend for MfPlaybackBackend {
                 PlaybackTranscodingCodec::Flac,
             ],
             output_device_selection: false,
+            asio_output: false,
         }
     }
 

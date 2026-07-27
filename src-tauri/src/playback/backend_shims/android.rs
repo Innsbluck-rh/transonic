@@ -159,6 +159,7 @@ impl PlaybackBackend for AndroidPlaybackBackend {
                 PlaybackTranscodingCodec::Opus,
             ],
             output_device_selection: false,
+            asio_output: false,
         }
     }
 
