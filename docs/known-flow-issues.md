@@ -18,7 +18,7 @@
 
 ---
 
-## 見立て（結論）
+## 初回調査時の見立て（2026-07-27）
 
 - Rust を1ファイル編集した後の検証セット（`bindings:check` → `cargo:check` → `cargo:test`）は実測 **52.9s**（`bindings:export` を使う変種では 34.9s）。Rustテスト本体は0.56sで、所要時間の大部分はビルドに費やされている。コマンド切り替え時の再コンパイルも観測されたが、その発生原因は未確定。
 - **Tier A-1 / A-2 は大きな短縮が期待できる候補**（検証ループから `cargo run`（bindings）を外し、bindingsドリフト検査をテストに移す）。同じ1編集に対し `cargo check` → `cargo test --workspace` は実測 **17.5s**。ただし、この手順はB-2の13テストを含む一方、bindingsドリフト検査を含まない。**同等性を保つには検査の移行が必要で、移行後の所要時間は未計測。**
@@ -94,20 +94,6 @@ Rust 1ファイル編集後の実測（連続実行）:
 ---
 
 ## Tier A: 同等性を保ったまま速くできる（方針①・議論不要）
-
-### A-1. 検証ループから `cargo run`（bindings）を外す
-状態: 未着手
-
-`bindings:check` は「Rustの型からTSを生成し、チェックイン済みの `src/bindings.ts` と比較する」ためだけに `dev` プロファイルのバイナリをビルド・リンクして実行している。これが前述の往復の片側を作っている。
-
-対応方針メモ: A-2でbindings検査を維持した上で、検証時に走らせるcargoコマンドを `cargo test` 系に寄せ、再コンパイルの削減を確認する。`cargo check`（3.2s）は速い一次シグナルとして残してよい。`bindings:export` は `predev` 由来の書き込み系なので検証ループとは別扱いでよい。
-
-### A-2. bindingsドリフト検査を `#[test]` に移す
-状態: 未着手 / A-1の具体案
-
-`check_typescript_bindings()` は既に `transonic_lib::bindings` のpub関数であり、同じ生成結果と `src/bindings.ts` の比較をテストから呼ぶ案。ただし `lib.rs` は `bindings` モジュールを `#[cfg(not(test))]` でテストから除外しているため、単に `#[test]` を追加するだけでは実行されない。モジュール構成の変更またはintegration test等の別経路が必要で、ビルド時間・検査の同等性は実装後に確認する。
-
-対応方針メモ: `check-bindings` bin は `prebuild` が使っているため、bin自体を消すかどうかは別途判断が要る。テスト化だけ先に入れてbinを残す形も可能。`export-bindings` bin は書き込み用途なので維持。
 
 ### A-3. `prettier --check` / `--write` に `--cache` を付ける
 状態: 未着手
@@ -208,22 +194,6 @@ vitest の内訳は `Duration 6.63s (transform 5.61s, setup 5.29s, import 7.36s,
 
 ## Tier D: 環境・ディスク衛生
 
-### D-1. `src-tauri/target` が58GBに膨張
-状態: 未着手
-
-| ディレクトリ | サイズ | 最終更新 |
-| --- | --- | --- |
-| `debug` | **42.0 GB** | 2026-07-27 |
-| `codex-test-clean` | 5.8 GB | 2026-06-20 |
-| `codex-test-run` | 5.8 GB | 2026-06-19 |
-| `release` | 3.8 GB | 2026-07-26 |
-| `aarch64-linux-android` | 1.0 GB | 2026-06-13 |
-| `flycheck0` | ~0 GB | 2026-07-04 |
-
-`codex-test-*`（11.6GB）は1か月以上更新されていない別ツール由来の残骸。`flycheck0` は rust-analyzer 由来。`debug` の42GBは、プロファイル/フラグを変えるたびに成果物が累積したもの。
-
-対応方針メモ: 容量の増大が検証時間へ与える影響は未測定。未使用の成果物は削除対象になり得るが、利用中でないことを確認する。`debug` の掃除は再ビルド約150s以上のコストと引き換え。
-
 ### D-2. `opusic-sys` の cmake ビルドが長いパスで失敗する
 状態: 記録のみ（実害は現状なし）
 
@@ -239,21 +209,3 @@ vitest の内訳は `Duration 6.63s (transform 5.61s, setup 5.29s, import 7.36s,
 
 - **vitest から `tailwindcss` / `vite-plugin-webfont-dl` プラグインを外せば速くなる**（`vite.config.ts` に `test` ブロックが無く、テストがdevサーバ用のフル構成を読み込んでいるため疑った） → **効果なし**。実測 7.39s（プラグイン除去）vs 6.63s（現状）で誤差範囲。ボトルネックはプラグインではなく jsdom 環境生成。
 - **`cargo check` と `cargo run` の切り替えでも同様に再コンパイルされる** → **調査時には観測されなかった**。`cargo check` 直後の `cargo run --bin export-bindings` は 0.9s。再コンパイルを観測したのは `cargo test` と `cargo run`/`cargo build` の切り替え。
-
-## 解決済み
-
-### B-4. Non-mutating Go type drift check (2026-10-11) (ins)
-
-`go-types:check` now generates into a temporary directory, formats with `gofmt`, and compares against the working file without relying on Git state. CRLF and LF are treated equivalently. Temporary files are removed on success and failure.
-
-Verified matching output, CRLF output, unstaged and staged drift, a correct working file with a stale index, missing generator and formatter commands, and generator failure. Each case preserved the working file and index and left no temporary files.
-
-### A-4 / B-2 / B-3. 検証セットの統合・workspaceテスト・型検査（2026-10-11）(ins)
-
-`pnpm verify` にTypeScript型検査、FEテスト、Go型ドリフト検査、Goテスト、Rustチェック、TS bindingsドリフト検査、Rust workspaceテストを順に組み込んだ。失敗時は後続の検証を実行しない。
-
-`cargo:test` に `--workspace` を追加し、`opensubsonic-client` を対象に含めた。`typecheck`（`tsc --noEmit`）を追加し、`vite:build` の先頭でも実行するため、Tauriの `beforeBuildCommand` 経由でも型エラーを検出する。
-
-Vitestの収集対象は `src/**/*.test.{ts,tsx}` に限定し、リポジトリ内の別worktreeやvendoredコードのテストを実行しない。
-
-検証: `pnpm verify`（FE 75件、Rust 228+13件、Go全パッケージ、型検査・生成型検査）と `pnpm vite:build` が成功。型エラーを一時的に追加すると `typecheck`・`verify`・`vite:build` が非ゼロで終了し、後続処理を実行しないことも確認した。

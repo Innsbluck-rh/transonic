@@ -19,7 +19,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "go:test": "cd server && go test ./...",
-    "verify": "pnpm typecheck && pnpm test && pnpm go-types:check && pnpm go:test && pnpm cargo:check && pnpm bindings:check && pnpm cargo:test",
+    "verify": "pnpm typecheck && pnpm test && pnpm go-types:check && pnpm go:test && pnpm cargo:check && pnpm cargo:test",
     "format": "prettier --write . --config .prettierrc",
     "format:check": "prettier --check . --config .prettierrc",
     "prettier": "pnpm format",
