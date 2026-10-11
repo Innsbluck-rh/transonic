@@ -194,22 +194,6 @@ vitest の内訳は `Duration 6.63s (transform 5.61s, setup 5.29s, import 7.36s,
 
 ## Tier D: 環境・ディスク衛生
 
-### D-1. `src-tauri/target` が58GBに膨張
-状態: 未着手
-
-| ディレクトリ | サイズ | 最終更新 |
-| --- | --- | --- |
-| `debug` | **42.0 GB** | 2026-07-27 |
-| `codex-test-clean` | 5.8 GB | 2026-06-20 |
-| `codex-test-run` | 5.8 GB | 2026-06-19 |
-| `release` | 3.8 GB | 2026-07-26 |
-| `aarch64-linux-android` | 1.0 GB | 2026-06-13 |
-| `flycheck0` | ~0 GB | 2026-07-04 |
-
-`codex-test-*`（11.6GB）は1か月以上更新されていない別ツール由来の残骸。`flycheck0` は rust-analyzer 由来。`debug` の42GBは、プロファイル/フラグを変えるたびに成果物が累積したもの。
-
-対応方針メモ: 容量の増大が検証時間へ与える影響は未測定。未使用の成果物は削除対象になり得るが、利用中でないことを確認する。`debug` の掃除は再ビルド約150s以上のコストと引き換え。
-
 ### D-2. `opusic-sys` の cmake ビルドが長いパスで失敗する
 状態: 記録のみ（実害は現状なし）
 
@@ -225,31 +209,3 @@ vitest の内訳は `Duration 6.63s (transform 5.61s, setup 5.29s, import 7.36s,
 
 - **vitest から `tailwindcss` / `vite-plugin-webfont-dl` プラグインを外せば速くなる**（`vite.config.ts` に `test` ブロックが無く、テストがdevサーバ用のフル構成を読み込んでいるため疑った） → **効果なし**。実測 7.39s（プラグイン除去）vs 6.63s（現状）で誤差範囲。ボトルネックはプラグインではなく jsdom 環境生成。
 - **`cargo check` と `cargo run` の切り替えでも同様に再コンパイルされる** → **調査時には観測されなかった**。`cargo check` 直後の `cargo run --bin export-bindings` は 0.9s。再コンパイルを観測したのは `cargo test` と `cargo run`/`cargo build` の切り替え。
-
-## 解決済み
-
-### B-4. Non-mutating Go type drift check (2026-10-11) (ins)
-
-`go-types:check` now generates into a temporary directory, formats with `gofmt`, and compares against the working file without relying on Git state. CRLF and LF are treated equivalently. Temporary files are removed on success and failure.
-
-Verified matching output, CRLF output, unstaged and staged drift, a correct working file with a stale index, missing generator and formatter commands, and generator failure. Each case preserved the working file and index and left no temporary files.
-
-### A-4 / B-2 / B-3. 検証セットの統合・workspaceテスト・型検査（2026-10-11）(ins)
-
-`pnpm verify` にTypeScript型検査、FEテスト、Go型ドリフト検査、Goテスト、Rustチェック、TS bindingsドリフト検査、Rust workspaceテストを順に組み込んだ。失敗時は後続の検証を実行しない。
-
-`cargo:test` に `--workspace` を追加し、`opensubsonic-client` を対象に含めた。`typecheck`（`tsc --noEmit`）を追加し、`vite:build` の先頭でも実行するため、Tauriの `beforeBuildCommand` 経由でも型エラーを検出する。
-
-Vitestの収集対象は `src/**/*.test.{ts,tsx}` に限定し、リポジトリ内の別worktreeやvendoredコードのテストを実行しない。
-
-検証: `pnpm verify`（FE 75件、Rust 228+13件、Go全パッケージ、型検査・生成型検査）と `pnpm vite:build` が成功。型エラーを一時的に追加すると `typecheck`・`verify`・`vite:build` が非ゼロで終了し、後続処理を実行しないことも確認した。
-
-### A-1 / A-2. bindingsドリフト検査をRustテストへ統合（2026-10-11）(ins)
-
-`check-bindings` バイナリに `typescript_bindings_are_up_to_date` テストを追加し、既存の `check_typescript_bindings()` を呼ぶ。通常ビルドのライブラリと同じ生成・比較処理を使い、`pnpm cargo:test` のworkspaceテストで実行する。`pnpm verify` から独立した `bindings:check` 呼び出しを除き、検証ループ内の `cargo run` をなくした。単独検査と `prebuild` 用の `bindings:check`、書き込み用の `bindings:export` は維持する。
-
-テストをバイナリ内に置くのは、WindowsでTauriのアプリケーションマニフェストをテスト実行ファイルにも適用するため。ライブラリ単体テストおよび統合テストで同じ検査関数を呼んだ構成では、テスト開始前に `STATUS_ENTRYPOINT_NOT_FOUND` で終了した。バイナリ内のテストでは正常に実行できた。
-
-検証: `pnpm verify` が成功（FE 75件、Rust 228+13+1件、Go全パッケージ、型検査・生成型検査）。意図的なbindingsのずれを非ゼロ終了で検出し、検査が対象ファイルを書き換えないこと、CRLFのbindingsも受け入れることを確認した。
-
-所要時間（Windows、2026-10-11）: `controller.rs` のmtime更新後、変更前の `cargo:check` → `bindings:check` → `cargo:test` は42.5秒。変更後の `cargo:check` → `cargo:test` は初回87.5秒、全体検証後に同じmtime更新で再測定すると26.5秒だった。変更前はビルドロック待ちも記録され、変更後も測定値の差が大きいため、安定した短縮幅はこの測定では確定できない。
