@@ -18,7 +18,7 @@
 
 ---
 
-## 見立て（結論）
+## 初回調査時の見立て（2026-07-27）
 
 - Rust を1ファイル編集した後の検証セット（`bindings:check` → `cargo:check` → `cargo:test`）は実測 **52.9s**（`bindings:export` を使う変種では 34.9s）。Rustテスト本体は0.56sで、所要時間の大部分はビルドに費やされている。コマンド切り替え時の再コンパイルも観測されたが、その発生原因は未確定。
 - **Tier A-1 / A-2 は大きな短縮が期待できる候補**（検証ループから `cargo run`（bindings）を外し、bindingsドリフト検査をテストに移す）。同じ1編集に対し `cargo check` → `cargo test --workspace` は実測 **17.5s**。ただし、この手順はB-2の13テストを含む一方、bindingsドリフト検査を含まない。**同等性を保つには検査の移行が必要で、移行後の所要時間は未計測。**
@@ -94,20 +94,6 @@ Rust 1ファイル編集後の実測（連続実行）:
 ---
 
 ## Tier A: 同等性を保ったまま速くできる（方針①・議論不要）
-
-### A-1. 検証ループから `cargo run`（bindings）を外す
-状態: 未着手
-
-`bindings:check` は「Rustの型からTSを生成し、チェックイン済みの `src/bindings.ts` と比較する」ためだけに `dev` プロファイルのバイナリをビルド・リンクして実行している。これが前述の往復の片側を作っている。
-
-対応方針メモ: A-2でbindings検査を維持した上で、検証時に走らせるcargoコマンドを `cargo test` 系に寄せ、再コンパイルの削減を確認する。`cargo check`（3.2s）は速い一次シグナルとして残してよい。`bindings:export` は `predev` 由来の書き込み系なので検証ループとは別扱いでよい。
-
-### A-2. bindingsドリフト検査を `#[test]` に移す
-状態: 未着手 / A-1の具体案
-
-`check_typescript_bindings()` は既に `transonic_lib::bindings` のpub関数であり、同じ生成結果と `src/bindings.ts` の比較をテストから呼ぶ案。ただし `lib.rs` は `bindings` モジュールを `#[cfg(not(test))]` でテストから除外しているため、単に `#[test]` を追加するだけでは実行されない。モジュール構成の変更またはintegration test等の別経路が必要で、ビルド時間・検査の同等性は実装後に確認する。
-
-対応方針メモ: `check-bindings` bin は `prebuild` が使っているため、bin自体を消すかどうかは別途判断が要る。テスト化だけ先に入れてbinを残す形も可能。`export-bindings` bin は書き込み用途なので維持。
 
 ### A-3. `prettier --check` / `--write` に `--cache` を付ける
 状態: 未着手
@@ -257,3 +243,13 @@ Verified matching output, CRLF output, unstaged and staged drift, a correct work
 Vitestの収集対象は `src/**/*.test.{ts,tsx}` に限定し、リポジトリ内の別worktreeやvendoredコードのテストを実行しない。
 
 検証: `pnpm verify`（FE 75件、Rust 228+13件、Go全パッケージ、型検査・生成型検査）と `pnpm vite:build` が成功。型エラーを一時的に追加すると `typecheck`・`verify`・`vite:build` が非ゼロで終了し、後続処理を実行しないことも確認した。
+
+### A-1 / A-2. bindingsドリフト検査をRustテストへ統合（2026-10-11）(ins)
+
+`check-bindings` バイナリに `typescript_bindings_are_up_to_date` テストを追加し、既存の `check_typescript_bindings()` を呼ぶ。通常ビルドのライブラリと同じ生成・比較処理を使い、`pnpm cargo:test` のworkspaceテストで実行する。`pnpm verify` から独立した `bindings:check` 呼び出しを除き、検証ループ内の `cargo run` をなくした。単独検査と `prebuild` 用の `bindings:check`、書き込み用の `bindings:export` は維持する。
+
+テストをバイナリ内に置くのは、WindowsでTauriのアプリケーションマニフェストをテスト実行ファイルにも適用するため。ライブラリ単体テストおよび統合テストで同じ検査関数を呼んだ構成では、テスト開始前に `STATUS_ENTRYPOINT_NOT_FOUND` で終了した。バイナリ内のテストでは正常に実行できた。
+
+検証: `pnpm verify` が成功（FE 75件、Rust 228+13+1件、Go全パッケージ、型検査・生成型検査）。意図的なbindingsのずれを非ゼロ終了で検出し、検査が対象ファイルを書き換えないこと、CRLFのbindingsも受け入れることを確認した。
+
+所要時間（Windows、2026-10-11）: `controller.rs` のmtime更新後、変更前の `cargo:check` → `bindings:check` → `cargo:test` は42.5秒。変更後の `cargo:check` → `cargo:test` は初回87.5秒、全体検証後に同じmtime更新で再測定すると26.5秒だった。変更前はビルドロック待ちも記録され、変更後も測定値の差が大きいため、安定した短縮幅はこの測定では確定できない。

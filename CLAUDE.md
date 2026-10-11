@@ -14,7 +14,7 @@ Frontend (run from repo root):
 - `pnpm dev` — run `tauri dev` (desktop). `predev` auto-runs bindings export first.
 - `pnpm ad:dev` — `tauri android dev`
 - `pnpm typecheck` — check TypeScript without emitting files; also runs before `vite:build`
-- `pnpm verify` — typecheck, frontend tests, Go type drift check and tests, Rust check, bindings drift check, and Rust workspace tests; stops on the first failure
+- `pnpm verify` — typecheck, frontend tests, Go type drift check and tests, Rust check, and Rust workspace tests (including bindings drift); stops on the first failure
 - `pnpm test` — run all vitest tests (`vitest run`)
 - `pnpm test <path>` / `pnpm exec vitest run <path>` — run a single test file
 - `pnpm format` / `pnpm format:check` — Prettier
@@ -25,7 +25,7 @@ Frontend (run from repo root):
 
 Rust backend (prefer these pnpm wrappers over raw `cargo` so paths/manifest resolve correctly):
 - `pnpm cargo:check` — `cargo check` in `src-tauri`; excludes `#[cfg(test)]` code
-- `pnpm cargo:test` — `cargo test --workspace` in `src-tauri`; includes `opensubsonic-client`
+- `pnpm cargo:test` — `cargo test --workspace` in `src-tauri`; includes `opensubsonic-client` and the TypeScript bindings drift check
 - Do **not** run a full `tauri build`/`tauri android build` unless truly needed — it is slow. `cargo check` + `cargo test` + `tsc` catch most issues.
 
 Platform-gated Rust code (`#[cfg(target_os = "...")]` for `android`/`ios`) is **not** exercised by `pnpm cargo:check` on Windows:
