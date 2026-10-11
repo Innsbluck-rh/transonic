@@ -8,15 +8,16 @@ const IndexContent: Component = () => {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Artists');
 
   return (
-    <div class='flex w-full flex-col overflow-y-hidden'>
-      <IndexModeSelect
-        defaultMode={browseMode()}
-        onSelect={(mode) => {
-          setBrowseMode(mode);
-        }}
-      />
-
-      <div class='flex-1 overflow-y-auto'>
+    <div class='relative flex size-full flex-col overflow-y-auto'>
+      <div class='sticky top-0 z-1 box-border flex p-1.5'>
+        <IndexModeSelect
+          defaultMode={browseMode()}
+          onSelect={(mode) => {
+            setBrowseMode(mode);
+          }}
+        />
+      </div>
+      <div class='flex flex-col'>
         <Switch>
           <Match when={browseMode() === 'Artists'}>
             <ArtistList />
