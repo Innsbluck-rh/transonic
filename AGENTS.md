@@ -35,6 +35,9 @@
 
 ## testing
 
+- Run `pnpm verify` for the host verification set: TypeScript typecheck, frontend tests, Go type drift check and tests, Rust check, TypeScript bindings drift check, and Rust workspace tests.
+- `pnpm cargo:check` is a fast check of production code; it does not check `#[cfg(test)]` code. `pnpm cargo:test` compiles and runs tests across the Rust workspace.
+
 - Always run test if you made any change in test files. When you haven't run test for some reason, you don't have to tell the user about it.
 
 ## FORBIDDEN SYNTAX (PowerShell)

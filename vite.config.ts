@@ -1,8 +1,8 @@
 import tailwindcss from '@tailwindcss/vite';
 import path from 'path';
-import { defineConfig } from 'vite';
 import solid from 'vite-plugin-solid';
 import webfontDownload from 'vite-plugin-webfont-dl';
+import { defineConfig } from 'vitest/config';
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -41,5 +41,8 @@ export default defineConfig(async ({ mode }) => ({
     alias: {
       '~': path.join(__dirname, 'src'),
     },
+  },
+  test: {
+    include: ['src/**/*.test.{ts,tsx}'],
   },
 }));

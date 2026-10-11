@@ -114,13 +114,6 @@ Rust 1ファイル編集後の実測（連続実行）:
 
 実測 7.6s → **4.0s**（ウォーム）。ただしプラグインのバージョン・実装変更はキャッシュキーに含まれないため、本プロジェクトの整形プラグイン更新時にはキャッシュ削除が必要。既定の保存先は `node_modules/.cache/prettier/`。既存のignore対象外へ保存する場合は `.gitignore` に追加する。
 
-### A-4. 検証セットを1コマンドにまとめる
-状態: 未着手
-
-現在、検証セットは CLAUDE.md・AGENTS.md・`adr/18` に散っており、`package.json` には対応する単一スクリプトがない。人間もエージェントも毎回「何を何個叩くか」を思い出す必要があり、実行順序も固定されていない。
-
-対応方針メモ: 単一の `verify` スクリプトにまとめれば、順序と検証対象を固定でき、Tier B の抜け（`--workspace` や `tsc`）も同時に塞げる。
-
 ---
 
 ## Tier B: 「同等のチェック」になっていない穴（速度以前の問題）
@@ -135,31 +128,12 @@ Rust 1ファイル編集後の実測（連続実行）:
 
 `cargo:check` だけを通して「検証した」と判断すると壊れたテストコードを見逃す。
 
-対応方針メモ: `--all-targets` を付けると 3.1s → 14.3s に増える（テストターゲットのコンパイルが増えるため）。`cargo test` を通すなら重複するので、「速い一次シグナルとしての `cargo:check`（現状のまま）」と「ゲートとしての `cargo:test`」の役割分担を明示するのが素直か。少なくとも現状の「`cargo:check` はテストコードを見ない」という事実は AGENTS.md に書かれていない。
-
-### B-2. `pnpm cargo:test` がワークスペースメンバを実行していない
-状態: 未着手
-
-`src-tauri/Cargo.toml` はワークスペースルート兼パッケージであり、`cargo test` は既定でルートパッケージのみを対象にする。結果、`crates/opensubsonic-client` の **13テストは現行の `pnpm cargo:test` では実行されない**。
-
-- `cargo test --manifest-path src-tauri/Cargo.toml` → 228 tests
-- `cargo test --manifest-path src-tauri/crates/opensubsonic-client/Cargo.toml` → 13 tests（単独では通る）
-
-`--workspace` を足しても所要時間はほぼ変わらない（12.2s、`--workspace` なしの 12.8s と誤差範囲）。**ほぼ無償で検出範囲が広がる。**
-
-### B-3. `tsc` がどの自動経路にも入っていない
-状態: 未着手
-
-- `package.json` に `typecheck` スクリプトが存在しない。CLAUDE.md / AGENTS.md / `adr/6` は `tsc --noEmit` を検証手段として挙げているのに、叩き方はドキュメント任せ。
-- `pnpm build` → `prebuild`(`bindings:check`) → `tauri build` → `beforeBuildCommand: pnpm vite:build` の経路にも型検査はない（`vite build` はTypeScriptの型検査をしない）。**型エラーがビルド失敗として検出されるとは限らない。**
-- `tsc --noEmit` は 2.4s と、全フロー中もっとも安いシグナルのひとつ。
-
-対応方針メモ: `typecheck` スクリプトの追加と、A-4 の verify への組み込み。`prebuild` に入れるかはビルド時間とのトレードオフだが、2.4s なら入れて損はない。過去に `vitest.shims.d.ts` 起因で `tsc` が壊れていた期間があり（`docs/known-issues.md` 解決済み 2026-07-05）、自動経路に無いことが検知遅れの原因になっている。
+対応方針メモ: `--all-targets` を付けると 3.1s → 14.3s に増える（テストターゲットのコンパイルが増えるため）。`cargo test` を通すなら重複するので、「速い一次シグナルとしての `cargo:check`（現状のまま）」と「ゲートとしての `cargo:test`」の役割分担を明示するのが素直か。この役割分担は AGENTS.md に明記した（2026-10-11）。
 
 ### B-5. CIが存在しない
 状態: 未着手
 
-`.github/workflows` が無く、GitHub Actionsによる継続的な検証はない。ローカルの自動検証には `simple-git-hooks` のpre-commit（`lint-staged` → ステージ済みファイルへの `prettier --write`）と `prebuild` のbindings検査があるが、型検査・テスト全体を自動実行する経路はない。CLAUDE.md の「CI/buildを落とす」という説明に対応するCI設定はリポジトリ内に存在しない。
+`.github/workflows` が無く、GitHub Actionsによる継続的な検証はない。ローカルにはpre-commitの整形、`prebuild` のbindings検査、`vite:build` の型検査がある。検証セットは `pnpm verify` で実行できるが、GitHub上で自動実行する経路はない。CLAUDE.md の「CI/buildを落とす」という説明に対応するCI設定はリポジトリ内に存在しない。
 
 対応方針メモ: B-1〜B-4を是正した検証をCIで実行すれば、実行漏れを減らせる。ただしWindows前提のビルド時間が長いこと、Android/ASIO など環境依存が強いことから、どこまでを自動化するかは方針決定が要る。まずは安いもの（`tsc`・`vitest`・`go test`・`go-types:check`）だけでも意味がある。
 
@@ -273,3 +247,13 @@ vitest の内訳は `Duration 6.63s (transform 5.61s, setup 5.29s, import 7.36s,
 `go-types:check` now generates into a temporary directory, formats with `gofmt`, and compares against the working file without relying on Git state. CRLF and LF are treated equivalently. Temporary files are removed on success and failure.
 
 Verified matching output, CRLF output, unstaged and staged drift, a correct working file with a stale index, missing generator and formatter commands, and generator failure. Each case preserved the working file and index and left no temporary files.
+
+### A-4 / B-2 / B-3. 検証セットの統合・workspaceテスト・型検査（2026-10-11）(ins)
+
+`pnpm verify` にTypeScript型検査、FEテスト、Go型ドリフト検査、Goテスト、Rustチェック、TS bindingsドリフト検査、Rust workspaceテストを順に組み込んだ。失敗時は後続の検証を実行しない。
+
+`cargo:test` に `--workspace` を追加し、`opensubsonic-client` を対象に含めた。`typecheck`（`tsc --noEmit`）を追加し、`vite:build` の先頭でも実行するため、Tauriの `beforeBuildCommand` 経由でも型エラーを検出する。
+
+Vitestの収集対象は `src/**/*.test.{ts,tsx}` に限定し、リポジトリ内の別worktreeやvendoredコードのテストを実行しない。
+
+検証: `pnpm verify`（FE 75件、Rust 228+13件、Go全パッケージ、型検査・生成型検査）と `pnpm vite:build` が成功。型エラーを一時的に追加すると `typecheck`・`verify`・`vite:build` が非ゼロで終了し、後続処理を実行しないことも確認した。
