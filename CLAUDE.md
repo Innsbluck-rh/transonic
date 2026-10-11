@@ -13,17 +13,19 @@ Always consult the latest (Open)Subsonic API docs (`docs/OpenSubSonic/`) for end
 Frontend (run from repo root):
 - `pnpm dev` — run `tauri dev` (desktop). `predev` auto-runs bindings export first.
 - `pnpm ad:dev` — `tauri android dev`
+- `pnpm typecheck` — check TypeScript without emitting files; also runs before `vite:build`
+- `pnpm verify` — typecheck, frontend tests, Go type drift check and tests, Rust check, bindings drift check, and Rust workspace tests; stops on the first failure
 - `pnpm test` — run all vitest tests (`vitest run`)
 - `pnpm test <path>` / `pnpm exec vitest run <path>` — run a single test file
 - `pnpm format` / `pnpm format:check` — Prettier
 - `pnpm bindings:export` — regenerate `src/bindings.ts` from Rust specta annotations
 - `pnpm bindings:check` — verify bindings are in sync (also runs before `pnpm build`)
 - `pnpm go-types:export` — regenerate the Go server's Connect wire types (`server/internal/realtime/connect_types_gen.go`) from the Rust source of truth via typeshare (requires `cargo install typeshare-cli --features go`)
-- `pnpm go-types:check` — verify the generated Go types are in sync (not wired into `prebuild`; run in the Go server's CI)
+- `pnpm go-types:check` — verify the generated Go types are in sync (included in `pnpm verify`)
 
 Rust backend (prefer these pnpm wrappers over raw `cargo` so paths/manifest resolve correctly):
-- `pnpm cargo:check` — `cargo check` in `src-tauri`
-- `pnpm cargo:test` — `cargo test` in `src-tauri`
+- `pnpm cargo:check` — `cargo check` in `src-tauri`; excludes `#[cfg(test)]` code
+- `pnpm cargo:test` — `cargo test --workspace` in `src-tauri`; includes `opensubsonic-client`
 - Do **not** run a full `tauri build`/`tauri android build` unless truly needed — it is slow. `cargo check` + `cargo test` + `tsc` catch most issues.
 
 Platform-gated Rust code (`#[cfg(target_os = "...")]` for `android`/`ios`) is **not** exercised by `pnpm cargo:check` on Windows:
@@ -32,6 +34,7 @@ Platform-gated Rust code (`#[cfg(target_os = "...")]` for `android`/`ios`) is **
 - If a platform check can't run (missing toolchain/NDK/target), say so explicitly and state the exact command that should be run instead of silently treating a host-only `cargo check` as full verification.
 
 Go server (`server/`, independent module):
+- `pnpm go:test` — run `go test ./...` in `server/` from the repo root
 - `go test ./...`, `go run ./cmd/transonic-server serve --config ./config.json` (see `server/README.md`)
 
 Exclude `./third_party` (vendored androidx-media) from broad greps/searches — it's noise.
