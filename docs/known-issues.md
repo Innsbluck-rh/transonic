@@ -66,6 +66,20 @@ Rust (`prepared_generation`・`media_instance_id`)、Kotlin `AndroidPlaybackPlug
 
 対応方針メモ: API追加のたびにcommand側のRaw型とparserが増え続ける構造。新しいbrowsing系endpointを追加する予定が出たタイミングで着手するのが自然。
 
+### Windows出力ストリームの自動リカバリが失敗を隠して複雑化させている
+状態: 未着手 / 元: playback-garbage-memo.md
+
+`PlaybackController`は出力デバイス/ドライバ由来のランタイムエラーを検知すると、最大3回（`OUTPUT_STREAM_RECOVERY_MAX_ATTEMPTS`, `controller.rs:41`）まで裏でstop→reload→再生を自動試行する（`handle_output_stream_error`〜`run_output_stream_recovery_attempt`, `controller.rs:2292-2470`、リトライ間隔は`output_stream_recovery_delay`が100/500/1500msを返す）。この間、状態遷移とリロードが利用者に見えない形で繰り返される。
+
+対応方針メモ: 音声出力層は「エラーを隠して裏で複雑な状態遷移を増やす」より「fail-fastで一度で確定的にエラーを見せる」方針の方が調査・保守コストが低いのではという論点がある。3回・100/500/1500msという値も経験則であり根拠が明文化されていない。リトライを残すか、初回失敗でエラー確定に倒すかは方針決定が先。
+
+### Raw stream失敗時に非Rawへ暗黙にフォールバックする
+状態: 未着手 / 元: playback-garbage-memo.md
+
+`stream_mode == Raw`でのロード時、raw stream requestが失敗すると（出力デバイスエラーの場合を除き）ユーザーへの通知なしに"standard" stream request（transcoding指定なし・デフォルトbitrate/format・`raw`パラメータなしの通常リクエスト。Transcodingモード自体とは別経路）へ自動的に切り替わる（`controller.rs:1718-1777`）。ユーザーがRawを明示的に選択していても、失敗時に別経路へ黙って落ちるため、実際にどちらの経路で再生されたかがログ以外から分からない。
+
+対応方針メモ: Raw失敗時はRawとして失敗を返す方が、選択と挙動の対応が明確になる。フォールバックを撤去するか、発生時にUI/ステータスへ明示するかの方針決定が必要。
+
 ---
 
 ## Tier 4
