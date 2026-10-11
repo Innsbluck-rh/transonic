@@ -156,17 +156,6 @@ Rust 1ファイル編集後の実測（連続実行）:
 
 対応方針メモ: `typecheck` スクリプトの追加と、A-4 の verify への組み込み。`prebuild` に入れるかはビルド時間とのトレードオフだが、2.4s なら入れて損はない。過去に `vitest.shims.d.ts` 起因で `tsc` が壊れていた期間があり（`docs/known-issues.md` 解決済み 2026-07-05）、自動経路に無いことが検知遅れの原因になっている。
 
-### B-4. `go-types:check` が作業ツリーを書き換える副作用つき検査
-状態: 未着手
-
-`go-types:check` は `go-types:export && git diff --exit-code` という実装で、**検査のために生成物を実際に上書きしてから差分を見る**。
-
-- 検査が失敗したとき、作業ツリーに生成物の変更が残る（クリーンな状態に戻す責任が呼び出し側にある）。
-- 生成物が未コミット状態で汚れていると、`git diff` の結果が本来のドリフトを反映しない。
-- 実行自体は 1.3s と非常に安い（typeshare 0.7s + gofmt 0.5s + diff 0.1s）。**速度は問題なく、検査の作法だけが問題。**
-
-対応方針メモ: `bindings:check` と同様に一時ファイルへ生成して比較する形にすれば副作用が消える（`src-tauri/src/bindings.rs` の `generate_typescript_bindings()` が既にその作法を実装しており、参考になる）。
-
 ### B-5. CIが存在しない
 状態: 未着手
 
@@ -279,4 +268,8 @@ vitest の内訳は `Duration 6.63s (transform 5.61s, setup 5.29s, import 7.36s,
 
 ## 解決済み
 
-（なし）
+### B-4. Non-mutating Go type drift check (2026-10-11) (ins)
+
+`go-types:check` now generates into a temporary directory, formats with `gofmt`, and compares against the working file without relying on Git state. CRLF and LF are treated equivalently. Temporary files are removed on success and failure.
+
+Verified matching output, CRLF output, unstaged and staged drift, a correct working file with a stale index, missing generator and formatter commands, and generator failure. Each case preserved the working file and index and left no temporary files.
