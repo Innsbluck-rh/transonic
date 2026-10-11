@@ -2,7 +2,7 @@ import { createSignal, Match, Switch } from 'solid-js';
 import RouteHeader from '~/components/common/text/RouteHeader';
 import ArtistList from '~/components/sidebar/index/list/ArtistList';
 import FolderList from '~/components/sidebar/index/list/FolderList';
-import IndexModeSelect2 from '~/components/sidebar/index/select/IndexModeSelect2';
+import IndexModeSelectSP from '~/components/sidebar/index/select/IndexModeSelectSP';
 import { type BrowseMode } from '~/features/navigation/routes';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 
@@ -13,7 +13,7 @@ function SPBrowseIndex() {
     <div class='home-surface-root relative flex size-full flex-col gap-0 overflow-y-auto p-0'>
       <RouteHeader title='Browse'>
         <div class='ml-auto p-1.5'>
-          <IndexModeSelect2
+          <IndexModeSelectSP
             defaultMode={browseMode()}
             onSelect={(mode) => {
               setBrowseMode(mode);

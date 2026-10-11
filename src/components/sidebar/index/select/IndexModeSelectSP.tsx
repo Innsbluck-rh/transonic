@@ -7,7 +7,7 @@ interface IndexModeSelectProps {
   onSelect?: (mode: BrowseMode) => void;
 }
 
-const IndexModeSelect2: Component<IndexModeSelectProps> = (props) => {
+const IndexModeSelectSP: Component<IndexModeSelectProps> = (props) => {
   const [currentMode, setCurrentMode] = createSignal<BrowseMode>(props.defaultMode);
 
   return (
@@ -26,4 +26,4 @@ const IndexModeSelect2: Component<IndexModeSelectProps> = (props) => {
   );
 };
 
-export default IndexModeSelect2;
+export default IndexModeSelectSP;
