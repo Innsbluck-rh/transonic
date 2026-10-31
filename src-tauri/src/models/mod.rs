@@ -30,7 +30,8 @@ pub use browse::{
 };
 #[allow(unused_imports)]
 pub use connect::{
-    ConnectDevicePresence, ConnectPlaybackCommand, ConnectPlaybackState, ConnectRuntimeStatus,
+    ConnectDevicePresence, ConnectPlaybackCommand, ConnectPlaybackState, ConnectQueueResolution,
+    ConnectQueueResolutionChoice, ConnectResolveQueueRequest, ConnectRuntimeStatus,
     ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectStateUpdated,
     ConnectTransferPlaybackRequest,
 };

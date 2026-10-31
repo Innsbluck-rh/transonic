@@ -13,6 +13,29 @@ pub struct ConnectRuntimeStatus {
     pub server_url: Option<String>,
     pub device_id: Option<String>,
     pub seq: u32,
+    /// Present while the local queue and the Connect server's queue conflict
+    /// after connecting and the user has not chosen which one to keep.
+    pub queue_resolution: Option<ConnectQueueResolution>,
+}
+
+#[derive(Debug, Clone, Serialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectQueueResolution {
+    pub pushing: bool,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub enum ConnectQueueResolutionChoice {
+    PushLocal,
+    PullServer,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectResolveQueueRequest {
+    pub choice: ConnectQueueResolutionChoice,
 }
 
 #[derive(Debug, Clone, Serialize, specta::Type)]
