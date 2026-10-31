@@ -1,8 +1,9 @@
 import { createRoot, createSignal, type Setter } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActiveSession } from '~/bindings';
 import { useCoverArt, type CoverArtState } from '~/features/albums/useCoverArt';
 import { setSessionStore } from '~/stores/SessionStore';
+import { activeSession } from '~test/fixtures/session';
+import { waitFor } from '~test/helpers/async';
 
 const mocks = vi.hoisted(() => ({
   fetchCoverArtAssetUrl: vi.fn(),
@@ -12,53 +13,12 @@ vi.mock('~/features/albums/service', () => ({
   fetchCoverArtAssetUrl: mocks.fetchCoverArtAssetUrl,
 }));
 
-function activeSession(profileId: string): ActiveSession {
-  return {
-    profileId,
-    normalizedServerUrl: 'https://music.example',
-    username: 'user',
-    authKind: 'password',
-    apiVersion: '1.16.1',
-    serverType: null,
-    serverVersion: null,
-    capabilityMatrix: {
-      openSubsonic: true,
-      rawExtensions: [],
-      apiKeyAuth: false,
-      indexBasedQueue: false,
-      playbackReport: false,
-      transcoding: false,
-      transcodeOffset: false,
-      songLyrics: false,
-    },
-  };
-}
-
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((nextResolve) => {
     resolve = nextResolve;
   });
   return { promise, resolve };
-}
-
-function flushPromises() {
-  return new Promise<void>((resolve) => setTimeout(resolve, 0));
-}
-
-async function waitFor(assertion: () => void) {
-  let lastError: unknown;
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    try {
-      assertion();
-      return;
-    } catch (error) {
-      lastError = error;
-      await flushPromises();
-    }
-  }
-
-  throw lastError;
 }
 
 describe('useCoverArt', () => {

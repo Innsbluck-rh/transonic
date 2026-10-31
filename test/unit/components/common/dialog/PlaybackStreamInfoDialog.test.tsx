@@ -1,58 +1,19 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectSharedPlaybackState, PlaybackActualStreamInfo, PlaybackStatus, PlaybackStreamInfo, SongResponse } from '~/bindings';
+import type { PlaybackStreamInfo } from '~/bindings';
 import PlaybackStreamInfoDialog, {
   closePlaybackStreamInfoDialog,
   openPlaybackStreamInfoDialog,
 } from '~/components/common/dialog/PlaybackStreamInfoDialog';
 import { setSettingsStore } from '~/features/settings/service';
-import { setConnectStore } from '~/stores/ConnectStore';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
+import { resetConnectStore, setSharedPlayback, sharedPlayback } from '~test/fixtures/connect';
+import { actualStreamInfo, playbackStatus, resetPlaybackStore, song } from '~test/fixtures/playback';
+import { appSettings } from '~test/fixtures/settings';
 
 vi.mock('@iconify-icon/solid', () => ({
   Icon: () => null,
 }));
-
-function song(id: string): SongResponse {
-  return {
-    id,
-    parentId: null,
-    path: null,
-    title: id,
-    album: null,
-    albumId: null,
-    artist: null,
-    artistId: null,
-    coverArtId: null,
-    displayCoverArtId: null,
-    track: null,
-    discNumber: null,
-    year: null,
-    duration: null,
-    size: null,
-    contentType: null,
-    suffix: null,
-    bitRate: null,
-    genre: null,
-    created: null,
-    starred: null,
-    isDirectory: false,
-    mediaType: 'song',
-  };
-}
-
-function actualStreamInfo(codec: string): PlaybackActualStreamInfo {
-  return {
-    codec,
-    codecProfile: null,
-    sampleRate: 44100,
-    channels: 2,
-    bitDepth: 16,
-    bitrate: 320000,
-    sampleFormat: null,
-    mimeType: null,
-  };
-}
 
 function streamInfo(streamUrl: string): PlaybackStreamInfo {
   return {
@@ -76,105 +37,15 @@ function streamInfo(streamUrl: string): PlaybackStreamInfo {
   };
 }
 
-function playbackStatus(overrides: Partial<PlaybackStatus> = {}): PlaybackStatus {
-  return {
-    playingState: 'playing',
-    interruptReason: null,
-    pendingSeekPositionMs: null,
-    gaplessStatus: {
-      state: 'unavailable',
-      message: 'gapless: unavailable',
-    },
-    queue: [song('local-song')],
-    currentIndex: 0,
-    playNextQueueLen: 0,
-    currentPositionMs: 0,
-    currentSongId: 'local-song',
-    outputHost: null,
-    playbackError: null,
-    activeStreamInfo: null,
-    preparedStreamInfo: null,
-    lastStreamRequest: null,
-    actualStreamInfo: null,
-    ...overrides,
-  };
-}
-
-function sharedPlayback(): ConnectSharedPlaybackState {
-  const remoteSong = song('remote-song');
-  return {
-    seq: 1,
-    activeDeviceId: 'remote-device',
-    state: {
-      playingState: 'playing',
-      queue: [remoteSong],
-      currentIndex: 0,
-      playNextQueueLen: 0,
-      currentPositionMs: 0,
-      currentSongId: remoteSong.id,
-    },
-    updatedAt: '2026-06-13T00:00:00Z',
-    updatedByDeviceId: 'remote-device',
-    updateReason: 'snapshot',
-  };
-}
-
-function resetStores() {
-  setPlaybackStore('status', undefined);
-  setPlaybackStore('authoritativeReceivedAtMs', null);
-  setPlaybackStore('clockMs', 0);
-  setConnectStore({
-    status: 'disabled',
-    message: null,
-    version: null,
-    protocolVersion: null,
-    capabilities: null,
-    runtime: {
-      enabled: false,
-      connected: false,
-      message: null,
-      deviceId: null,
-      seq: 0,
-    },
-    devices: [],
-    sharedPlayback: null,
-    sharedPlaybackReceivedAtMs: null,
-  });
-  setSettingsStore({
-    appearance: {
-      albumDisplayMode: 'grid',
-    },
-    playback: {
-      gaplessPlaybackEnabled: true,
-      volume: 1,
-      useCustomOutput: false,
-      useAsioOutput: false,
-      outputDeviceId: null,
-      streamMode: 'raw',
-      meteredNetworkTranscodingEnabled: false,
-      transcodingBitrateLimit: 320,
-      useCustomTranscodingCodec: false,
-      transcodingCodec: 'auto',
-    },
-    connect: {
-      enabled: false,
-      useSubsonicServerHost: true,
-      connectServerPort: 4747,
-      connectServerHost: null,
-      deviceId: '',
-      deviceName: null,
-      allowInsecureConnectServer: false,
-    },
-  });
-}
-
 describe('PlaybackStreamInfoDialog', () => {
   let container: HTMLDivElement;
   let dispose: () => void;
 
   beforeEach(() => {
     closePlaybackStreamInfoDialog();
-    resetStores();
+    resetPlaybackStore();
+    resetConnectStore();
+    setSettingsStore(appSettings({ playback: { gaplessPlaybackEnabled: true }, connect: { deviceId: '' } }));
     container = document.createElement('div');
     document.body.appendChild(container);
   });
@@ -190,6 +61,8 @@ describe('PlaybackStreamInfoDialog', () => {
     setPlaybackStore(
       'status',
       playbackStatus({
+        queue: [song('local-song')],
+        currentIndex: 0,
         interruptReason: 'initial_load',
         gaplessStatus: {
           state: 'preparing',
@@ -201,15 +74,7 @@ describe('PlaybackStreamInfoDialog', () => {
         lastStreamRequest: streamInfo('https://example.test/local-last-stream'),
       })
     );
-    setConnectStore('runtime', {
-      enabled: true,
-      connected: true,
-      message: null,
-      deviceId: 'own-device',
-      seq: 1,
-    });
-    setConnectStore('sharedPlayback', sharedPlayback());
-    setConnectStore('sharedPlaybackReceivedAtMs', 100);
+    setSharedPlayback(sharedPlayback({ queue: [song('remote-song')], currentIndex: 0 }));
 
     openPlaybackStreamInfoDialog();
     dispose = render(() => <PlaybackStreamInfoDialog />, container);

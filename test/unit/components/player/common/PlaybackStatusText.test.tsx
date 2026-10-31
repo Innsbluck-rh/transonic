@@ -1,6 +1,5 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectSharedPlaybackState, PlaybackActualStreamInfo, PlaybackStatus } from '~/bindings';
 // The ASIO marker links to the playback settings, and resolving that route asks
 // the OS plugin whether this is a smartphone layout.
 vi.mock('@tauri-apps/plugin-os', () => ({
@@ -8,93 +7,17 @@ vi.mock('@tauri-apps/plugin-os', () => ({
 }));
 
 import PlaybackStatusText from '~/components/player/common/PlaybackStatusText';
-import { setConnectStore } from '~/stores/ConnectStore';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
-
-function actualStreamInfo(codec: string): PlaybackActualStreamInfo {
-  return {
-    codec,
-    codecProfile: null,
-    sampleRate: 44100,
-    channels: 2,
-    bitDepth: 16,
-    bitrate: 320000,
-    sampleFormat: null,
-    mimeType: null,
-  };
-}
-
-function playbackStatus(overrides: Partial<PlaybackStatus> = {}): PlaybackStatus {
-  return {
-    playingState: 'playing',
-    interruptReason: null,
-    pendingSeekPositionMs: null,
-    gaplessStatus: {
-      state: 'unavailable',
-      message: 'gapless: unavailable',
-    },
-    queue: [],
-    currentIndex: null,
-    playNextQueueLen: 0,
-    currentPositionMs: 0,
-    currentSongId: null,
-    outputHost: null,
-    playbackError: null,
-    activeStreamInfo: null,
-    preparedStreamInfo: null,
-    lastStreamRequest: null,
-    actualStreamInfo: null,
-    ...overrides,
-  };
-}
-
-function sharedPlayback(activeDeviceId: string): ConnectSharedPlaybackState {
-  return {
-    seq: 1,
-    activeDeviceId,
-    state: {
-      playingState: 'playing',
-      queue: [],
-      currentIndex: null,
-      playNextQueueLen: 0,
-      currentPositionMs: 0,
-      currentSongId: null,
-    },
-    updatedAt: '2026-06-13T00:00:00Z',
-    updatedByDeviceId: activeDeviceId,
-    updateReason: 'snapshot',
-  };
-}
-
-function resetStores() {
-  setPlaybackStore('status', undefined);
-  setPlaybackStore('authoritativeReceivedAtMs', null);
-  setPlaybackStore('clockMs', 0);
-  setConnectStore({
-    status: 'disabled',
-    message: null,
-    version: null,
-    protocolVersion: null,
-    capabilities: null,
-    runtime: {
-      enabled: false,
-      connected: false,
-      message: null,
-      deviceId: null,
-      seq: 0,
-    },
-    devices: [],
-    sharedPlayback: null,
-    sharedPlaybackReceivedAtMs: null,
-  });
-}
+import { resetConnectStore, setSharedPlayback, sharedPlayback } from '~test/fixtures/connect';
+import { actualStreamInfo, playbackStatus, resetPlaybackStore } from '~test/fixtures/playback';
 
 describe('PlaybackStatusText', () => {
   let container: HTMLDivElement;
   let dispose: () => void;
 
   beforeEach(() => {
-    resetStores();
+    resetPlaybackStore();
+    resetConnectStore();
     container = document.createElement('div');
     document.body.appendChild(container);
   });
@@ -106,15 +29,7 @@ describe('PlaybackStatusText', () => {
 
   it('hides local stream info while another Connect device is active', () => {
     setPlaybackStore('status', playbackStatus({ actualStreamInfo: actualStreamInfo('local-codec') }));
-    setConnectStore('runtime', {
-      enabled: true,
-      connected: true,
-      message: null,
-      deviceId: 'own-device',
-      seq: 1,
-    });
-    setConnectStore('sharedPlayback', sharedPlayback('remote-device'));
-    setConnectStore('sharedPlaybackReceivedAtMs', 100);
+    setSharedPlayback(sharedPlayback({ activeDeviceId: 'remote-device' }));
 
     dispose = render(() => <PlaybackStatusText />, container);
 
@@ -144,15 +59,7 @@ describe('PlaybackStatusText', () => {
     // The output path is a fact about this machine, so it must not be claimed
     // for audio that is coming out of a different device.
     setPlaybackStore('status', playbackStatus({ actualStreamInfo: actualStreamInfo('flac'), outputHost: 'asio' }));
-    setConnectStore('runtime', {
-      enabled: true,
-      connected: true,
-      message: null,
-      deviceId: 'own-device',
-      seq: 1,
-    });
-    setConnectStore('sharedPlayback', sharedPlayback('remote-device'));
-    setConnectStore('sharedPlaybackReceivedAtMs', 100);
+    setSharedPlayback(sharedPlayback({ activeDeviceId: 'remote-device' }));
 
     dispose = render(() => <PlaybackStatusText />, container);
 
@@ -161,15 +68,7 @@ describe('PlaybackStatusText', () => {
 
   it('shows local stream info when this Connect device is active', () => {
     setPlaybackStore('status', playbackStatus({ actualStreamInfo: actualStreamInfo('local-codec') }));
-    setConnectStore('runtime', {
-      enabled: true,
-      connected: true,
-      message: null,
-      deviceId: 'own-device',
-      seq: 1,
-    });
-    setConnectStore('sharedPlayback', sharedPlayback('own-device'));
-    setConnectStore('sharedPlaybackReceivedAtMs', 100);
+    setSharedPlayback(sharedPlayback({ activeDeviceId: 'own-device' }));
 
     dispose = render(() => <PlaybackStatusText />, container);
 

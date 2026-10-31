@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '~/bindings';
+import { appSettings } from '~test/fixtures/settings';
 
 vi.mock('~/bindings', () => ({
   commands: {
@@ -22,32 +23,7 @@ describe('settings service', () => {
   const settingsUpdate = vi.mocked(commands.settingsUpdate);
 
   beforeEach(() => {
-    setSettingsStore({
-      appearance: {
-        albumDisplayMode: 'grid',
-      },
-      playback: {
-        gaplessPlaybackEnabled: false,
-        volume: 1,
-        useCustomOutput: false,
-        useAsioOutput: false,
-        outputDeviceId: null,
-        streamMode: 'raw',
-        meteredNetworkTranscodingEnabled: false,
-        transcodingBitrateLimit: 320,
-        useCustomTranscodingCodec: false,
-        transcodingCodec: 'auto',
-      },
-      connect: {
-        enabled: false,
-        useSubsonicServerHost: true,
-        connectServerPort: 4747,
-        connectServerHost: null,
-        deviceId: 'device-1',
-        deviceName: null,
-        allowInsecureConnectServer: false,
-      },
-    });
+    setSettingsStore(appSettings());
     settingsUpdate.mockReset();
   });
 
@@ -71,7 +47,7 @@ describe('settings service', () => {
 
   it('applies Rust-provided settings verbatim without re-normalizing on the TS side', async () => {
     // Rust owns normalization/migration; hydrate must trust its output as-is.
-    const settings = {
+    const settings = appSettings({
       appearance: {
         albumDisplayMode: 'list',
       },
@@ -86,16 +62,9 @@ describe('settings service', () => {
         useCustomTranscodingCodec: true,
         transcodingCodec: 'opus',
       },
-      connect: {
-        enabled: false,
-        useSubsonicServerHost: true,
-        connectServerPort: 4747,
-        connectServerHost: null,
-        deviceId: 'device-1',
-        deviceName: null,
-        allowInsecureConnectServer: false,
-      },
-    } as AppSettings;
+    });
+    // A field left out on purpose: hydrate must not fill in TS-side defaults either.
+    delete (settings.playback as Partial<AppSettings['playback']>).useAsioOutput;
 
     await hydrateSettings(settings, 'stored');
 
@@ -108,35 +77,10 @@ describe('settings service', () => {
     const legacyBlob = { playback: { prebufferStrategy: 'next_track' } };
     window.localStorage.setItem('transonic.settings.v1', JSON.stringify(legacyBlob));
 
-    const migrated = {
-      appearance: {
-        albumDisplayMode: 'grid',
-      },
-      playback: {
-        gaplessPlaybackEnabled: true,
-        volume: 1,
-        useCustomOutput: false,
-        useAsioOutput: false,
-        outputDeviceId: null,
-        streamMode: 'raw',
-        meteredNetworkTranscodingEnabled: false,
-        transcodingBitrateLimit: 320,
-        useCustomTranscodingCodec: false,
-        transcodingCodec: 'auto',
-      },
-      connect: {
-        enabled: false,
-        useSubsonicServerHost: true,
-        connectServerPort: 4747,
-        connectServerHost: null,
-        deviceId: 'device-1',
-        deviceName: null,
-        allowInsecureConnectServer: false,
-      },
-    } as AppSettings;
+    const migrated = appSettings({ playback: { gaplessPlaybackEnabled: true } });
     settingsUpdate.mockResolvedValue({ status: 'ok', data: migrated });
 
-    const rustDefaults = { ...migrated, connect: { ...migrated.connect, deviceId: 'device-1' } } as AppSettings;
+    const rustDefaults = appSettings({ playback: { gaplessPlaybackEnabled: true } });
     await hydrateSettings(rustDefaults, 'default');
 
     // The raw blob is handed to Rust untouched; TS does not normalize it.

@@ -1,34 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
-import type { PlaybackStatus } from '~/bindings';
-
 import { resolveSongItemConditions, songItemConditionAttrs } from '~/features/items/SongItemConditions';
-
-function createPlaybackStatus(overrides: Partial<PlaybackStatus> = {}): PlaybackStatus {
-  return {
-    playingState: 'idle',
-    interruptReason: null,
-    pendingSeekPositionMs: null,
-    gaplessStatus: { state: 'idle', message: '' },
-    queue: [],
-    currentIndex: null,
-    playNextQueueLen: 0,
-    currentPositionMs: 0,
-    currentSongId: null,
-    outputHost: null,
-    playbackError: null,
-    activeStreamInfo: null,
-    preparedStreamInfo: null,
-    lastStreamRequest: null,
-    actualStreamInfo: null,
-    ...overrides,
-  };
-}
+import { playbackStatus } from '~test/fixtures/playback';
 
 describe('song item conditions', () => {
   it('marks the current song by song id when queue index is not provided', () => {
     const conditions = resolveSongItemConditions({
-      playbackStatus: createPlaybackStatus({ currentSongId: 'song-1' }),
+      playbackStatus: playbackStatus({ currentSongId: 'song-1' }),
       songId: 'song-1',
     });
 
@@ -39,14 +17,14 @@ describe('song item conditions', () => {
   });
 
   it('requires both song id and queue index to match for queue rows', () => {
-    const playbackStatus = createPlaybackStatus({
+    const status = playbackStatus({
       currentSongId: 'song-1',
       currentIndex: 4,
     });
 
     expect(
       resolveSongItemConditions({
-        playbackStatus,
+        playbackStatus: status,
         songId: 'song-1',
         queueIndex: 4,
       }).current
@@ -54,7 +32,7 @@ describe('song item conditions', () => {
 
     expect(
       resolveSongItemConditions({
-        playbackStatus,
+        playbackStatus: status,
         songId: 'song-1',
         queueIndex: 3,
       }).current
