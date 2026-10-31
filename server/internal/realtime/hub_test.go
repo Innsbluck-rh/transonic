@@ -684,6 +684,93 @@ func TestTransferPlaybackClaimsTargetWhenActiveDeviceIsMissing(t *testing.T) {
 	}
 }
 
+func TestPushStateReplacesSharedStateAndClaimsActiveDevice(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	hub := NewHub(st, time.Minute)
+	aSession := store.Session{UserKey: "user", DeviceID: "a", UpstreamServerURL: "https://a/rest", Username: "a"}
+	bSession := store.Session{UserKey: "user", DeviceID: "b", UpstreamServerURL: "https://a/rest", Username: "a"}
+	a, _ := hub.Register(ctx, aSession)
+	b, _ := hub.Register(ctx, bSession)
+	defer hub.Unregister(ctx, a)
+	defer hub.Unregister(ctx, b)
+	drain(a)
+	drain(b)
+
+	hub.Handle(ctx, a, Envelope{
+		ID:              "cmd-1",
+		Type:            TypePlaybackCommandRequest,
+		ProtocolVersion: 2,
+		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
+	})
+	drain(a)
+	drain(b)
+
+	hub.Handle(ctx, b, Envelope{
+		ID:              "cmd-2",
+		Type:            TypePlaybackCommandRequest,
+		ProtocolVersion: 2,
+		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":1,"op":"pushState","state":{"playingState":"paused","queue":[{"id":"song-x"},{"id":"song-y"},{"id":"song-z"}],"currentIndex":1,"playNextQueueLen":5,"currentPositionMs":42000}}`),
+	})
+	updated := <-a.Send
+	if updated.Type != TypePlaybackSharedUpdated {
+		t.Fatalf("expected push update, got %s", updated.Type)
+	}
+	var payload struct {
+		Seq               int64                `json:"seq"`
+		ActiveDeviceID    string               `json:"activeDeviceId"`
+		UpdatedByDeviceID string               `json:"updatedByDeviceId"`
+		UpdateReason      string               `json:"updateReason"`
+		State             ConnectPlaybackState `json:"state"`
+	}
+	if err := json.Unmarshal(updated.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	if payload.Seq != 2 || payload.ActiveDeviceID != "b" || payload.UpdatedByDeviceID != "b" || payload.UpdateReason != "push" {
+		t.Fatalf("unexpected push metadata: %#v", payload)
+	}
+	state := payload.State
+	if len(state.Queue) != 3 || state.CurrentIndex == nil || *state.CurrentIndex != 1 {
+		t.Fatalf("unexpected pushed queue: %#v", state)
+	}
+	if state.CurrentSongID == nil || *state.CurrentSongID != "song-y" {
+		t.Fatalf("unexpected current song: %#v", state.CurrentSongID)
+	}
+	if state.PlayingState != "paused" || state.CurrentPositionMs != 42000 {
+		t.Fatalf("expected paused at 42000, got %s at %d", state.PlayingState, state.CurrentPositionMs)
+	}
+	if state.PlayNextQueueLen != 1 {
+		t.Fatalf("expected play-next queue length clamped to 1, got %d", state.PlayNextQueueLen)
+	}
+}
+
+func TestPushStateRequiresState(t *testing.T) {
+	ctx := context.Background()
+	st, err := store.OpenMemory(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	hub := NewHub(st, time.Minute)
+	a, _ := hub.Register(ctx, store.Session{UserKey: "user", DeviceID: "a", UpstreamServerURL: "https://a/rest", Username: "a"})
+	defer hub.Unregister(ctx, a)
+	drain(a)
+
+	hub.Handle(ctx, a, Envelope{
+		ID:              "cmd-1",
+		Type:            TypePlaybackCommandRequest,
+		ProtocolVersion: 2,
+		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"pushState"}`),
+	})
+	if message := commandErrorMessage(t, a); message != "pushState requires state" {
+		t.Fatalf("unexpected push error: %s", message)
+	}
+}
+
 func commandErrorMessage(t *testing.T, client *Client) string {
 	t.Helper()
 	got := <-client.Send

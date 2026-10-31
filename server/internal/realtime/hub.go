@@ -191,6 +191,15 @@ func (h *Hub) handlePlaybackCommandRequest(ctx context.Context, client *Client, 
 		if command.Op == "setQueue" && command.AutoPlay != nil && *command.AutoPlay {
 			h.applyToActiveDevice(client, inbound.ID, commandID, next.ActiveDeviceID, "play", nil)
 		}
+	case "pushState":
+		next, err := reducePushStateCommand(current, command, client.Session.DeviceID)
+		if err != nil {
+			h.sendCommandError(client, inbound.ID, commandID, err.Error())
+			return
+		}
+		if err := h.saveAndBroadcast(ctx, client.Session.UserKey, next, client.Session.DeviceID, "push"); err != nil {
+			h.sendCommandError(client, inbound.ID, commandID, "failed to save shared playback state")
+		}
 	case "transferPlayback":
 		next, err := h.reduceTransferCommand(ctx, client, current, command)
 		if err != nil {
@@ -367,6 +376,29 @@ func (h *Hub) reduceTransferCommand(ctx context.Context, client *Client, current
 		State:             raw,
 		UpdatedAt:         time.Now().UTC(),
 		UpdatedByDeviceID: client.Session.DeviceID,
+	}, nil
+}
+
+// pushState replaces the whole shared state with the sender's local state and
+// makes the sender the active device, so its playback continues unchanged.
+func reducePushStateCommand(current *store.SharedPlaybackState, command ConnectPlaybackCommand, deviceID string) (*store.SharedPlaybackState, error) {
+	if command.State == nil {
+		return nil, errors.New("pushState requires state")
+	}
+	state := *command.State
+	state.Queue = cloneRawMessages(state.Queue)
+	state.CurrentIndex = cloneInt64Ptr(state.CurrentIndex)
+	raw, err := encodePlaybackState(state)
+	if err != nil {
+		return nil, err
+	}
+	return &store.SharedPlaybackState{
+		UserKey:           current.UserKey,
+		Seq:               current.Seq + 1,
+		ActiveDeviceID:    deviceID,
+		State:             raw,
+		UpdatedAt:         time.Now().UTC(),
+		UpdatedByDeviceID: deviceID,
 	}, nil
 }
 

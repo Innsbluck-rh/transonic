@@ -129,4 +129,6 @@ pub struct ConnectPlaybackCommand {
     pub position_ms: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_device_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub state: Option<ConnectPlaybackState>,
 }
