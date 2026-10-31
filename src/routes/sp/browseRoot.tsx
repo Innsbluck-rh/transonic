@@ -1,12 +1,11 @@
-import { createSignal, Match, Switch } from 'solid-js';
+import { createSignal } from 'solid-js';
 import RouteHeader from '~/components/common/text/RouteHeader';
-import IndexModeSelect from '~/components/sidebar/index/IndexModeSelect';
-import ArtistList from '~/components/sidebar/index/list/ArtistList';
-import FolderList from '~/components/sidebar/index/list/FolderList';
+import BrowseItemList from '~/components/sidebar/browse/BrowseItemList';
+import BrowseModeSelect from '~/components/sidebar/browse/BrowseModeSelect';
 import { type BrowseMode } from '~/features/navigation/routes';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 
-function SPBrowseIndex() {
+function SPBrowseRoot() {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Artists');
 
   return (
@@ -14,7 +13,7 @@ function SPBrowseIndex() {
       <RouteHeader title='Browse' />
       <div class='sticky top-12 z-10 flex h-0 justify-end'>
         <div class='p-1.5'>
-          <IndexModeSelect
+          <BrowseModeSelect
             defaultMode={browseMode()}
             onSelect={(mode) => {
               setBrowseMode(mode);
@@ -29,17 +28,10 @@ function SPBrowseIndex() {
           'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
         }}
       >
-        <Switch>
-          <Match when={browseMode() === 'Artists'}>
-            <ArtistList />
-          </Match>
-          <Match when={browseMode() === 'Folder Structures'}>
-            <FolderList />
-          </Match>
-        </Switch>
+        <BrowseItemList mode={browseMode()} />
       </div>
     </div>
   );
 }
 
-export default SPBrowseIndex;
+export default SPBrowseRoot;

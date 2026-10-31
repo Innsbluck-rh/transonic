@@ -2,11 +2,12 @@ import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, createSignal, onMount, Show } from 'solid-js';
 import { commands, type SearchResponse } from '~/bindings';
 import AlbumList from '~/components/common/list/album/AlbumList';
-import BrowseList, { type BrowseListItem } from '~/components/common/list/index/BrowseList';
+import BrowseList from '~/components/common/list/browse/BrowseList';
 import SearchSongList from '~/components/common/list/search/SearchSongList';
 import LoadCircle from '~/components/common/LoadCircle';
 import Heading3 from '~/components/common/text/Heading3';
 import RouteHeader from '~/components/common/text/RouteHeader';
+import type { BrowseListItem } from '~/features/browse/service';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
@@ -25,9 +26,11 @@ const Search: Component = () => {
 
   const artistItems = createMemo<BrowseListItem[]>(() =>
     (results()?.artists ?? []).map((artist) => ({
+      type: 'artist',
       id: artist.id,
       name: artist.name,
       href: resolveArtistRoute(artist.id),
+      coverArtId: artist.coverArtId,
     }))
   );
 

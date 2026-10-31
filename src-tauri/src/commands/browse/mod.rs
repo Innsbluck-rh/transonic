@@ -1,7 +1,9 @@
 pub mod album;
 pub mod artist;
+pub mod artist_indexes;
 pub mod folder_structure;
 pub mod folder_structure_album_songs;
+pub mod folder_structure_roots;
 pub mod song;
 
 use crate::commands::common::normalize_media_type;

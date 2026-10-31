@@ -2,14 +2,14 @@ import { Component, createEffect, createMemo, createSignal, For, on, onCleanup }
 
 import { Icon } from '@iconify-icon/solid';
 import { BROWSE_MODES, type BrowseMode } from '~/features/navigation/routes';
-import styles from './IndexModeSelect.module.css';
+import styles from './BrowseModeSelect.module.css';
 
-interface IndexModeSelectProps {
+interface BrowseModeSelectProps {
   defaultMode: BrowseMode;
   onSelect?: (mode: BrowseMode) => void;
 }
 
-const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
+const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
   let rootRef: HTMLDivElement | undefined;
   const browseMode = createMemo(() => props.defaultMode);
   const [open, setOpen] = createSignal(false);
@@ -44,7 +44,7 @@ const IndexModeSelect: Component<IndexModeSelectProps> = (props) => {
 
   return (
     <div ref={rootRef} class='relative w-full'>
-      <div class='bg-primary-surface border-secondary-border flex w-full flex-col overflow-hidden rounded-lg border shadow-lg'>
+      <div class='bg-primary-surface border-secondary-border flex w-full flex-col overflow-hidden rounded-lg border shadow-md'>
         <div
           class='hover:bg-primary-hover flex w-full cursor-pointer flex-row items-center gap-2 px-3 py-1.5'
           onClick={() => setOpen((current) => !current)}
@@ -101,4 +101,4 @@ const getIconForMode = (mode: BrowseMode) => {
   }
 };
 
-export default IndexModeSelect;
+export default BrowseModeSelect;
