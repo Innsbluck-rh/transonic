@@ -103,9 +103,9 @@ describe('ConnectButton', () => {
   it('ignores outside clicks before the menu has been opened', () => {
     dispose = render(() => <ConnectButton />, container);
 
-    expect(() => {
-      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    }).not.toThrow();
+    // dispatchEvent never rethrows listener errors; Vitest reports them as unhandled errors and fails the run.
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(container.textContent).not.toContain("there's no devices");
   });
 
   it('opens and closes safely from the trigger button', () => {
@@ -114,14 +114,10 @@ describe('ConnectButton', () => {
     const button = container.querySelector('button');
     expect(button).not.toBeNull();
 
-    expect(() => {
-      button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    }).not.toThrow();
+    button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(container.textContent).toContain("there's no devices");
 
-    expect(() => {
-      button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    }).not.toThrow();
+    button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(container.textContent).not.toContain("there's no devices");
   });
 
@@ -134,9 +130,7 @@ describe('ConnectButton', () => {
     button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(container.textContent).toContain("there's no devices");
 
-    expect(() => {
-      document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-    }).not.toThrow();
+    document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(container.textContent).not.toContain("there's no devices");
   });
 
