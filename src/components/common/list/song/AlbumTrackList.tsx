@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, For } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
 import SongItem from '~/components/common/list/song/SongItem';
@@ -47,7 +46,7 @@ const AlbumTrackList: Component<AlbumTrackListProps> = (props) => {
               conditions={conditions()}
               leadingContent={
                 conditions().current ? (
-                  <Icon class='song-item-leading -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />
+                  <i class='icon-[material-symbols--play-arrow] song-item-leading -ml-0.5 scale-125 text-xs' />
                 ) : song.track != null ? (
                   String(song.track)
                 ) : (

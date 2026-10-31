@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, JSX, Show } from 'solid-js';
 import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
 import PlaybackStatusText from '~/components/player/common/PlaybackStatusText';
@@ -57,13 +56,14 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
       <div {...props.topSectionProps} class={`relative flex h-auto w-full shrink-0 flex-col items-center ${props.topSectionProps?.class ?? ''}`}>
         <div class='z-10 mt-0 flex size-full flex-col items-center'>
           <div class='flex w-full items-center gap-1 p-1'>
-            <Icon
-              icon='material-symbols:keyboard-arrow-down'
-              class='ripple mr-auto cursor-pointer p-2 text-2xl'
+            <div
+              class='ripple mr-auto flex cursor-pointer p-2 text-2xl'
               onClick={() => {
                 closePlayerBar(true);
               }}
-            />
+            >
+              <i class='icon-[material-symbols--keyboard-arrow-down]' />
+            </div>
             <PlaybackStatusText />
             <div
               class='flex cursor-pointer flex-row items-center rounded-full p-1'
@@ -71,7 +71,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               aria-label='Playback stream info'
               onClick={() => openPlaybackStreamInfoDialog()}
             >
-              <Icon class='text-primary-text text-[18px]' icon='material-symbols:info-outline' />
+              <i class='icon-[material-symbols--info-outline] text-primary-text text-[18px]' />
             </div>
           </div>
 

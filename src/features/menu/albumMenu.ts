@@ -9,12 +9,12 @@ export interface AlbumMenuCallbacks {
 export function buildAlbumMenuItems(source: QueueSource, callbacks: AlbumMenuCallbacks): MenuItem[] {
   return [
     {
-      icon: 'material-symbols:next-plan',
+      icon: 'icon-[material-symbols--next-plan]',
       label: 'Play Next',
       onClick: () => callbacks.insertAfterCurrent([source]),
     },
     {
-      icon: 'material-symbols:playlist-add',
+      icon: 'icon-[material-symbols--playlist-add]',
       label: 'Add to Queue',
       onClick: () => callbacks.appendToQueue([source]),
     },

@@ -7,10 +7,6 @@ import { setConnectStore } from '~/stores/ConnectStore';
 import { appSettings } from '~test/fixtures/settings';
 import { flushPromises } from '~test/helpers/async';
 
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: () => null,
-}));
-
 vi.mock('~/bindings', () => ({
   commands: {
     getDefaultDeviceName: vi.fn().mockResolvedValue('test-device'),

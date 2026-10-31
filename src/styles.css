@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@plugin '@iconify/tailwind4';
 @import 'css-ripple-effect/dist/ripple.min.css';
 
 @media (hover: none), (pointer: coarse) {
@@ -84,6 +85,16 @@
     width: 100dvw;
     overflow-x: hidden;
     user-select: none;
+  }
+
+  /* Iconify icons are empty elements that draw the glyph as a mask over 1em.
+     Keep padding outside the glyph and stop flex from shrinking them away,
+     matching the previous <iconify-icon> box (1em svg + padding). */
+  [class*='icon-['] {
+    box-sizing: content-box;
+    flex-shrink: 0;
+    -webkit-mask-origin: content-box;
+    mask-origin: content-box;
   }
 
   div,

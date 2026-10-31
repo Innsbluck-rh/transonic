@@ -11,10 +11,6 @@ const osMocks = vi.hoisted(() => ({
   platform: vi.fn(() => 'android'),
 }));
 
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: () => null,
-}));
-
 vi.mock('@tauri-apps/plugin-os', () => ({
   platform: osMocks.platform,
 }));

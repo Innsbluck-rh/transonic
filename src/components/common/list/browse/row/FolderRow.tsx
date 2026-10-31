@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component } from 'solid-js';
 
 interface FolderRowProps {
@@ -20,7 +19,7 @@ const FolderRow: Component<FolderRowProps> = (props) => {
       onClick={() => props.onClick?.()}
     >
       <div class='mr-3.5 flex size-8 shrink-0 items-center justify-center lg:mr-3 lg:size-6'>
-        <Icon class='text-secondary-text text-xl lg:text-lg' icon='material-symbols:folder-outline' />
+        <i class='icon-[material-symbols--folder-outline] text-secondary-text text-xl lg:text-lg' />
       </div>
       <p
         class='archivo text-sm lg:text-xs'

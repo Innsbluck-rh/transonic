@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, JSX, Show } from 'solid-js';
 import type { SongResponse } from '~/bindings';
 import { type SongItemConditions, songItemConditionAttrs } from '~/features/items/SongItemConditions';
@@ -54,7 +53,7 @@ const SongItem: Component<SongItemProps> = (props) => {
       <div class='flex min-w-0 flex-1 flex-col gap-0'>
         <div class='flex items-center gap-1'>
           <Show when={props.playNext}>
-            <Icon class='text-secondary-text text-xs' icon='material-symbols:next-plan' />
+            <i class='icon-[material-symbols--next-plan] text-secondary-text text-xs' />
           </Show>
           <p class='song-item-title archivo min-w-0 flex-1 truncate' classList={{ 'font-bold': props.emphasizeTitle }} title={props.song.title}>
             {props.song.title}

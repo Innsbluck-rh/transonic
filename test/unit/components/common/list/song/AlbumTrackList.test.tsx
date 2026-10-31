@@ -5,10 +5,6 @@ import { setPlaybackStore } from '~/stores/PlaybackStore';
 import { resetConnectStore, setSharedPlayback, sharedPlayback } from '~test/fixtures/connect';
 import { playbackStatus, resetPlaybackStore, song } from '~test/fixtures/playback';
 
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: () => null,
-}));
-
 vi.mock('~/features/menu', () => ({
   buildSongMenuItems: () => [],
 }));

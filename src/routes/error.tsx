@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { useLocation, useNavigate, useSearchParams } from '@solidjs/router';
 import { createMemo } from 'solid-js';
 import Heading1 from '~/components/common/text/Heading1';
@@ -56,7 +55,12 @@ function AppError() {
     };
   });
 
-  const icons = ['pixelarticons:fire', 'pixelarticons:siren-sharp', 'pixelarticons:skull', 'pixelarticons:square-alert'];
+  const icons = [
+    'icon-[pixelarticons--fire]',
+    'icon-[pixelarticons--siren-sharp]',
+    'icon-[pixelarticons--skull]',
+    'icon-[pixelarticons--square-alert]',
+  ];
 
   const pickRandomIcon = () => {
     const rndIndex = Math.floor(Math.random() * icons.length);
@@ -66,7 +70,7 @@ function AppError() {
   return (
     <div class='bg-primary-surface flex h-dvh w-dvw flex-col items-center justify-center gap-4'>
       <div class='bg-primary-surface flex min-w-[40%] flex-col gap-4 p-4'>
-        <Icon icon={pickRandomIcon()} class='w-fit text-8xl text-zinc-700' />
+        <i class={`${pickRandomIcon()} text-8xl text-zinc-700`} />
         <Heading1>Oops!</Heading1>
         <p class='archivo italic opacity-75'>{model().message}</p>
         <button class='w-fit' onClick={model().action}>

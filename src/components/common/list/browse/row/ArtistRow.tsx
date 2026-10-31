@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, Show } from 'solid-js';
 
 interface ArtistRowProps {
@@ -25,13 +24,13 @@ const ArtistRow: Component<ArtistRowProps> = (props) => {
           when={props.coverArtUrl}
           fallback={
             <div class='border-primary-border flex size-full items-center justify-center rounded-full border'>
-              <Icon class='text-secondary-text text-md opacity-50' icon='material-symbols:person' />
+              <i class='icon-[material-symbols--person] text-secondary-text text-md opacity-50' />
             </div>
           }
         >
           {(url) => (
             <div class='relative flex size-full items-center justify-center'>
-              {/*<Icon class='text-primary-text absolute right-0 bottom-0 translate-1 text-sm opacity-75' icon='material-symbols:artist-rounded' />*/}
+              {/*<i class='icon-[material-symbols--artist-rounded] text-primary-text absolute right-0 bottom-0 translate-1 text-sm opacity-75' />*/}
               <img src={url()} class='size-full rounded-full object-cover' loading='lazy' decoding='async' />
             </div>
           )}

@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createSignal, For, onCleanup, onMount, Show } from 'solid-js';
 import { ConnectDevicePresence } from '~/bindings';
 import { resolveCurrentPlaybackDevice } from '~/features/connect/playbackDevice';
@@ -68,9 +67,8 @@ const ConnectButton: Component = () => {
           class='bg-primary-surface hover:bg-primary-hover border-secondary-border flex cursor-pointer flex-row items-center gap-2.5 rounded-full border px-3 py-2 lg:gap-2 lg:px-2.5 lg:py-1.5'
           onClick={() => setMenuOpened((opened) => !opened)}
         >
-          <Icon
-            class='scale-125 lg:scale-100'
-            icon={isActiveDevicePlaying() ? 'material-symbols:volume-up' : 'material-symbols:devices'}
+          <i
+            class={`${isActiveDevicePlaying() ? 'icon-[material-symbols--volume-up]' : 'icon-[material-symbols--devices]'} scale-125 lg:scale-100`}
             classList={{
               'text-accent': isActiveDevicePlaying(),
               'text-primary-text': !isActiveDevicePlaying() && hasActiveDevice(),

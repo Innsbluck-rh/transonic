@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { platform } from '@tauri-apps/plugin-os';
 import { Component, createMemo, JSX, Show } from 'solid-js';
 import { ConnectDevicePresence, type SongResponse } from '~/bindings';
@@ -168,7 +167,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                 <Show when={externalPlaybackDevice()}>
                   <>
                     <p class='text-secondary-text leading-none'>・</p>
-                    <Icon icon={'material-symbols:volume-up'} class='text-accent text-sm leading-none' />
+                    <i class='icon-[material-symbols--volume-up] text-accent text-sm leading-none' />
                     <p class='text-accent text-xs leading-none font-bold'>{externalPlaybackDevice()?.displayName}</p>
                   </>
                 </Show>
@@ -190,7 +189,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                     aria-label='Playback stream info'
                     onClick={() => openPlaybackStreamInfoDialog()}
                   >
-                    <Icon class='text-primary-text' icon='material-symbols:info-outline' />
+                    <i class='icon-[material-symbols--info-outline] text-primary-text' />
                   </div>
                 </Show>
               </div>

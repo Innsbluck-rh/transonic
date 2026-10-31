@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, Show } from 'solid-js';
 import LoadCircle from '../common/LoadCircle';
 
@@ -16,13 +15,13 @@ const PlayerIcon: Component<PlayerIconProps> = (props) => {
   const icon = createMemo(() => {
     switch (props.type) {
       case 'play':
-        return 'material-symbols:play-arrow';
+        return 'icon-[material-symbols--play-arrow]';
       case 'pause':
-        return 'material-symbols:pause';
+        return 'icon-[material-symbols--pause]';
       case 'next':
-        return 'material-symbols:skip-next';
+        return 'icon-[material-symbols--skip-next]';
       case 'prev':
-        return 'material-symbols:skip-previous';
+        return 'icon-[material-symbols--skip-previous]';
     }
   });
 
@@ -39,7 +38,7 @@ const PlayerIcon: Component<PlayerIconProps> = (props) => {
       }}
     >
       <Show when={!props.loading} fallback={<LoadCircle class={props.iconClass} />}>
-        <Icon icon={icon()} class={`${props.disabled ? 'text-secondary-text' : 'text-primary-text'} scale-175 ${props.iconClass}`} />
+        <i class={`${icon()} ${props.disabled ? 'text-secondary-text' : 'text-primary-text'} scale-175 ${props.iconClass}`} />
       </Show>
     </div>
   );

@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { commands, type AlbumSongsResponse } from '~/bindings';
@@ -92,13 +91,14 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
   return (
     <div class='home-surface-root w-full gap-0 p-0'>
       <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
-        <Icon
-          icon='material-symbols:arrow-back'
-          class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
+        <div
+          class='ripple hover:bg-primary-hover mr-auto flex cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
           onClick={() => {
             navigate(-1);
           }}
-        />
+        >
+          <i class='icon-[material-symbols--arrow-back]' />
+        </div>
       </div>
 
       <div class='bg-primary-surface relative z-10 flex w-full flex-col items-center px-3.5 pb-4 lg:flex-row lg:pb-6'>
@@ -120,10 +120,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           >
             {(assetUrl) => <img class='w-52 cursor-pointer hover:brightness-75 lg:w-42' src={assetUrl()} loading='lazy' decoding='async' />}
           </Show>
-          <Icon
-            class='pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 scale-300 text-white group-hover:visible'
-            icon='material-symbols:play-arrow'
-          />
+          <i class='icon-[material-symbols--play-arrow] pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 scale-300 text-white group-hover:visible' />
         </div>
 
         <div class='mt-6 flex w-full flex-col items-start lg:mt-0 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
@@ -149,7 +146,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
                   if (albumId) insertAfterCurrent([{ type: 'album', albumId }]);
                 }}
               >
-                <Icon icon='material-symbols:next-plan' />
+                <i class='icon-[material-symbols--next-plan]' />
                 play next
               </button>
               <button
@@ -159,7 +156,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
                   if (albumId) appendToQueue([{ type: 'album', albumId }]);
                 }}
               >
-                <Icon icon='material-symbols:playlist-add' />
+                <i class='icon-[material-symbols--playlist-add]' />
                 add to queue
               </button>
             </div>

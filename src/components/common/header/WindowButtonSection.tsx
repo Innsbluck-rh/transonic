@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Component, onCleanup, onMount } from 'solid-js';
 import { createStore } from 'solid-js/store';
@@ -46,7 +45,7 @@ const WindowButtonSection: Component = () => {
         }}
         onClick={() => getCurrentWindow().minimize()}
       >
-        <Icon class='text-primary-text' icon='material-symbols:minimize' />
+        <i class='icon-[material-symbols--minimize] text-primary-text' />
       </div>
       <div
         data-tauri-drag-exclude
@@ -56,7 +55,9 @@ const WindowButtonSection: Component = () => {
         }}
         onClick={() => getCurrentWindow().toggleMaximize()}
       >
-        <Icon class='text-primary-text text-sm' icon={windowStore.maximized ? 'material-symbols:stack-outline' : 'material-symbols:square-outline'} />
+        <i
+          class={`${windowStore.maximized ? 'icon-[material-symbols--stack-outline]' : 'icon-[material-symbols--square-outline]'} text-primary-text text-sm`}
+        />
       </div>
       <div
         data-tauri-drag-exclude
@@ -66,7 +67,7 @@ const WindowButtonSection: Component = () => {
         }}
         onClick={() => getCurrentWindow().close()}
       >
-        <Icon class='text-primary-text group-hover:text-red-500' icon='material-symbols:close' />
+        <i class='icon-[material-symbols--close] text-primary-text group-hover:text-red-500' />
       </div>
     </div>
   );

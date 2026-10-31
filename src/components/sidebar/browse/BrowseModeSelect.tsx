@@ -1,6 +1,5 @@
 import { Component, createEffect, createMemo, createSignal, For, on, onCleanup } from 'solid-js';
 
-import { Icon } from '@iconify-icon/solid';
 import { BROWSE_MODES, type BrowseMode } from '~/features/navigation/routes';
 import styles from './BrowseModeSelect.module.css';
 
@@ -58,13 +57,15 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
                   classList={{ invisible: mode !== browseMode() }}
                   aria-hidden={mode !== browseMode()}
                 >
-                  <Icon class='text-md' icon={getIconForMode(mode)} />
+                  <i class={`${getIconForMode(mode)} text-md`} />
                   <p class='archivo text-md truncate font-bold lg:text-sm'>{mode}</p>
                 </div>
               )}
             </For>
           </div>
-          <Icon class='ml-auto w-4 text-center text-xl' icon={open() ? 'material-symbols:arrow-drop-up' : 'material-symbols:arrow-drop-down'} />
+          <div class='ml-auto flex w-4 text-xl'>
+            <i class={open() ? 'icon-[material-symbols--arrow-drop-up]' : 'icon-[material-symbols--arrow-drop-down]'} />
+          </div>
         </div>
       </div>
 
@@ -81,7 +82,7 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
                 setOpen(false);
               }}
             >
-              <Icon class='text-md' icon={getIconForMode(mode)} />
+              <i class={`${getIconForMode(mode)} text-md`} />
               <p class='archivo truncate text-sm'>{mode}</p>
             </div>
           )}
@@ -94,10 +95,10 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
 const getIconForMode = (mode: BrowseMode) => {
   switch (mode) {
     case 'Folder Structures':
-      // return "material-symbols:folder";
-      return 'material-symbols:folder-copy-rounded';
+      // return "icon-[material-symbols--folder]";
+      return 'icon-[material-symbols--folder-copy-rounded]';
     case 'Artists':
-      return 'material-symbols:artist-rounded';
+      return 'icon-[material-symbols--artist-rounded]';
   }
 };
 
