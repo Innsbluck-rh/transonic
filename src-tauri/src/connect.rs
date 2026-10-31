@@ -550,6 +550,11 @@ impl ConnectRuntime {
             if !inner.status.connected {
                 return Ok(false);
             }
+            // The local queue is what is playing until the conflict is resolved,
+            // so commands act on it instead of on the shared state.
+            if matches!(inner.queue_gate, QueueGate::AwaitingChoice { .. }) {
+                return Ok(false);
+            }
             let sender = inner
                 .sender
                 .clone()
@@ -1962,6 +1967,22 @@ mod tests {
 
         assert!(update.queue_gate_closed);
         assert_eq!(runtime.shared_playback().unwrap().seq, 6);
+    }
+
+    #[test]
+    fn playback_commands_stay_local_while_queue_resolution_is_pending() {
+        let (runtime, mut receiver) = connected_runtime();
+        runtime.begin_queue_resolution(7);
+
+        let sent = runtime
+            .send_playback_command(ConnectPlaybackCommand {
+                op: "play".to_string(),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert!(!sent);
+        assert!(receiver.try_recv().is_err());
     }
 
     #[test]
