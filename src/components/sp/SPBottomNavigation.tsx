@@ -29,7 +29,21 @@ const SPBottomNavigation: Component = () => {
         onClick={() => navigate(resolveSPBrowseRoute())}
       />
 
-      <NavigationItem icon='icon-[pixelarticons--search]' currentMode={current} targetMode='search' onClick={() => navigate(resolveSearchRoute())} />
+      <NavigationItem
+        icon='icon-[pixelarticons--search]'
+        currentMode={current}
+        targetMode='search'
+        onClick={() => {
+          const searchRoute = resolveSearchRoute();
+          if (location.pathname.startsWith(searchRoute)) {
+            const sp = new URLSearchParams();
+            sp.append('focusInput', 'true');
+            navigate(`${searchRoute}?${sp.toString()}`);
+          } else {
+            navigate(searchRoute);
+          }
+        }}
+      />
 
       <NavigationItem
         icon='icon-[pixelarticons--settings-2-sharp]'

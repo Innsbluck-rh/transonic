@@ -15,7 +15,7 @@ const BrowseItemList: Component<BrowseItemListProps> = (props) => {
     <Show
       when={!items.loading}
       fallback={
-        <div class='my-8 flex self-center justify-self-center'>
+        <div class='flex size-full items-center justify-center'>
           <LoadCircle />
         </div>
       }

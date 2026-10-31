@@ -1,37 +1,38 @@
 import { createSignal } from 'solid-js';
+import BrowseItemList from '~/components/browse/BrowseItemList';
+import BrowseModeSelect from '~/components/browse/BrowseModeSelect';
 import RouteHeader from '~/components/common/text/RouteHeader';
-import BrowseItemList from '~/components/sidebar/browse/BrowseItemList';
-import BrowseModeSelect from '~/components/sidebar/browse/BrowseModeSelect';
 import { type BrowseMode } from '~/features/navigation/routes';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 
-function SPBrowseRoot() {
+function SPBrowseIndex() {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Artists');
 
   return (
-    <div class='home-surface-root relative flex size-full flex-col gap-0 overflow-y-auto p-0'>
+    <div class='home-surface-root relative flex size-full flex-col gap-0 p-0'>
       <RouteHeader title='Browse' />
-      <div class='sticky top-12 z-10 flex h-0 justify-end'>
-        <div class='p-1.5'>
-          <BrowseModeSelect
-            defaultMode={browseMode()}
-            onSelect={(mode) => {
-              setBrowseMode(mode);
-            }}
-          />
-        </div>
-      </div>
+
       <div
-        class='flex w-full flex-1 flex-col'
+        class='relative flex size-full flex-col overflow-y-auto'
         style={{
           'padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
           'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
         }}
       >
+        <div class='sticky top-0 z-10 flex items-center px-2 pt-3 pb-2'>
+          <div>
+            <BrowseModeSelect
+              defaultMode={browseMode()}
+              onSelect={(mode) => {
+                setBrowseMode(mode);
+              }}
+            />
+          </div>
+        </div>
         <BrowseItemList mode={browseMode()} />
       </div>
     </div>
   );
 }
 
-export default SPBrowseRoot;
+export default SPBrowseIndex;

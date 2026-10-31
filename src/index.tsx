@@ -2,8 +2,9 @@
 import { attachConsole } from '@tauri-apps/plugin-log';
 import { render } from 'solid-js/web';
 import App from './App';
-import { initializeCjkFontOrder } from './features/font/service';
 import { initializeTheme } from './features/theme/service';
+import { initializeCjkFontOrder } from './utils/CJKFontFallback';
+import { initializeRipple } from './utils/ripple';
 
 type SafeAreaInsetSide = 'top' | 'right' | 'bottom' | 'left';
 
@@ -50,5 +51,7 @@ if ('__TAURI_INTERNALS__' in window) {
 initializeSafeAreaInsets();
 initializeCjkFontOrder();
 initializeTheme();
+const disposeRipple = initializeRipple();
+import.meta.hot?.dispose(disposeRipple);
 
 render(() => <App />, document.getElementById('root') as HTMLElement);

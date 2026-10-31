@@ -9,10 +9,6 @@ function setNavDirection(direction: NavDirection) {
   document.documentElement.dataset.navDirection = direction;
 }
 
-function clearNavDirection() {
-  delete document.documentElement.dataset.navDirection;
-}
-
 function normalizePathname(path: string) {
   return (path.split(/[?#]/, 1)[0] || '/').replace(/\/+$/, '') || '/';
 }
@@ -27,57 +23,49 @@ function isSPBrowseDetailPath(pathname: string) {
   return pathname !== browseRoot && pathname.startsWith(`${browseRoot}/`);
 }
 
-function insertSPBrowseRootHistoryEntry() {
-  const browseRoot = resolveSPBrowseRoute();
-
-  window.history.pushState({ _depth: window.history.length }, '', browseRoot);
-}
-
-/**
- * SP専用のナビゲーションフック。
- * SP画面内での遷移にView Transitions APIを使ったフェードアニメーションを付与する。
- * SP以外のプラットフォームからの呼び出しでは通常のnavigateにフォールバックする。
- *
- * SPPlayerバーが展開中の場合、遷移前にバーを閉じる。
- * これにより、View Transitionのアニメーション擬似要素がプレイヤーの上に
- * 描画されてしまうz軸の問題を回避する。
- */
+// returns `navigate()` function (from `useNavigate()`), but including some intermediate processes for SP devices.
+// (such as closing player, history arrangement (for /browse/...), and transition animations)
 export function useSPNavigate() {
   const navigate = useNavigate();
   const location = useLocation();
 
   return (to: string | number, options?: Partial<NavigateOptions>) => {
-    // @solidjs/router の navigate はオーバーロード定義のため as any でキャスト
-    const nav = (t: string | number) => (navigate as (to: string | number, opts?: Partial<NavigateOptions>) => void)(t, options);
-
     if (!isSP()) {
-      nav(to);
-      return;
-    }
-
-    // SPPlayerバーが展開中なら閉じてからナビゲーションを行う
-    closePlayerBar(true);
-
-    const direction: NavDirection = typeof to === 'number' && to < 0 ? 'backward' : 'forward';
-    setNavDirection(direction);
-
-    const currentPathname = normalizePathname(location.pathname);
-    const targetPathname = typeof to === 'string' ? normalizePathname(to) : null;
-    const shouldInsertBrowseRoot =
-      targetPathname !== null && !options?.replace && isSPBrowseDetailPath(targetPathname) && !isSPBrowsePath(currentPathname);
-
-    const navigateWithBrowseRoot = () => {
-      if (shouldInsertBrowseRoot) {
-        insertSPBrowseRootHistoryEntry();
-      }
-      nav(to);
-    };
-
-    if (document.startViewTransition) {
-      const transition = document.startViewTransition(navigateWithBrowseRoot);
-      void transition.finished.then(clearNavDirection);
+      navigate(to, options);
     } else {
-      navigateWithBrowseRoot();
+      // Dismiss the player before the transition snapshot to avoid overlaying it.
+      closePlayerBar(true);
+
+      const direction: NavDirection = typeof to === 'number' && to < 0 ? 'backward' : 'forward';
+      setNavDirection(direction);
+
+      const currentPathname = normalizePathname(location.pathname);
+      const targetPathname = typeof to === 'string' ? normalizePathname(to) : null;
+
+      // On SP devices, `/sp/browse/XXX` routes have back button to back to /browse (BrowseList).
+      // However, when the user opens `/sp/browse/XXXX` from **any components outside of the routes** (e.g.: the artist/album link in SPPlayer),
+      //   any back buttons won't navigate `/sp/browse/XXX` to `/sp/browse` (which is kinda unexpected behavior).
+      //
+      // To prevent this, insert `/sp/browse` before `/browse/XXX` target when current path is not `/sp/browse` itself.
+      // Example:
+      // [Desktop] /home -> /browse/album/123 -(back)-> home
+      // [SP]      /sp -> [/sp/browse] -> /sp/browse/albums/123 -(back)-> /sp/browse
+      const shouldInsertBrowseRoot =
+        targetPathname !== null && !options?.replace && isSPBrowseDetailPath(targetPathname) && !isSPBrowsePath(currentPathname);
+      if (shouldInsertBrowseRoot) {
+        const browseRoot = resolveSPBrowseRoute();
+        window.history.pushState({ _depth: window.history.length }, '', browseRoot);
+      }
+
+      // Start with fading animation if supported.
+      if (document.startViewTransition) {
+        const transition = document.startViewTransition(() => navigate(to, options));
+        void transition.finished.then(() => {
+          delete document.documentElement.dataset.navDirection;
+        });
+      } else {
+        navigate(to, options);
+      }
     }
   };
 }

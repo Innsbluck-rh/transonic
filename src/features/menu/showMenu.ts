@@ -1,4 +1,5 @@
 import { openContextMenu } from '~/stores/ContextMenuStore';
+import { cancelRipple } from '~/utils/ripple';
 import type { MenuItem } from './types';
 
 export function showContextMenu(e: TouchEvent | MouseEvent, items: MenuItem[]) {
@@ -14,5 +15,6 @@ export function showContextMenu(e: TouchEvent | MouseEvent, items: MenuItem[]) {
 
   e.preventDefault();
   e.stopPropagation();
+  cancelRipple();
   openContextMenu(items, clientX, clientY);
 }

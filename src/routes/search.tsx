@@ -1,4 +1,5 @@
-import { Component, createMemo, createSignal, onMount, Show } from 'solid-js';
+import { useSearchParams } from '@solidjs/router';
+import { Component, createEffect, createMemo, createSignal, onMount, Show } from 'solid-js';
 import { commands, type SearchResponse } from '~/bindings';
 import AlbumList from '~/components/common/list/album/AlbumList';
 import BrowseList from '~/components/common/list/browse/BrowseList';
@@ -14,6 +15,7 @@ import { isSP } from '~/utils/isSP';
 
 const Search: Component = () => {
   const navigate = useSPNavigate();
+  const [sp, setSp] = useSearchParams();
   const [results, setResults] = createSignal<SearchResponse | null>(null);
   const [loading, setLoading] = createSignal(false);
   const [error, setError] = createSignal<string | null>(null);
@@ -21,6 +23,13 @@ const Search: Component = () => {
 
   onMount(() => {
     if (!isSP()) searchInput.focus();
+  });
+
+  createEffect(() => {
+    if (sp.focusInput) {
+      searchInput.focus();
+      setSp({ focusInput: '' }); // remove param
+    }
   });
 
   const artistItems = createMemo<BrowseListItem[]>(() =>

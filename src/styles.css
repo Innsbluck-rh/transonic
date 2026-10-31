@@ -1,22 +1,52 @@
 @import 'tailwindcss';
 @plugin '@iconify/tailwind4';
-@import 'css-ripple-effect/dist/ripple.min.css';
+.ripple {
+  position: relative;
+}
 
-@media (hover: none), (pointer: coarse) {
-  .ripple::after {
-    transform: scale(0, 0);
-    opacity: 0;
-    transition:
-      opacity 160ms ease-out,
-      transform 0s linear 160ms;
+/* Only an interacting target gets a layer; idle rows have no ripple boxes. */
+.ripple-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.16;
+}
+
+.ripple-wave {
+  position: absolute;
+  border-radius: 50%;
+  background: var(--ripple-color, var(--color-primary-text));
+  animation: ripple-grow 450ms ease-out both;
+}
+
+.ripple-releasing {
+  animation: ripple-fade 160ms ease-out forwards;
+}
+
+@keyframes ripple-grow {
+  from {
+    transform: scale(0);
   }
+  to {
+    transform: scale(1);
+  }
+}
 
-  .ripple:active::after {
-    transform: scale(10, 10);
-    opacity: 0.2;
-    transition:
-      transform 500ms ease-out,
-      opacity 0s;
+@keyframes ripple-fade {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ripple-wave {
+    animation: none;
+  }
+  .ripple-releasing {
+    animation-duration: 1ms;
   }
 }
 
@@ -166,27 +196,6 @@
 
     &:disabled {
       @apply cursor-none;
-    }
-
-    &::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      background-image: radial-gradient(circle, #000 10%, transparent 10.01%);
-      background-repeat: no-repeat;
-      background-position: 50%;
-      transform: scale(10);
-      opacity: 0;
-      transition:
-        transform 0.5s,
-        opacity 1s;
-    }
-
-    &:active::after {
-      transform: scale(0);
-      opacity: 0.2;
-      transition: 0s;
     }
   }
 

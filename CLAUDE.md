@@ -80,6 +80,10 @@ Settings have defaults/normalization/migration logic duplicated across `src-taur
 
 Android's Kotlin implementation lives under `src-tauri/gen/android/app/src/main/java/com/innsb/transonic/` (`MainActivity.kt`, `playback/AndroidPlaybackPlugin.kt`, `playback/PlaybackService.kt`, `playback/RustPlaybackBridge.kt`). Despite living in `gen/android` (a Tauri-generated project tree), these files are hand-authored and version-controlled — this is a known structural wart (`adr/20` #9), not accidental generated-file drift.
 
+### Image sizes
+
+`docs/image-sizes.md` records every image fetch (cover art and artist images), its requested size, its cached fallback sizes, and the CSS size it is displayed at. When you add, remove or change an image fetch, its requested or fallback sizes, or the displayed size of the element that shows it, update that table in the same change. Size decisions are made from that table.
+
 ## ADRs (`adr/`)
 
 Read `adr/README.md` before creating a new ADR. Key rules:
