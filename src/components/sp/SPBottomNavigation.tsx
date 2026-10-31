@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { useLocation } from '@solidjs/router';
 import { Accessor, Component, createMemo } from 'solid-js';
 import { resolveHomeRoute, resolveSearchRoute, resolveSettingsRoute, resolveSPBrowseRoute } from '~/features/navigation/routes';
@@ -21,14 +20,19 @@ const SPBottomNavigation: Component = () => {
       class='bg-primary-plane z-50 flex h-15 w-full flex-row shadow-[0_-2px_10px_rgba(0,0,0,0.2)]'
       style={{ 'view-transition-name': 'sp-bottom-navigation' }}
     >
-      <NavigationItem icon='pixelarticons:home-sharp' currentMode={current} targetMode='home' onClick={() => navigate(resolveHomeRoute())} />
-
-      <NavigationItem icon='pixelarticons:library' currentMode={current} targetMode='browse' onClick={() => navigate(resolveSPBrowseRoute())} />
-
-      <NavigationItem icon='pixelarticons:search' currentMode={current} targetMode='search' onClick={() => navigate(resolveSearchRoute())} />
+      <NavigationItem icon='icon-[pixelarticons--home-sharp]' currentMode={current} targetMode='home' onClick={() => navigate(resolveHomeRoute())} />
 
       <NavigationItem
-        icon='pixelarticons:settings-2-sharp'
+        icon='icon-[pixelarticons--library]'
+        currentMode={current}
+        targetMode='browse'
+        onClick={() => navigate(resolveSPBrowseRoute())}
+      />
+
+      <NavigationItem icon='icon-[pixelarticons--search]' currentMode={current} targetMode='search' onClick={() => navigate(resolveSearchRoute())} />
+
+      <NavigationItem
+        icon='icon-[pixelarticons--settings-2-sharp]'
         currentMode={current}
         targetMode='settings'
         onClick={() => navigate(resolveSettingsRoute())}
@@ -54,9 +58,8 @@ const NavigationItem: Component<NavigationItemProps> = (props) => {
       }}
       onClick={props.onClick}
     >
-      <Icon
-        icon={props.icon}
-        class='scale-150'
+      <i
+        class={`${props.icon} scale-150`}
         classList={{
           'text-accent': props.currentMode() === props.targetMode,
         }}

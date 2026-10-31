@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, createSignal, onMount, Show } from 'solid-js';
 import { commands, type SearchResponse } from '~/bindings';
 import AlbumList from '~/components/common/list/album/AlbumList';
@@ -82,7 +81,7 @@ const Search: Component = () => {
           }}
         />
         <div class='flex w-7 items-center justify-center'>
-          <Show when={loading()} fallback={<Icon icon='material-symbols:search' class='text-xl' />}>
+          <Show when={loading()} fallback={<i class='icon-[material-symbols--search] text-xl' />}>
             <LoadCircle />
           </Show>
         </div>

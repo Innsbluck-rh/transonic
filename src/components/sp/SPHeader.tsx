@@ -26,7 +26,7 @@ const SPHeader: Component = () => {
             class='bg-primary-plane hover:bg-primary-hover flex cursor-pointer flex-row items-center gap-2 rounded-full p-2'
             onClick={() => navigate(resolveSettingsRoute())}
           >
-            <Icon class='text-primary-text text-[16px]' icon='pixelarticons:settings-2-sharp' />
+            <i class='icon-[pixelarticons--settings-2-sharp] text-primary-text text-[16px]' />
           </div>
         </div>
       </div>*/}

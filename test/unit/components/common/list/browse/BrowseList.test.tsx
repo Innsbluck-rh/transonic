@@ -10,10 +10,6 @@ const mocks = vi.hoisted(() => ({
   fetchCoverArtAssetUrl: vi.fn(),
 }));
 
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: () => null,
-}));
-
 vi.mock('@solidjs/router', () => ({
   useLocation: () => ({ pathname: '/' }),
 }));

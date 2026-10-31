@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, Show } from 'solid-js';
 import type { MenuItem } from '~/features/menu/types';
 
@@ -14,7 +13,7 @@ const MenuItem: Component<MenuItem> = (props) => {
       }}
     >
       <div class='flex w-5 items-center justify-center'>
-        <Show when={props.icon}>{(icon) => <Icon icon={icon()} class='scale-150' />}</Show>
+        <Show when={props.icon}>{(icon) => <i class={`${icon()} scale-150`} />}</Show>
       </div>
       <p>{props.label}</p>
     </div>

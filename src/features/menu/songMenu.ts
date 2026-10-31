@@ -9,12 +9,12 @@ export interface SongMenuCallbacks {
 export function buildSongMenuItems(song: SongResponse, callbacks: SongMenuCallbacks): MenuItem[] {
   return [
     {
-      icon: 'material-symbols:next-plan',
+      icon: 'icon-[material-symbols--next-plan]',
       label: 'Play Next',
       onClick: () => callbacks.insertAfterCurrent([{ type: 'songs', songs: [song] }]),
     },
     {
-      icon: 'material-symbols:playlist-add',
+      icon: 'icon-[material-symbols--playlist-add]',
       label: 'Add to Queue',
       onClick: () => callbacks.appendToQueue([{ type: 'songs', songs: [song] }]),
     },

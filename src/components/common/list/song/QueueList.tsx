@@ -1,6 +1,5 @@
 import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
 import { draggable, dropTargetForElements, type ElementDragPayload } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
-import { Icon } from '@iconify-icon/solid';
 import { Component, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
 import SongItem from '~/components/common/list/song/SongItem';
@@ -287,7 +286,7 @@ const QueueList: Component<QueueListProps> = (props) => {
                 song={entry}
                 leadingContent={
                   conditions().current ? (
-                    <Icon class='song-item-leading -ml-0.5 w-fit scale-125 text-xs' icon='material-symbols:play-arrow' />
+                    <i class='icon-[material-symbols--play-arrow] song-item-leading -ml-0.5 scale-125 text-xs' />
                   ) : (
                     String(i() + 1)
                   )

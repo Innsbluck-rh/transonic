@@ -2,12 +2,6 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import VolumeSlider from '~/components/player/common/VolumeSlider';
 
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: (props: { icon: string; class?: string; onClick?: (event: MouseEvent) => void }) => (
-    <span data-testid='volume-icon' data-icon={props.icon} class={props.class} onClick={props.onClick} />
-  ),
-}));
-
 function pointerEvent(type: string, clientX: number) {
   const event = new MouseEvent(type, { bubbles: true, clientX });
   Object.defineProperty(event, 'pointerId', { value: 1 });

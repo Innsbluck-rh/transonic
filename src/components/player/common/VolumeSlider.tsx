@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, createSignal, For, JSX } from 'solid-js';
 
 import styles from './VolumeSlider.module.css';
@@ -117,11 +116,11 @@ const VolumeSlider: Component<VolumeSliderProps> = (props) => {
   const volumeIcon = createMemo(() => {
     const nextVolume = displayedPercentage();
     if (nextVolume <= 0) {
-      return 'material-symbols:volume-off';
+      return 'icon-[material-symbols--volume-off]';
     } else if (nextVolume < 50) {
-      return 'material-symbols:volume-down';
+      return 'icon-[material-symbols--volume-down]';
     } else {
-      return 'material-symbols:volume-up';
+      return 'icon-[material-symbols--volume-up]';
     }
   });
 
@@ -197,9 +196,8 @@ const VolumeSlider: Component<VolumeSliderProps> = (props) => {
       }}
       onClick={(event) => event.stopPropagation()}
     >
-      <Icon
-        icon={volumeIcon()}
-        class='text-primary-text scale-125 cursor-pointer'
+      <i
+        class={`${volumeIcon()} text-primary-text scale-125 cursor-pointer`}
         onClick={(e) => {
           e.stopPropagation();
           if (props.disabled) {

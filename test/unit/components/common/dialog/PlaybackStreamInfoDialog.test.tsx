@@ -11,10 +11,6 @@ import { resetConnectStore, setSharedPlayback, sharedPlayback } from '~test/fixt
 import { actualStreamInfo, playbackStatus, resetPlaybackStore, song } from '~test/fixtures/playback';
 import { appSettings } from '~test/fixtures/settings';
 
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: () => null,
-}));
-
 function streamInfo(streamUrl: string): PlaybackStreamInfo {
   return {
     requestKind: 'load',

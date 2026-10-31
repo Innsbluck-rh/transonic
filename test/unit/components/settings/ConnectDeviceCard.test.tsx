@@ -3,12 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import ConnectDeviceCard from '~/components/settings/ConnectDeviceCard';
 import { device, setConnectAvailable, sharedPlayback } from '~test/fixtures/connect';
 
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: (props: { icon: string; class?: string; classList?: Record<string, boolean> }) => (
-    <span data-testid='device-icon' data-icon={props.icon} class={props.class} classList={props.classList} />
-  ),
-}));
-
 vi.mock('~/bindings', () => ({
   commands: {
     connectTransferPlayback: vi.fn().mockResolvedValue({ status: 'ok', data: null }),
@@ -35,9 +29,9 @@ describe('ConnectDeviceCard', () => {
 
     dispose = render(() => <ConnectDeviceCard device={device('active-device', 'Living Room')} />, container);
 
-    const icon = container.querySelector('[data-testid="device-icon"]') as HTMLElement | null;
+    const icon = container.querySelector('i[class*="icon-["]') as HTMLElement | null;
     const label = container.querySelector('p') as HTMLElement | null;
-    expect(icon?.dataset.icon).toBe('material-symbols:devices');
+    expect(icon?.classList.contains('icon-[material-symbols--devices]')).toBe(true);
     expect(icon?.classList.contains('text-accent')).toBe(true);
     expect(label?.classList.contains('text-accent')).toBe(true);
   });
@@ -47,8 +41,8 @@ describe('ConnectDeviceCard', () => {
 
     dispose = render(() => <ConnectDeviceCard device={device('active-device', 'Living Room')} />, container);
 
-    const icon = container.querySelector('[data-testid="device-icon"]') as HTMLElement | null;
-    expect(icon?.dataset.icon).toBe('material-symbols:volume-up');
+    const icon = container.querySelector('i[class*="icon-["]') as HTMLElement | null;
+    expect(icon?.classList.contains('icon-[material-symbols--volume-up]')).toBe(true);
     expect(icon?.classList.contains('text-accent')).toBe(true);
   });
 });

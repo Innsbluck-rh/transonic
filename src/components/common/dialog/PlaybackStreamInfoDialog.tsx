@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createMemo, createSignal, For, Show } from 'solid-js';
 import type { PlaybackActualStreamInfo, PlaybackStreamInfo } from '~/bindings';
 import { useLocalPlaybackDiagnosticsAvailable, usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
@@ -185,12 +184,12 @@ export const PlaybackStreamInfoDialog: Component = () => {
           aria-labelledby='playback-stream-info-title'
         >
           <header class='border-secondary-border flex items-center gap-3 border-b px-4 py-3'>
-            <Icon class='text-accent text-xl' icon='material-symbols:info-outline' />
+            <i class='icon-[material-symbols--info-outline] text-accent text-xl' />
             <h2 id='playback-stream-info-title' class='text-primary-text min-w-0 flex-1 text-base'>
               Playback stream info
             </h2>
             <button class='button-borderless px-2' type='button' onClick={close} aria-label='Close playback stream info'>
-              <Icon icon='material-symbols:close' />
+              <i class='icon-[material-symbols--close]' />
             </button>
           </header>
           <div class='overflow-auto p-4'>
@@ -221,7 +220,7 @@ export const PlaybackStreamInfoDialog: Component = () => {
           <footer class='border-secondary-border flex items-center justify-end gap-2 border-t px-4 py-3'>
             <Show when={copyState()}>{(state) => <span class='text-secondary-text mr-auto text-xs'>{state()}</span>}</Show>
             <button class='flex items-center gap-1' type='button' onClick={copy}>
-              <Icon icon='material-symbols:content-copy-outline' />
+              <i class='icon-[material-symbols--content-copy-outline]' />
               <span>Copy</span>
             </button>
             <button type='button' onClick={close}>

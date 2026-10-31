@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createResource, createSignal, Match, Show, Switch } from 'solid-js';
 import { commands, type ArtistInfo2Response, type ArtistResponse } from '~/bindings';
@@ -146,13 +145,14 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
           </div>
           <div class='bg-primary-surface absolute inset-0 size-full opacity-75' />
           <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
-            <Icon
-              icon='material-symbols:arrow-back'
-              class='ripple hover:bg-primary-hover mr-auto cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
+            <div
+              class='ripple hover:bg-primary-hover mr-auto flex cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
               onClick={() => {
                 navigate(-1);
               }}
-            />
+            >
+              <i class='icon-[material-symbols--arrow-back]' />
+            </div>
           </div>
           <p class='archivo text-primary-text absolute bottom-0 left-0 m-3 w-full text-2xl font-black tracking-tighter'>{artist()?.name ?? ''}</p>
         </div>
@@ -170,9 +170,8 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
               <p class='text-secondary-text px-1 text-center text-xs leading-0 font-bold tracking-tight'>
                 {settingsStore.appearance.albumDisplayMode === 'grid' ? 'Grid' : 'List'}
               </p>
-              <Icon
-                icon={settingsStore.appearance.albumDisplayMode === 'grid' ? 'pixelarticons:grid-2x2-2' : 'pixelarticons:bulletlist-sharp'}
-                class='text-[13px]'
+              <i
+                class={`${settingsStore.appearance.albumDisplayMode === 'grid' ? 'icon-[pixelarticons--grid-2x2-2]' : 'icon-[pixelarticons--bulletlist-sharp]'} text-[13px]`}
               />
             </div>
           </div>

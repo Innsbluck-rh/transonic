@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { useNavigate } from '@solidjs/router';
 import { createSignal, Show } from 'solid-js';
 import { commands } from '~/bindings';
@@ -86,7 +85,7 @@ function ServerSettings() {
         {(session) => (
           <div class='flex flex-col gap-3'>
             <div class='flex gap-3'>
-              <Icon icon='material-symbols:dns' class='text-xl' />
+              <i class='icon-[material-symbols--dns] text-xl' />
               <div class='flex flex-col'>
                 <p class='text-sm font-bold'>{session().normalizedServerUrl}</p>
                 <p class='text-secondary-text text-xs'>
@@ -97,11 +96,11 @@ function ServerSettings() {
               </div>
             </div>
             <div class='flex items-center gap-3'>
-              <Icon icon='material-symbols:account-circle' class='text-xl' />
+              <i class='icon-[material-symbols--account-circle] text-xl' />
               <p>{session().username}</p>
             </div>
             <button type='button' class='flex w-fit items-center gap-1 text-red-500' onClick={() => setLogoutConfirm(true)}>
-              <Icon icon='material-symbols:logout' />
+              <i class='icon-[material-symbols--logout]' />
               <span>Logout</span>
             </button>
           </div>
@@ -129,7 +128,7 @@ function ServerSettings() {
             aria-labelledby='logout-title'
           >
             <h2 id='logout-title' class='flex items-center gap-2 text-base'>
-              <Icon icon='material-symbols:logout' class='text-red-500' />
+              <i class='icon-[material-symbols--logout] text-red-500' />
               Logout
             </h2>
             <p class='text-secondary-text text-sm leading-5'>

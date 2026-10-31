@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createSignal, Show } from 'solid-js';
 import { commands, type ConnectDevicePresence } from '~/bindings';
 import { connectStore } from '~/stores/ConnectStore';
@@ -45,9 +44,8 @@ const ConnectDeviceCard: Component<ConnectDeviceCardProps> = (props) => {
       }}
     >
       <div class='flex h-full w-5 items-center'>
-        <Icon
-          icon={isPlaying() ? 'material-symbols:volume-up' : 'material-symbols:devices'}
-          class={'text-[18px]'}
+        <i
+          class={`${isPlaying() ? 'icon-[material-symbols--volume-up]' : 'icon-[material-symbols--devices]'} text-[18px]`}
           classList={{
             'text-accent': isActive(),
             'text-primary-text': !isActive() && props.device.online,

@@ -9,7 +9,7 @@ export function buildQueueItemMenuItems(song: SongResponse, index: () => number,
 
   const items: MenuItem[] = [];
   items.push({
-    icon: 'material-symbols:playlist-remove',
+    icon: 'icon-[material-symbols--playlist-remove]',
     label: 'Remove from queue',
     onClick: () => {
       commands.playbackRemoveQueueIndex({ index: index() }).then(hasPlaybackCommandError);
@@ -18,7 +18,7 @@ export function buildQueueItemMenuItems(song: SongResponse, index: () => number,
 
   if (albumId) {
     items.push({
-      icon: 'material-symbols:album',
+      icon: 'icon-[material-symbols--album]',
       label: 'Go to album',
       onClick: () => navigate(resolveAlbumRoute(albumId)),
     });
@@ -26,7 +26,7 @@ export function buildQueueItemMenuItems(song: SongResponse, index: () => number,
 
   if (artistId) {
     items.push({
-      icon: 'material-symbols:person',
+      icon: 'icon-[material-symbols--person]',
       label: 'Go to artist',
       onClick: () => navigate(resolveArtistRoute(artistId)),
     });

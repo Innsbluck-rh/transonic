@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 
@@ -61,19 +60,19 @@ export default function PlaybackErrorDialog() {
             aria-labelledby='playback-error-title'
           >
             <header class='border-secondary-border flex items-center gap-3 border-b px-4 py-3'>
-              <Icon class='text-xl text-red-500' icon='pixelarticons:square-alert' />
+              <i class='icon-[pixelarticons--square-alert] text-xl text-red-500' />
               <h2 id='playback-error-title' class='text-primary-text min-w-0 flex-1 text-base'>
                 Playback error
               </h2>
               <button class='button-borderless px-2' type='button' onClick={close} aria-label='Close playback error'>
-                <Icon icon='material-symbols:close' />
+                <i class='icon-[material-symbols--close]' />
               </button>
             </header>
             <pre class='text-primary-text overflow-auto p-4 text-xs leading-5 break-words whitespace-pre-wrap'>{error()}</pre>
             <footer class='border-secondary-border flex items-center justify-end gap-2 border-t px-4 py-3'>
               <Show when={copyState()}>{(state) => <span class='text-secondary-text mr-auto text-xs'>{state()}</span>}</Show>
               <button class='flex items-center gap-1' type='button' onClick={copy}>
-                <Icon icon='material-symbols:content-copy-outline' />
+                <i class='icon-[material-symbols--content-copy-outline]' />
                 <span>Copy</span>
               </button>
               <button type='button' onClick={close}>

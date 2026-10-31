@@ -1,13 +1,7 @@
 import { render } from 'solid-js/web';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import ConnectButton from '~/components/common/ConnectButton';
 import { device, resetConnectStore, setConnectAvailable, sharedPlayback } from '~test/fixtures/connect';
-
-vi.mock('@iconify-icon/solid', () => ({
-  Icon: (props: { icon: string; class?: string; classList?: Record<string, boolean> }) => (
-    <span data-testid='connect-icon' data-icon={props.icon} class={props.class} classList={props.classList} />
-  ),
-}));
 
 describe('ConnectButton', () => {
   let container: HTMLDivElement;
@@ -64,8 +58,8 @@ describe('ConnectButton', () => {
 
     dispose = render(() => <ConnectButton />, container);
 
-    const icon = container.querySelector('[data-testid="connect-icon"]') as HTMLElement | null;
-    expect(icon?.dataset.icon).toBe('material-symbols:volume-up');
+    const icon = container.querySelector('i[class*="icon-["]') as HTMLElement | null;
+    expect(icon?.classList.contains('icon-[material-symbols--volume-up]')).toBe(true);
     expect(container.textContent).toContain('Living Room');
   });
 

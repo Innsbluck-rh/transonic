@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { platform } from '@tauri-apps/plugin-os';
 import { createEffect, createMemo, createResource, For, Show } from 'solid-js';
 import { commands, type PlaybackOutputDevice, type PlaybackTranscodingCodec } from '~/bindings';
@@ -163,7 +162,7 @@ function PlaybackSettings() {
             checked={settingsStore.playback.streamMode === 'raw'}
             onChange={() => setPlaybackSetting('streamMode', 'raw')}
           />
-          <Icon icon='material-symbols:audio-file-rounded' class='text-2xl' />
+          <i class='icon-[material-symbols--audio-file-rounded] text-2xl' />
           <div class='flex flex-col'>
             <p class='font-bold'>Raw Stream</p>
             <p class='text-secondary-text'>Stream raw audio files.</p>
@@ -177,7 +176,7 @@ function PlaybackSettings() {
             checked={settingsStore.playback.streamMode === 'transcoding'}
             onChange={() => setPlaybackSetting('streamMode', 'transcoding')}
           />
-          <Icon icon='material-symbols:replace-audio-rounded' class='text-2xl' />
+          <i class='icon-[material-symbols--replace-audio-rounded] text-2xl' />
           <div class='flex flex-col'>
             <p class='font-bold'>Transcoding Stream</p>
             <p class='text-secondary-text'>Stream audio files via transcoding.</p>

@@ -1,4 +1,3 @@
-import { Icon } from '@iconify-icon/solid';
 import { Component, createSignal, Show } from 'solid-js';
 import { formatCompactDuration } from '~/utils/duration';
 import Heading3 from '../text/Heading3';
@@ -35,24 +34,24 @@ export default function ConnectQueueResolveDialog() {
               Resolve Queue
             </h2>
             <button class='button-borderless px-2' type='button' onClick={close} aria-label='Close playback error'>
-              <Icon icon='material-symbols:close' />
+              <i class='icon-[material-symbols--close]' />
             </button>
           </header>
           <div class='flex flex-col gap-1 p-4'>
-            <ResolvingQueueItem name='Server' icon='material-symbols:host-sharp' />
+            <ResolvingQueueItem name='Server' icon='icon-[material-symbols--host-sharp]' />
 
             <div class='flex items-center justify-end justify-evenly gap-2 px-4 py-3'>
               <button class='flex items-center gap-1' type='button'>
-                <Icon icon='material-symbols:arrow-upward' />
+                <i class='icon-[material-symbols--arrow-upward]' />
                 <span>Push Local</span>
               </button>
               <button class='flex items-center gap-1' type='button'>
-                <Icon icon='material-symbols:arrow-downward' />
+                <i class='icon-[material-symbols--arrow-downward]' />
                 <span>Pull From Server</span>
               </button>
             </div>
 
-            <ResolvingQueueItem name='Local' icon='material-symbols:devices-sharp' />
+            <ResolvingQueueItem name='Local' icon='icon-[material-symbols--devices-sharp]' />
           </div>
 
           <footer class='border-secondary-border flex items-center justify-end gap-2 border-t px-4 py-3'>
@@ -76,7 +75,7 @@ const ResolvingQueueItem: Component<ResolvingQueueItemProps> = (props) => {
   return (
     <div class='flex cursor-pointer flex-col gap-2 rounded-md px-3 py-2'>
       <div class='flex items-center gap-2'>
-        <Icon icon={props.icon} />
+        <i class={props.icon} />
         <Heading3>{props.name}</Heading3>
         <div class='flex-1' />
         <p class='font-bold'>10 items / playing</p>
