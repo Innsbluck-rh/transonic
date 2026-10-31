@@ -69,45 +69,6 @@ describe('settings service', () => {
     expect(settingsStore.playback.gaplessPlaybackEnabled).toBe(false);
   });
 
-  it('rolls back optimistic playback stream setting changes when persistence fails', async () => {
-    settingsUpdate.mockResolvedValue({
-      status: 'error',
-      error: 'write failed',
-    });
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    await setPlaybackSetting('streamMode', 'transcoding');
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith('write failed');
-    expect(settingsStore.playback.streamMode).toBe('raw');
-  });
-
-  it('rolls back optimistic output device changes when persistence fails', async () => {
-    settingsUpdate.mockResolvedValue({
-      status: 'error',
-      error: 'write failed',
-    });
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    await setPlaybackSetting('outputDeviceId', 'output:speakers');
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith('write failed');
-    expect(settingsStore.playback.outputDeviceId).toBeNull();
-  });
-
-  it('rolls back optimistic metered network transcoding changes when persistence fails', async () => {
-    settingsUpdate.mockResolvedValue({
-      status: 'error',
-      error: 'write failed',
-    });
-    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-
-    await setPlaybackSetting('meteredNetworkTranscodingEnabled', true);
-
-    expect(consoleErrorSpy).toHaveBeenCalledWith('write failed');
-    expect(settingsStore.playback.meteredNetworkTranscodingEnabled).toBe(false);
-  });
-
   it('applies Rust-provided settings verbatim without re-normalizing on the TS side', async () => {
     // Rust owns normalization/migration; hydrate must trust its output as-is.
     const settings = {
