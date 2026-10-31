@@ -18,7 +18,6 @@ interface QueueListProps {
   onClickQueue?: (song: SongResponse, index: number, songs: SongResponse[]) => void;
 }
 
-const QUEUE_COVER_ART_ROOT_MARGIN = '480px 0px';
 const QUEUE_ITEM_DND_TYPE = 'queue-item';
 const QUEUE_ITEM_DROP_TARGET_TYPE = 'queue-item-drop-target';
 
@@ -92,20 +91,17 @@ const QueueList: Component<QueueListProps> = (props) => {
       return undefined;
     }
     if (!coverArtObserver) {
-      coverArtObserver = new IntersectionObserver(
-        (entries) => {
-          for (const entry of entries) {
-            if (!entry.isIntersecting) {
-              continue;
-            }
-
-            const coverArtId = (entry.target as HTMLElement).dataset.coverArtId;
-            requestCoverArtId(coverArtId);
-            coverArtObserver?.unobserve(entry.target);
+      coverArtObserver = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) {
+            continue;
           }
-        },
-        { rootMargin: QUEUE_COVER_ART_ROOT_MARGIN }
-      );
+
+          const coverArtId = (entry.target as HTMLElement).dataset.coverArtId;
+          requestCoverArtId(coverArtId);
+          coverArtObserver?.unobserve(entry.target);
+        }
+      });
     }
 
     return coverArtObserver;

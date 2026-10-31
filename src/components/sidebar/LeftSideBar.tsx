@@ -1,9 +1,9 @@
 import interact from 'interactjs';
 import { Component } from 'solid-js';
-import IndexContent from './index/IndexContent';
+import BrowseContent from './browse/BrowseContent';
 
 const LeftSideBar: Component = () => {
-  interact('.index-sidebar').resizable({
+  interact('.browse-sidebar').resizable({
     edges: { right: true },
     listeners: {
       move: function (event) {
@@ -28,8 +28,8 @@ const LeftSideBar: Component = () => {
   });
 
   return (
-    <div class='bg-primary-plane index-sidebar border-primary-border flex w-56 max-w-96 min-w-40 flex-col border-r'>
-      <IndexContent />
+    <div class='bg-primary-plane browse-sidebar border-primary-border flex w-60 max-w-96 min-w-40 flex-col border-r'>
+      <BrowseContent />
     </div>
   );
 };

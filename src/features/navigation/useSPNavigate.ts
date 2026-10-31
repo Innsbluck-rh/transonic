@@ -27,7 +27,7 @@ function isSPBrowseDetailPath(pathname: string) {
   return pathname !== browseRoot && pathname.startsWith(`${browseRoot}/`);
 }
 
-function insertSPBrowseIndexHistoryEntry() {
+function insertSPBrowseRootHistoryEntry() {
   const browseRoot = resolveSPBrowseRoute();
 
   window.history.pushState({ _depth: window.history.length }, '', browseRoot);
@@ -63,21 +63,21 @@ export function useSPNavigate() {
 
     const currentPathname = normalizePathname(location.pathname);
     const targetPathname = typeof to === 'string' ? normalizePathname(to) : null;
-    const shouldInsertBrowseIndex =
+    const shouldInsertBrowseRoot =
       targetPathname !== null && !options?.replace && isSPBrowseDetailPath(targetPathname) && !isSPBrowsePath(currentPathname);
 
-    const navigateWithBrowseIndex = () => {
-      if (shouldInsertBrowseIndex) {
-        insertSPBrowseIndexHistoryEntry();
+    const navigateWithBrowseRoot = () => {
+      if (shouldInsertBrowseRoot) {
+        insertSPBrowseRootHistoryEntry();
       }
       nav(to);
     };
 
     if (document.startViewTransition) {
-      const transition = document.startViewTransition(navigateWithBrowseIndex);
+      const transition = document.startViewTransition(navigateWithBrowseRoot);
       void transition.finished.then(clearNavDirection);
     } else {
-      navigateWithBrowseIndex();
+      navigateWithBrowseRoot();
     }
   };
 }

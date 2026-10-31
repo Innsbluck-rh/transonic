@@ -5,7 +5,6 @@ mod browse;
 pub(crate) mod common;
 mod connect;
 mod cover_art;
-mod index;
 mod json;
 pub(crate) mod playback;
 mod search;
@@ -17,8 +16,10 @@ pub use artist_image::get_artist_image;
 pub use backup::{export_server_backup, import_server_backup};
 pub use browse::album::{get_album_info, get_album_songs};
 pub use browse::artist::{get_artist, get_artist_info2, get_artists, get_music_directory};
+pub use browse::artist_indexes::get_artist_indexes;
 pub use browse::folder_structure::get_folder_structure_albums;
 pub use browse::folder_structure_album_songs::get_folder_structure_album_songs;
+pub use browse::folder_structure_roots::{get_folder_structure_roots, get_music_folders};
 pub use browse::song::get_song;
 pub use connect::{
     connect_get_devices, connect_get_runtime_status, connect_get_shared_playback,
@@ -27,8 +28,6 @@ pub use connect::{
 pub use cover_art::{
     clear_cover_art_cache, get_cover_art, get_cover_art_cache_status, get_cover_art_cached,
 };
-pub use index::artist::get_artist_indexes;
-pub use index::folder_structure::{get_folder_structure_roots, get_music_folders};
 pub use playback::{
     consume_pending_notification_tap, playback_append_to_queue, playback_clear_queue,
     playback_get_output_devices, playback_get_state, playback_insert_after_current,
@@ -61,12 +60,19 @@ pub use browse::artist::{
     __specta__fn__get_music_directory,
 };
 #[doc(hidden)]
+pub use browse::artist_indexes::{__cmd__get_artist_indexes, __specta__fn__get_artist_indexes};
+#[doc(hidden)]
 pub use browse::folder_structure::{
     __cmd__get_folder_structure_albums, __specta__fn__get_folder_structure_albums,
 };
 #[doc(hidden)]
 pub use browse::folder_structure_album_songs::{
     __cmd__get_folder_structure_album_songs, __specta__fn__get_folder_structure_album_songs,
+};
+#[doc(hidden)]
+pub use browse::folder_structure_roots::{
+    __cmd__get_folder_structure_roots, __cmd__get_music_folders,
+    __specta__fn__get_folder_structure_roots, __specta__fn__get_music_folders,
 };
 #[doc(hidden)]
 pub use browse::song::{__cmd__get_song, __specta__fn__get_song};
@@ -83,13 +89,6 @@ pub use cover_art::{
     __cmd__clear_cover_art_cache, __cmd__get_cover_art, __cmd__get_cover_art_cache_status,
     __cmd__get_cover_art_cached, __specta__fn__clear_cover_art_cache, __specta__fn__get_cover_art,
     __specta__fn__get_cover_art_cache_status, __specta__fn__get_cover_art_cached,
-};
-#[doc(hidden)]
-pub use index::artist::{__cmd__get_artist_indexes, __specta__fn__get_artist_indexes};
-#[doc(hidden)]
-pub use index::folder_structure::{
-    __cmd__get_folder_structure_roots, __cmd__get_music_folders,
-    __specta__fn__get_folder_structure_roots, __specta__fn__get_music_folders,
 };
 #[doc(hidden)]
 pub use playback::{
