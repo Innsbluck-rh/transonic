@@ -326,7 +326,7 @@ describe('PlaybackSettings', () => {
     const root = renderPlaybackSettings(settings());
     const useCustomOutput = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
 
-    expect(useCustomOutput).toBeDefined();
+    expect(useCustomOutput).not.toBeNull();
     expect(useCustomOutput!.disabled).toBe(false);
     expect(commands.playbackGetOutputDevices).not.toHaveBeenCalled();
 
