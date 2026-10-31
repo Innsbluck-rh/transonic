@@ -82,7 +82,7 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
                 setOpen(false);
               }}
             >
-              <i class={`${getIconForMode(mode)} text-md`} />
+              <i class={`${getIconForMode(mode)} text-secondary-text text-md`} />
               <p class='archivo truncate text-sm'>{mode}</p>
             </div>
           )}
