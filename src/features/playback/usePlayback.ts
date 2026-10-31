@@ -1,9 +1,9 @@
 import { createMemo, createSignal } from 'solid-js';
-import { commands, type InterruptReason, type PlayingState, type QueueSource, type SongResponse } from '~/bindings';
+import { commands, type InterruptReason, type PlayingState, type SongResponse } from '~/bindings';
 import { setPlaybackSetting, settingsStore } from '~/features/settings/service';
 import { connectStore } from '~/stores/ConnectStore';
 import { formatClockTime } from '~/utils/duration';
-import { hasPlaybackCommandError } from './service';
+import { appendToQueue, hasPlaybackCommandError, insertAfterCurrent } from './service';
 
 import { playbackStore } from '~/stores/PlaybackStore';
 import { usePlaybackStatus } from './usePlaybackStatus';
@@ -220,14 +220,6 @@ export function usePlayback() {
         autoPlay: true,
       })
       .then(hasPlaybackCommandError);
-  };
-
-  const insertAfterCurrent = (items: QueueSource[]) => {
-    commands.playbackInsertAfterCurrent({ items }).then(hasPlaybackCommandError);
-  };
-
-  const appendToQueue = (items: QueueSource[]) => {
-    commands.playbackAppendToQueue({ items }).then(hasPlaybackCommandError);
   };
 
   const clearQueue = () => {

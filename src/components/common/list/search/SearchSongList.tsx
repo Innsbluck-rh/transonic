@@ -15,7 +15,7 @@ interface SearchSongListProps {
  * @description 検索画面の曲一行リスト（カバーアート付き・番号列なし）
  */
 const SearchSongList: Component<SearchSongListProps> = (props) => {
-  const { insertAfterCurrent, appendToQueue, status: playbackStatus } = usePlayback();
+  const { status: playbackStatus } = usePlayback();
   const coverArtMap = useCoverArtMap(() => (props.songs ?? []).map((song) => song.displayCoverArtId ?? song.coverArtId), CoverArtSizes.sm, {
     cachedFallbackSizes: [CoverArtSizes.lg, CoverArtSizes.md],
   });
@@ -30,7 +30,7 @@ const SearchSongList: Component<SearchSongListProps> = (props) => {
             conditions={conditions()}
             coverArt
             coverArtUrl={coverArtMap.src(song.displayCoverArtId ?? song.coverArtId)}
-            menuItems={buildSongMenuItems(song, { insertAfterCurrent, appendToQueue })}
+            menuItems={buildSongMenuItems(song)}
             onClick={() => {
               const songs = props.songs ?? [];
               if (songs.length === 0) return;

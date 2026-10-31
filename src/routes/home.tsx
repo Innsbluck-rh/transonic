@@ -1,6 +1,7 @@
-import { createSignal, For, onMount, Show } from 'solid-js';
+import { createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
-import AlbumHorizontalList from '~/components/common/list/album/AlbumHorizontalList';
+import AlbumGrid from '~/components/common/list/album/AlbumGrid';
+import HorizontalAlbumItem from '~/components/common/list/album/HorizontalAlbumItem';
 import Heading2 from '~/components/common/text/Heading2';
 import RouteHeader from '~/components/common/text/RouteHeader';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
@@ -11,12 +12,13 @@ type HomeAlbumSection = {
   heading: string;
   context: AlbumListContext;
   albums: AlbumListItem[];
+  size: number;
 };
 
-const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> = [
-  { heading: 'recently played', context: 'recent' },
-  { heading: 'newest', context: 'newest' },
-  { heading: 'random picks', context: 'random' },
+const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context' | 'size'>> = [
+  { heading: 'recently played', context: 'recent', size: 6 },
+  { heading: 'recently added', context: 'newest', size: 6 },
+  { heading: 'random picks', context: 'random', size: 6 },
 ];
 
 function Home() {
@@ -34,7 +36,7 @@ function Home() {
         HOME_ALBUM_CONTEXTS.map(async (section) => {
           const result = await commands.getAlbumList({
             context: section.context,
-            size: 16,
+            size: section.size,
             offset: null,
             fromYear: null,
             toYear: null,
@@ -100,16 +102,37 @@ function Home() {
           <Show when={!isLoadingAlbums()} fallback={<p class='m-3 text-sm text-zinc-400'>Loading album lists...</p>}>
             <For each={albumSections()}>
               {(section) => (
-                <div class='flex w-full flex-col gap-1 overflow-x-hidden'>
-                  <Heading2 class='px-3'>{section.heading}</Heading2>
-                  <AlbumHorizontalList
-                    class='px-4'
-                    albums={section.albums}
-                    emptyMessage={`No albums returned for ${section.heading}.`}
-                    onItemClick={async (album) => {
-                      navigate(resolveAlbumRoute(album.id, 'pc'));
-                    }}
-                  />
+                <div class='flex w-full flex-col overflow-x-hidden'>
+                  <Heading2 class='px-2'>{section.heading}</Heading2>
+                  <Switch
+                    fallback={
+                      <div class='m-3'>
+                        <AlbumGrid
+                          inline
+                          albums={section.albums}
+                          emptyMessage={`No albums returned for ${section.heading}.`}
+                          onItemClick={(album) => {
+                            navigate(resolveAlbumRoute(album.id));
+                          }}
+                        />
+                      </div>
+                    }
+                  >
+                    <Match when={section.context === 'recent'}>
+                      <Show
+                        when={section.albums.length > 0}
+                        fallback={<p class='archivo text-secondary-text mt-4 text-center italic'>No recent albums.</p>}
+                      >
+                        <div class='grid w-full gap-x-3 gap-y-2.5 p-3 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3'>
+                          <For each={section.albums}>
+                            {(album, _i) => {
+                              return <HorizontalAlbumItem album={album} />;
+                            }}
+                          </For>
+                        </div>
+                      </Show>
+                    </Match>
+                  </Switch>
                 </div>
               )}
             </For>

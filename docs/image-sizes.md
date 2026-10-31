@@ -30,15 +30,16 @@ that shows it, update the table below in the same change.
 ## Usage
 
 As of 2026-10-31. "Displayed" is the element's CSS size; `lg:` is the
-Tailwind `lg` breakpoint (≥ 1024 CSS px wide).
+Tailwind `lg` breakpoint (≥ 1024 CSS px wide), `md:` the `md` breakpoint
+(≥ 768 CSS px wide).
 
 | Where | Source | Requested | Cached fallback | Displayed (CSS px) |
 |---|---|---|---|---|
 | `ArtistRow` (via `BrowseList`) | artist `coverArtId` | `sm` 48 | `lg`, `md` | 32 × 32, `lg:` 24 × 24, circle |
 | `SongItem` (via `QueueList`, `SearchSongList`) | song `coverArtId` (`displayCoverArtId` in search) | `sm` 48 | `lg`, `md` | 32 × 32 |
 | `AlbumListItem` | album `coverArtId` | `sm` 48 | `lg`, `md` | 36 × 36 |
-| `AlbumGridItem` in `AlbumGrid` | album `coverArtId` | `md` 224 | `lg` | grid cell, min 112 wide (`lg:` min 144), grows to fill the row |
-| `AlbumGridItem` in `AlbumHorizontalList` | album `coverArtId` | `md` 224 | `lg` | 112 × 112 (`w-28`) |
+| `AlbumGridItem` in `AlbumGrid` | album `coverArtId` | `md` 224 | `lg` | grid cell, min 112 wide, grows to fill the row |
+| `HorizontalAlbumItem` (home, recently played) | album `coverArtId` | `md` 224 | `lg` | 56 × 56 (`size-14`), `md:` 48 × 48, `lg:` 56 × 56 |
 | Album page (`routes/browse/album.tsx`) | album `coverArtId` | `lg` 512 | — | 208 wide (`w-52`), `lg:` 168 (`w-42`) |
 | Artist page header (`routes/browse/artist.tsx`) | external artist image URL if any (`getArtistInfo2` large → medium → small, then `artistImageUrl`); otherwise artist `coverArtId` | external: as served (no size control); cover art: `lg` 512 | — | full width × 168 (`h-42`), `object-cover` |
 | `PlayerBar` (desktop) | current entry `coverArtId` | `lg` 512 | `lg` (no effect) | one image used twice: background full width × 92, thumbnail 48 × 48 |
@@ -57,7 +58,7 @@ each other:
 
 - Current track: `PlayerBar`, `SPPlayer`, SMTC and the Android notification all
   use the 512 entry; `SPPlayerBar` reuses it through its `lg` fallback.
-- Album: the album page fetches 512; `AlbumGridItem` and `AlbumListItem` reuse
-  it when cached.
+- Album: the album page fetches 512; `AlbumGridItem`, `AlbumListItem` and
+  `HorizontalAlbumItem` reuse it when cached.
 - Artist: the artist page fetches 512 only when there is no external image;
   `ArtistRow` reuses it when cached.

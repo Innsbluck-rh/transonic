@@ -1,6 +1,8 @@
-import { createSignal, For, onMount, Show } from 'solid-js';
+import { createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
+import HorizontalAlbumItem from '~/components/common/list/album/HorizontalAlbumItem';
+import LoadCircle from '~/components/common/LoadCircle';
 import Heading2 from '~/components/common/text/Heading2';
 import RouteHeader from '~/components/common/text/RouteHeader';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
@@ -11,12 +13,13 @@ type HomeAlbumSection = {
   heading: string;
   context: AlbumListContext;
   albums: AlbumListItem[];
+  size: number;
 };
 
-const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context'>> = [
-  { heading: 'recently played', context: 'recent' },
-  { heading: 'recently added', context: 'newest' },
-  { heading: 'random picks', context: 'random' },
+const HOME_ALBUM_CONTEXTS: Array<Pick<HomeAlbumSection, 'heading' | 'context' | 'size'>> = [
+  { heading: 'recently played', context: 'recent', size: 4 },
+  { heading: 'recently added', context: 'newest', size: 6 },
+  { heading: 'random picks', context: 'random', size: 6 },
 ];
 
 function SPHome() {
@@ -34,7 +37,7 @@ function SPHome() {
         HOME_ALBUM_CONTEXTS.map(async (section) => {
           const result = await commands.getAlbumList({
             context: section.context,
-            size: 3,
+            size: section.size,
             offset: null,
             fromYear: null,
             toYear: null,
@@ -95,21 +98,47 @@ function SPHome() {
       <Show when={albumError()}>{(message) => <p class='text-sm text-red-500'>{message()}</p>}</Show>
 
       <div class='flex flex-col gap-4'>
-        <Show when={!isLoadingAlbums()} fallback={<p class='text-sm text-zinc-400'>Loading album lists...</p>}>
+        <Show
+          when={!isLoadingAlbums()}
+          fallback={
+            <div class='flex size-full items-center justify-center'>
+              <LoadCircle />
+            </div>
+          }
+        >
           <For each={albumSections()}>
             {(section) => (
               <div class='flex flex-col'>
                 <Heading2 class='px-2'>{section.heading}</Heading2>
-                <div class='m-3'>
-                  <AlbumGrid
-                    inline
-                    albums={section.albums}
-                    emptyMessage={`No albums returned for ${section.heading}.`}
-                    onItemClick={(album) => {
-                      navigate(resolveAlbumRoute(album.id));
-                    }}
-                  />
-                </div>
+                <Switch
+                  fallback={
+                    <div class='m-3'>
+                      <AlbumGrid
+                        inline
+                        albums={section.albums}
+                        emptyMessage={`No albums returned for ${section.heading}.`}
+                        onItemClick={(album) => {
+                          navigate(resolveAlbumRoute(album.id));
+                        }}
+                      />
+                    </div>
+                  }
+                >
+                  <Match when={section.context === 'recent'}>
+                    <Show
+                      when={section.albums.length > 0}
+                      fallback={<p class='archivo text-secondary-text mt-4 text-center italic'>No recent albums.</p>}
+                    >
+                      <div class='grid w-full grid-cols-2 gap-1.5 px-3 py-2 xl:grid-cols-3'>
+                        <For each={section.albums}>
+                          {(album, _i) => {
+                            return <HorizontalAlbumItem album={album} />;
+                          }}
+                        </For>
+                      </div>
+                    </Show>
+                  </Match>
+                </Switch>
               </div>
             )}
           </For>
