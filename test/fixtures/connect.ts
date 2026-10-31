@@ -59,6 +59,7 @@ export function resetConnectStore() {
       message: null,
       deviceId: null,
       seq: 0,
+      queueResolution: null,
     },
     devices: [],
     sharedPlayback: null,
@@ -74,6 +75,7 @@ export function setSharedPlayback(state: ConnectSharedPlaybackState) {
     message: null,
     deviceId: 'own-device',
     seq: 1,
+    queueResolution: null,
   });
   setConnectStore('sharedPlayback', state);
   setConnectStore('sharedPlaybackReceivedAtMs', 100);
@@ -98,6 +100,7 @@ export function setConnectAvailable(devices: ConnectDevicePresence[], state: Con
       message: null,
       deviceId: 'local-device',
       seq: 1,
+      queueResolution: null,
     },
     devices,
     sharedPlayback: state,

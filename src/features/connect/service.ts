@@ -250,6 +250,7 @@ export async function refreshConnectStateSnapshot() {
       message: error instanceof Error ? error.message : String(error),
       deviceId: null,
       seq: 0,
+      queueResolution: null,
     });
     setConnectStore('devices', []);
     setConnectStore('sharedPlayback', null);
