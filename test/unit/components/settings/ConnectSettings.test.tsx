@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '~/bindings';

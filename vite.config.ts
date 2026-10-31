@@ -44,5 +44,6 @@ export default defineConfig(async ({ mode }) => ({
   },
   test: {
     include: ['test/**/*.test.{ts,tsx}'],
+    environment: 'jsdom',
   },
 }));
