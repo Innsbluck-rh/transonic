@@ -1,8 +1,8 @@
 import { Component, createSignal, Match, Switch } from 'solid-js';
 import { type BrowseMode } from '~/features/navigation/routes';
+import IndexModeSelect from './IndexModeSelect';
 import ArtistList from './list/ArtistList';
 import FolderList from './list/FolderList';
-import IndexModeSelect from './select/IndexModeSelect';
 
 const IndexContent: Component = () => {
   const [browseMode, setBrowseMode] = createSignal<BrowseMode>('Artists');
