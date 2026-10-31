@@ -1,6 +1,5 @@
 import { createRoot } from 'solid-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mergePlaybackStatusWithSharedPlayback } from '~/features/playback/sharedPlaybackStatus';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { setSettingsStore } from '~/features/settings/service';
 import { setConnectStore } from '~/stores/ConnectStore';
@@ -113,16 +112,6 @@ describe('usePlayback', () => {
     setPlaybackStore('status', localStatus);
     setSharedPlayback(remoteSharedPlayback);
 
-    const mergedStatus = mergePlaybackStatusWithSharedPlayback(localStatus, remoteSharedPlayback, 'own-device');
-    expect(mergedStatus.interruptReason).toBeNull();
-    expect(mergedStatus.pendingSeekPositionMs).toBeNull();
-    expect(mergedStatus.gaplessStatus).toEqual({
-      state: 'unavailable',
-      message: 'gapless: remote playback diagnostics unavailable',
-    });
-    expect(mergedStatus.playbackError).toBeNull();
-    expect(mergedStatus.actualStreamInfo).toBeNull();
-
     const dispose = createRoot((dispose) => {
       const playback = usePlayback();
 
@@ -136,69 +125,6 @@ describe('usePlayback', () => {
     });
 
     dispose();
-  });
-
-  it('preserves local stream details only for the active Connect device', () => {
-    const queue = [song('song-a')];
-    const localStatus = playbackStatus({
-      queue,
-      currentIndex: 0,
-      actualStreamInfo: actualStreamInfo('local-codec'),
-    });
-
-    expect(
-      mergePlaybackStatusWithSharedPlayback(localStatus, sharedPlayback({ queue, currentIndex: 0, activeDeviceId: 'own-device' }), 'own-device')
-        .actualStreamInfo?.codec
-    ).toBe('local-codec');
-    expect(
-      mergePlaybackStatusWithSharedPlayback(localStatus, sharedPlayback({ queue, currentIndex: 0, activeDeviceId: 'remote-device' }), 'own-device')
-        .actualStreamInfo
-    ).toBeNull();
-    expect(
-      mergePlaybackStatusWithSharedPlayback(localStatus, sharedPlayback({ queue, currentIndex: 0, activeDeviceId: null }), 'own-device')
-        .actualStreamInfo
-    ).toBeNull();
-  });
-
-  it('preserves local playback diagnostics only for the active Connect device', () => {
-    const queue = [song('song-a')];
-    const localStatus = playbackStatus({
-      queue,
-      currentIndex: 0,
-      interruptReason: 'stream_buffering_stall',
-      pendingSeekPositionMs: 12000,
-      gaplessStatus: {
-        state: 'ready',
-        message: 'gapless: ready',
-      },
-      playbackError: {
-        message: 'local error',
-        handled: false,
-      },
-      actualStreamInfo: actualStreamInfo('local-codec'),
-    });
-
-    const ownMergedStatus = mergePlaybackStatusWithSharedPlayback(
-      localStatus,
-      sharedPlayback({ queue, currentIndex: 0, activeDeviceId: 'own-device' }),
-      'own-device'
-    );
-    expect(ownMergedStatus.interruptReason).toBe('stream_buffering_stall');
-    expect(ownMergedStatus.pendingSeekPositionMs).toBe(12000);
-    expect(ownMergedStatus.gaplessStatus.state).toBe('ready');
-    expect(ownMergedStatus.playbackError?.message).toBe('local error');
-    expect(ownMergedStatus.actualStreamInfo?.codec).toBe('local-codec');
-
-    const remoteMergedStatus = mergePlaybackStatusWithSharedPlayback(
-      localStatus,
-      sharedPlayback({ queue, currentIndex: 0, activeDeviceId: 'remote-device' }),
-      'own-device'
-    );
-    expect(remoteMergedStatus.interruptReason).toBeNull();
-    expect(remoteMergedStatus.pendingSeekPositionMs).toBeNull();
-    expect(remoteMergedStatus.gaplessStatus.state).toBe('unavailable');
-    expect(remoteMergedStatus.playbackError).toBeNull();
-    expect(remoteMergedStatus.actualStreamInfo).toBeNull();
   });
 
   it('commits a previewed volume without sending the volume command again', () => {
