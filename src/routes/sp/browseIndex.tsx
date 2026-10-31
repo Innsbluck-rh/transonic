@@ -1,7 +1,7 @@
 import { createSignal } from 'solid-js';
+import BrowseItemList from '~/components/browse/BrowseItemList';
+import BrowseModeSelect from '~/components/browse/BrowseModeSelect';
 import RouteHeader from '~/components/common/text/RouteHeader';
-import BrowseItemList from '~/components/sidebar/browse/BrowseItemList';
-import BrowseModeSelect from '~/components/sidebar/browse/BrowseModeSelect';
 import { type BrowseMode } from '~/features/navigation/routes';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 

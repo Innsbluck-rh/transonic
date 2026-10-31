@@ -45,7 +45,7 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
     <div ref={rootRef} class='relative w-full'>
       <div class='bg-primary-surface border-secondary-border flex w-full flex-col overflow-hidden rounded-lg border shadow-md'>
         <div
-          class='hover:bg-primary-hover flex w-full cursor-pointer flex-row items-center gap-2 px-3 py-1.5'
+          class='hover:bg-primary-hover ripple flex w-full cursor-pointer flex-row items-center gap-2 px-3 py-1.5'
           onClick={() => setOpen((current) => !current)}
         >
           {/* 全モードを同じセルに重ね、幅を最長のモード名に固定する（選択中以外は invisible） */}
@@ -76,7 +76,7 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
         <For each={otherModes()}>
           {(mode) => (
             <div
-              class='hover:bg-primary-hover flex w-full cursor-pointer items-center gap-2 px-3 py-2'
+              class='hover:bg-primary-hover ripple flex w-full cursor-pointer items-center gap-2 px-3 py-2'
               onClick={() => {
                 props.onSelect?.(mode);
                 setOpen(false);

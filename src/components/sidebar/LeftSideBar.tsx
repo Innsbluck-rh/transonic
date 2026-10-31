@@ -1,8 +1,8 @@
 import interact from 'interactjs';
 import { Component, createSignal } from 'solid-js';
 import { BrowseMode } from '~/features/navigation/routes';
-import BrowseItemList from './browse/BrowseItemList';
-import BrowseModeSelect from './browse/BrowseModeSelect';
+import BrowseItemList from '../browse/BrowseItemList';
+import BrowseModeSelect from '../browse/BrowseModeSelect';
 
 const LeftSideBar: Component = () => {
   interact('.browse-sidebar').resizable({
