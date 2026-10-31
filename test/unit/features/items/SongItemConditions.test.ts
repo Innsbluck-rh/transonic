@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { PlaybackStatus } from '~/bindings';
 
-import { resolveSongItemConditions, songItemConditionAttrs } from './SongItemConditions';
+import { resolveSongItemConditions, songItemConditionAttrs } from '~/features/items/SongItemConditions';
 
 function createPlaybackStatus(overrides: Partial<PlaybackStatus> = {}): PlaybackStatus {
   return {

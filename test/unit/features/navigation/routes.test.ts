@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { resolveAlbumRoute, resolveArtistRoute, resolveFolderRoute, resolveHomeRoute, resolveSettingsRoute, resolveSPBrowseRoute } from './routes';
+import {
+  resolveAlbumRoute,
+  resolveArtistRoute,
+  resolveFolderRoute,
+  resolveHomeRoute,
+  resolveSettingsRoute,
+  resolveSPBrowseRoute,
+} from '~/features/navigation/routes';
 
 describe('navigation routes', () => {
   it('resolves canonical home and settings routes for each target', () => {

@@ -9,9 +9,9 @@ vi.mock('@tauri-apps/plugin-os', () => ({
   platform: () => 'windows',
 }));
 
+import PlaybackStatusText from '~/components/player/common/PlaybackStatusText';
 import { setConnectStore } from '~/stores/ConnectStore';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
-import PlaybackStatusText from './PlaybackStatusText';
 
 function actualStreamInfo(codec: string): PlaybackActualStreamInfo {
   return {

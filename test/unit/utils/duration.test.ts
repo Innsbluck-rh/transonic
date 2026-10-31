@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatClockTime, formatCompactDuration } from './duration';
+import { formatClockTime, formatCompactDuration } from '~/utils/duration';
 
 describe('duration formatters', () => {
   it('formats playback clock time with floor-based minute handling', () => {

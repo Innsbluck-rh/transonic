@@ -3,9 +3,9 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSession } from '~/bindings';
+import BrowseList from '~/components/common/list/browse/BrowseList';
 import type { BrowseListItem } from '~/features/browse/service';
 import { setSessionStore } from '~/stores/SessionStore';
-import BrowseList from './BrowseList';
 
 const mocks = vi.hoisted(() => ({
   fetchCoverArtAssetUrl: vi.fn(),

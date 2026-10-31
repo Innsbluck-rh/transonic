@@ -1,11 +1,11 @@
 import { createRoot } from 'solid-js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectSharedPlaybackState, PlaybackActualStreamInfo, PlaybackStatus, SongResponse } from '~/bindings';
+import { mergePlaybackStatusWithSharedPlayback } from '~/features/playback/sharedPlaybackStatus';
+import { usePlayback } from '~/features/playback/usePlayback';
 import { setSettingsStore } from '~/features/settings/service';
 import { setConnectStore } from '~/stores/ConnectStore';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
-import { mergePlaybackStatusWithSharedPlayback } from './sharedPlaybackStatus';
-import { usePlayback } from './usePlayback';
 
 const bindingMocks = vi.hoisted(() => ({
   playbackSetVolume: vi.fn(),

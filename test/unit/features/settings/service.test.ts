@@ -9,7 +9,14 @@ vi.mock('~/bindings', () => ({
 
 import { commands } from '~/bindings';
 
-import { hydrateSettings, setAppearanceSetting, setConnectSetting, setPlaybackSetting, setSettingsStore, settingsStore } from './service';
+import {
+  hydrateSettings,
+  setAppearanceSetting,
+  setConnectSetting,
+  setPlaybackSetting,
+  setSettingsStore,
+  settingsStore,
+} from '~/features/settings/service';
 
 describe('settings service', () => {
   const settingsUpdate = vi.mocked(commands.settingsUpdate);

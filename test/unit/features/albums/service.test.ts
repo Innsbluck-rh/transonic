@@ -18,7 +18,7 @@ vi.mock('~/bindings', () => ({
 }));
 
 async function loadService() {
-  return import('./service');
+  return import('~/features/albums/service');
 }
 
 describe('album cover art service', () => {

@@ -3,8 +3,8 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectDevicePresence, ConnectSharedPlaybackState, PlayingState } from '~/bindings';
+import ConnectDeviceCard from '~/components/settings/ConnectDeviceCard';
 import { setConnectStore } from '~/stores/ConnectStore';
-import ConnectDeviceCard from './ConnectDeviceCard';
 
 vi.mock('@iconify-icon/solid', () => ({
   Icon: (props: { icon: string; class?: string; classList?: Record<string, boolean> }) => (

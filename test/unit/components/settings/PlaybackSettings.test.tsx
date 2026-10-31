@@ -3,9 +3,9 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, type AppSettings } from '~/bindings';
+import PlaybackSettings from '~/components/settings/PlaybackSettings';
 import { setSettingsStore } from '~/features/settings/service';
 import { setSessionStore } from '~/stores/SessionStore';
-import PlaybackSettings from './PlaybackSettings';
 
 const osMocks = vi.hoisted(() => ({
   platform: vi.fn(() => 'android'),

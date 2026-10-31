@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, type ConnectSharedPlaybackState, type ConnectStateSnapshot, type PlayingState, type SongResponse } from '~/bindings';
+import { refreshConnectStateSnapshot, shouldReuseSharedPlaybackReceivedAtMs } from '~/features/connect/service';
 import { connectStore, setConnectStore } from '~/stores/ConnectStore';
-import { refreshConnectStateSnapshot, shouldReuseSharedPlaybackReceivedAtMs } from './service';
 
 const bindingMocks = vi.hoisted(() => ({
   connectGetStateSnapshot: vi.fn(),

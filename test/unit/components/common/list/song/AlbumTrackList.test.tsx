@@ -3,39 +3,25 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ConnectSharedPlaybackState, PlaybackStatus, SongResponse } from '~/bindings';
+import AlbumTrackList from '~/components/common/list/song/AlbumTrackList';
 import { setConnectStore } from '~/stores/ConnectStore';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
-import QueueList from './QueueList';
 
 vi.mock('@iconify-icon/solid', () => ({
   Icon: () => null,
 }));
 
-vi.mock('@atlaskit/pragmatic-drag-and-drop/combine', () => ({
-  combine: () => () => {},
-}));
-
-vi.mock('@atlaskit/pragmatic-drag-and-drop/element/adapter', () => ({
-  draggable: () => () => {},
-  dropTargetForElements: () => () => {},
-}));
-
 vi.mock('~/features/menu', () => ({
-  buildQueueItemMenuItems: () => [],
+  buildSongMenuItems: () => [],
 }));
 
 vi.mock('~/features/menu/useContextMenu', () => ({
   default: () => ({}),
 }));
 
-vi.mock('~/features/navigation/useSPNavigate', () => ({
-  useSPNavigate: () => vi.fn(),
-}));
-
 vi.mock('~/bindings', () => ({
   commands: {
-    playbackMoveQueueIndex: vi.fn().mockResolvedValue({ status: 'ok' }),
-    playbackPlayQueueIndex: vi.fn(),
+    playbackSetQueue: vi.fn(),
   },
 }));
 
@@ -132,7 +118,7 @@ function resetStores() {
   });
 }
 
-describe('QueueList', () => {
+describe('AlbumTrackList', () => {
   let container: HTMLDivElement;
   let dispose: () => void;
 
@@ -148,9 +134,10 @@ describe('QueueList', () => {
     vi.clearAllMocks();
   });
 
-  it('highlights the shared current queue row when the local queue index is stale', () => {
-    const remoteQueue = [song('remote-1'), song('remote-2')];
-    setPlaybackStore('status', playbackStatus([remoteQueue[1]], 0));
+  it('marks the shared current song when Connect playback is active', () => {
+    const staleLocalSong = song('local-current');
+    const remoteSongs = [song('remote-1'), song('remote-2')];
+    setPlaybackStore('status', playbackStatus([staleLocalSong], 0));
     setConnectStore('runtime', {
       enabled: true,
       connected: true,
@@ -158,13 +145,14 @@ describe('QueueList', () => {
       deviceId: 'own-device',
       seq: 1,
     });
-    setConnectStore('sharedPlayback', sharedPlayback(remoteQueue, 1));
+    setConnectStore('sharedPlayback', sharedPlayback(remoteSongs, 1));
     setConnectStore('sharedPlaybackReceivedAtMs', 100);
 
-    dispose = render(() => <QueueList queue={remoteQueue} />, container);
+    dispose = render(() => <AlbumTrackList songs={[staleLocalSong, ...remoteSongs]} />, container);
 
     const rows = container.querySelectorAll('.song-item');
     expect(rows[0].getAttribute('data-current')).toBeNull();
-    expect(rows[1].getAttribute('data-current')).toBe('true');
+    expect(rows[1].getAttribute('data-current')).toBeNull();
+    expect(rows[2].getAttribute('data-current')).toBe('true');
   });
 });

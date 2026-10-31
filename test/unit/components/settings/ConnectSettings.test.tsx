@@ -3,9 +3,9 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '~/bindings';
+import ConnectSettings from '~/components/settings/ConnectSettings';
 import { setSettingsStore } from '~/features/settings/service';
 import { setConnectStore } from '~/stores/ConnectStore';
-import ConnectSettings from './ConnectSettings';
 
 vi.mock('@iconify-icon/solid', () => ({
   Icon: () => null,

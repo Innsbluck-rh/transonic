@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ConnectDevicePresence, ConnectSharedPlaybackState } from '~/bindings';
-import { resolveExternalPlaybackDevice } from './playbackDevice';
+import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice';
 
 function device(deviceId: string, displayName = deviceId): ConnectDevicePresence {
   return {

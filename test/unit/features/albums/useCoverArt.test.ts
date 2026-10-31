@@ -1,14 +1,14 @@
 import { createRoot, createSignal, type Setter } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ActiveSession } from '~/bindings';
+import { useCoverArt, type CoverArtState } from '~/features/albums/useCoverArt';
 import { setSessionStore } from '~/stores/SessionStore';
-import { useCoverArt, type CoverArtState } from './useCoverArt';
 
 const mocks = vi.hoisted(() => ({
   fetchCoverArtAssetUrl: vi.fn(),
 }));
 
-vi.mock('./service', () => ({
+vi.mock('~/features/albums/service', () => ({
   fetchCoverArtAssetUrl: mocks.fetchCoverArtAssetUrl,
 }));
 
