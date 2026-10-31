@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadArtistBrowseItems, loadFolderBrowseItems } from './service';
+import { loadArtistBrowseItems, loadFolderBrowseItems } from '~/features/browse/service';
 
 const mocks = vi.hoisted(() => ({
   getMusicFolders: vi.fn(),

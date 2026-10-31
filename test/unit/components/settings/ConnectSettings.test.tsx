@@ -1,11 +1,11 @@
-// @vitest-environment jsdom
-
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppSettings } from '~/bindings';
+import ConnectSettings from '~/components/settings/ConnectSettings';
 import { setSettingsStore } from '~/features/settings/service';
 import { setConnectStore } from '~/stores/ConnectStore';
-import ConnectSettings from './ConnectSettings';
+import { appSettings } from '~test/fixtures/settings';
+import { flushPromises } from '~test/helpers/async';
 
 vi.mock('@iconify-icon/solid', () => ({
   Icon: () => null,
@@ -27,32 +27,7 @@ vi.mock('~/bindings', () => ({
 import { commands } from '~/bindings';
 
 function enabledSettings(): AppSettings {
-  return {
-    appearance: {
-      albumDisplayMode: 'grid',
-    },
-    playback: {
-      gaplessPlaybackEnabled: false,
-      volume: 1,
-      useCustomOutput: false,
-      useAsioOutput: false,
-      outputDeviceId: null,
-      streamMode: 'raw',
-      meteredNetworkTranscodingEnabled: false,
-      transcodingBitrateLimit: 320,
-      useCustomTranscodingCodec: false,
-      transcodingCodec: 'auto',
-    },
-    connect: {
-      enabled: true,
-      useSubsonicServerHost: true,
-      connectServerPort: 4747,
-      connectServerHost: null,
-      deviceId: 'device-1',
-      deviceName: 'This device',
-      allowInsecureConnectServer: false,
-    },
-  };
+  return appSettings({ connect: { enabled: true, deviceName: 'This device' } });
 }
 
 describe('ConnectSettings', () => {
@@ -108,10 +83,6 @@ describe('ConnectSettings', () => {
     document.body.appendChild(container);
     dispose = render(() => <ConnectSettings />, container);
     return container;
-  }
-
-  function flushPromises() {
-    return new Promise((resolve) => window.setTimeout(resolve, 0));
   }
 
   it('persists disabled Connect settings when the main toggle is unchecked', async () => {

@@ -1,35 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { ConnectDevicePresence, ConnectSharedPlaybackState } from '~/bindings';
-import { resolveExternalPlaybackDevice } from './playbackDevice';
-
-function device(deviceId: string, displayName = deviceId): ConnectDevicePresence {
-  return {
-    deviceId,
-    displayName,
-    platform: 'test',
-    appVersion: '0.0.0',
-    lastSeenAt: '2026-05-25T00:00:00Z',
-    online: true,
-  };
-}
-
-function sharedPlayback(activeDeviceId: string | null): ConnectSharedPlaybackState {
-  return {
-    seq: 1,
-    activeDeviceId,
-    state: {
-      playingState: 'playing',
-      queue: [],
-      currentIndex: null,
-      currentPositionMs: 0,
-      currentSongId: null,
-      playNextQueueLen: 0,
-    },
-    updatedAt: '2026-05-25T00:00:00Z',
-    updatedByDeviceId: activeDeviceId,
-    updateReason: 'snapshot',
-  };
-}
+import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice';
+import { device, sharedPlayback } from '~test/fixtures/connect';
 
 describe('resolveExternalPlaybackDevice', () => {
   it('does not resolve a playback device before the local runtime identity is known', () => {
@@ -37,7 +8,7 @@ describe('resolveExternalPlaybackDevice', () => {
       connected: false,
       ownDeviceId: null,
       devices: [device('own-device', 'This device')],
-      sharedPlayback: sharedPlayback('own-device'),
+      sharedPlayback: sharedPlayback({ activeDeviceId: 'own-device' }),
     });
 
     expect(result).toBeUndefined();
@@ -48,7 +19,7 @@ describe('resolveExternalPlaybackDevice', () => {
       connected: true,
       ownDeviceId: 'own-device',
       devices: [device('own-device', 'This device')],
-      sharedPlayback: sharedPlayback('own-device'),
+      sharedPlayback: sharedPlayback({ activeDeviceId: 'own-device' }),
     });
 
     expect(result).toBeUndefined();
@@ -60,7 +31,7 @@ describe('resolveExternalPlaybackDevice', () => {
       connected: true,
       ownDeviceId: 'own-device',
       devices: [device('own-device', 'This device'), remoteDevice],
-      sharedPlayback: sharedPlayback('remote-device'),
+      sharedPlayback: sharedPlayback({ activeDeviceId: 'remote-device' }),
     });
 
     expect(result).toBe(remoteDevice);
@@ -71,7 +42,7 @@ describe('resolveExternalPlaybackDevice', () => {
       connected: true,
       ownDeviceId: 'own-device',
       devices: [device('own-device', 'This device')],
-      sharedPlayback: sharedPlayback('missing-device'),
+      sharedPlayback: sharedPlayback({ activeDeviceId: 'missing-device' }),
     });
 
     expect(result).toBeUndefined();

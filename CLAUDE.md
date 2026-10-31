@@ -17,6 +17,7 @@ Frontend (run from repo root):
 - `pnpm verify` — typecheck, frontend tests, Go type drift check and tests, Rust check, and Rust workspace tests (including bindings drift); stops on the first failure
 - `pnpm test` — run all vitest tests (`vitest run`)
 - `pnpm test <path>` / `pnpm exec vitest run <path>` — run a single test file
+- Frontend tests live under `test/`, never in `src/`: unit tests in `test/unit/` mirroring the `src/` path of their subject (`src/features/x/service.ts` → `test/unit/features/x/service.test.ts`), integration tests in `test/integration/`. Import subjects via `~/...`. Shared test data and store setup live in `test/fixtures/`, async helpers in `test/helpers/` (import via `~test/...`); extend those instead of copying builders into a test file. Vitest only collects `test/**`, and `test/no-tests-in-src.test.ts` fails if a `*.test.*` file appears under `src/`.
 - `pnpm format` / `pnpm format:check` — Prettier
 - `pnpm bindings:export` — regenerate `src/bindings.ts` from Rust specta annotations
 - `pnpm bindings:check` — verify bindings are in sync (also runs before `pnpm build`)

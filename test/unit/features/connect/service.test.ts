@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { commands, type ConnectSharedPlaybackState, type ConnectStateSnapshot, type PlayingState, type SongResponse } from '~/bindings';
+import { commands, type ConnectSharedPlaybackState, type ConnectStateSnapshot } from '~/bindings';
+import { refreshConnectStateSnapshot, shouldReuseSharedPlaybackReceivedAtMs } from '~/features/connect/service';
 import { connectStore, setConnectStore } from '~/stores/ConnectStore';
-import { refreshConnectStateSnapshot, shouldReuseSharedPlaybackReceivedAtMs } from './service';
+import { resetConnectStore, sharedPlayback } from '~test/fixtures/connect';
+import { song } from '~test/fixtures/playback';
 
 const bindingMocks = vi.hoisted(() => ({
   connectGetStateSnapshot: vi.fn(),
@@ -19,40 +21,6 @@ vi.mock('~/bindings', () => ({
   },
 }));
 
-function song(id: string): SongResponse {
-  return { id } as SongResponse;
-}
-
-function sharedPlayback(
-  overrides: {
-    seq?: number;
-    activeDeviceId?: string | null;
-    playingState?: PlayingState;
-    currentIndex?: number | null;
-    currentPositionMs?: number;
-    currentSongId?: string | null;
-    queueIds?: string[];
-    updatedAt?: string;
-    updateReason?: string | null;
-  } = {}
-): ConnectSharedPlaybackState {
-  return {
-    seq: overrides.seq ?? 1,
-    activeDeviceId: overrides.activeDeviceId === undefined ? 'remote-device' : overrides.activeDeviceId,
-    state: {
-      playingState: overrides.playingState ?? 'playing',
-      queue: (overrides.queueIds ?? []).map(song),
-      currentIndex: overrides.currentIndex === undefined ? 0 : overrides.currentIndex,
-      playNextQueueLen: 0,
-      currentPositionMs: overrides.currentPositionMs ?? 0,
-      currentSongId: overrides.currentSongId === undefined ? 'song-a' : overrides.currentSongId,
-    },
-    updatedAt: overrides.updatedAt ?? '2026-05-31T00:00:00Z',
-    updatedByDeviceId: 'remote-device',
-    updateReason: overrides.updateReason === undefined ? 'report' : overrides.updateReason,
-  };
-}
-
 function snapshot(sharedPlayback: ConnectSharedPlaybackState | null): ConnectStateSnapshot {
   return {
     runtime: {
@@ -68,29 +36,17 @@ function snapshot(sharedPlayback: ConnectSharedPlaybackState | null): ConnectSta
   };
 }
 
-function resetConnectStore() {
-  setConnectStore({
-    status: 'available',
-    message: null,
-    version: null,
-    protocolVersion: null,
-    capabilities: null,
-    runtime: {
-      enabled: true,
-      connected: true,
-      message: null,
-      deviceId: 'own-device',
-      seq: 0,
-    },
-    devices: [],
-    sharedPlayback: null,
-    sharedPlaybackReceivedAtMs: null,
-  });
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
   resetConnectStore();
+  setConnectStore('status', 'available');
+  setConnectStore('runtime', {
+    enabled: true,
+    connected: true,
+    message: null,
+    deviceId: 'own-device',
+    seq: 0,
+  });
 });
 
 describe('shouldReuseSharedPlaybackReceivedAtMs', () => {
@@ -137,8 +93,8 @@ describe('shouldReuseSharedPlaybackReceivedAtMs', () => {
   });
 
   it('resets the receive time when the queued current entry changes without a currentSongId', () => {
-    const previous = sharedPlayback({ currentIndex: 0, currentPositionMs: 0, currentSongId: null, queueIds: ['song-a'] });
-    const next = sharedPlayback({ currentIndex: 0, currentPositionMs: 0, currentSongId: null, queueIds: ['song-b'] });
+    const previous = sharedPlayback({ currentIndex: 0, currentPositionMs: 0, currentSongId: null, queue: [song('song-a')] });
+    const next = sharedPlayback({ currentIndex: 0, currentPositionMs: 0, currentSongId: null, queue: [song('song-b')] });
 
     expect(shouldReuseSharedPlaybackReceivedAtMs(previous, next, 100)).toBe(false);
   });
@@ -146,14 +102,9 @@ describe('shouldReuseSharedPlaybackReceivedAtMs', () => {
 
 describe('refreshConnectStateSnapshot', () => {
   it('refreshes the stored receive time when a same-seq snapshot moves to the next track', async () => {
-    const previous = sharedPlayback({ currentIndex: 0, currentPositionMs: 18_000, currentSongId: 'song-a', queueIds: ['song-a', 'song-b'] });
-    const next = sharedPlayback({
-      currentIndex: 1,
-      currentPositionMs: 0,
-      currentSongId: 'song-b',
-      queueIds: ['song-a', 'song-b'],
-      updatedAt: '2026-05-31T00:00:18Z',
-    });
+    const queue = [song('song-a'), song('song-b')];
+    const previous = sharedPlayback({ queue, currentIndex: 0, currentPositionMs: 18_000 });
+    const next = sharedPlayback({ queue, currentIndex: 1, currentPositionMs: 0, updatedAt: '2026-05-31T00:00:18Z' });
     const nowSpy = vi.spyOn(performance, 'now').mockReturnValue(18_100);
     setConnectStore('sharedPlayback', previous);
     setConnectStore('sharedPlaybackReceivedAtMs', 100);

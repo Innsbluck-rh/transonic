@@ -15,7 +15,8 @@
     "sourceMap": true,
     "noEmit": true,
     "paths": {
-      "~/*": ["./src/*"]
+      "~/*": ["./src/*"],
+      "~test/*": ["./test/*"]
     },
     "types": ["vite/client"],
     "rootDirs": ["src"]

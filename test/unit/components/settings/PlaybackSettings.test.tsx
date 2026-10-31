@@ -1,11 +1,11 @@
-// @vitest-environment jsdom
-
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, type AppSettings } from '~/bindings';
+import PlaybackSettings from '~/components/settings/PlaybackSettings';
 import { setSettingsStore } from '~/features/settings/service';
 import { setSessionStore } from '~/stores/SessionStore';
-import PlaybackSettings from './PlaybackSettings';
+import { appSettings } from '~test/fixtures/settings';
+import { flushPromises } from '~test/helpers/async';
 
 const osMocks = vi.hoisted(() => ({
   platform: vi.fn(() => 'android'),
@@ -26,34 +26,8 @@ vi.mock('~/bindings', () => ({
   },
 }));
 
-function settings(overrides: Partial<AppSettings['playback']> = {}): AppSettings {
-  return {
-    appearance: {
-      albumDisplayMode: 'grid',
-    },
-    playback: {
-      gaplessPlaybackEnabled: false,
-      volume: 1,
-      useCustomOutput: false,
-      useAsioOutput: false,
-      outputDeviceId: null,
-      streamMode: 'raw',
-      meteredNetworkTranscodingEnabled: false,
-      transcodingBitrateLimit: 320,
-      useCustomTranscodingCodec: false,
-      transcodingCodec: 'auto',
-      ...overrides,
-    },
-    connect: {
-      enabled: false,
-      useSubsonicServerHost: true,
-      connectServerPort: 4747,
-      connectServerHost: null,
-      deviceId: 'device-1',
-      deviceName: null,
-      allowInsecureConnectServer: false,
-    },
-  };
+function settings(playback: Partial<AppSettings['playback']> = {}): AppSettings {
+  return appSettings({ playback });
 }
 
 describe('PlaybackSettings', () => {
@@ -85,14 +59,10 @@ describe('PlaybackSettings', () => {
     vi.clearAllMocks();
   });
 
-  function renderPlaybackSettings(appSettings: AppSettings) {
-    setSettingsStore(appSettings);
+  function renderPlaybackSettings(initialSettings: AppSettings) {
+    setSettingsStore(initialSettings);
     dispose = render(() => <PlaybackSettings />, container);
     return container;
-  }
-
-  function flushPromises() {
-    return new Promise((resolve) => window.setTimeout(resolve, 0));
   }
 
   function findCustomOutputSelect(root: HTMLElement) {
@@ -328,7 +298,7 @@ describe('PlaybackSettings', () => {
     const root = renderPlaybackSettings(settings());
     const useCustomOutput = root.querySelector<HTMLInputElement>('input[type="checkbox"]');
 
-    expect(useCustomOutput).toBeDefined();
+    expect(useCustomOutput).not.toBeNull();
     expect(useCustomOutput!.disabled).toBe(false);
     expect(commands.playbackGetOutputDevices).not.toHaveBeenCalled();
 

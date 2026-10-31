@@ -1,8 +1,6 @@
-// @vitest-environment jsdom
-
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import VolumeSlider from './VolumeSlider';
+import VolumeSlider from '~/components/player/common/VolumeSlider';
 
 vi.mock('@iconify-icon/solid', () => ({
   Icon: (props: { icon: string; class?: string; onClick?: (event: MouseEvent) => void }) => (

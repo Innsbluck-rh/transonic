@@ -40,9 +40,11 @@ export default defineConfig(async ({ mode }) => ({
   resolve: {
     alias: {
       '~': path.join(__dirname, 'src'),
+      '~test': path.join(__dirname, 'test'),
     },
   },
   test: {
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['test/**/*.test.{ts,tsx}'],
+    environment: 'jsdom',
   },
 }));
