@@ -11,7 +11,7 @@ interface AlbumTrackListProps {
 }
 
 const AlbumTrackList: Component<AlbumTrackListProps> = (props) => {
-  const { insertAfterCurrent, appendToQueue, status: playbackStatus } = usePlayback();
+  const { status: playbackStatus } = usePlayback();
 
   return (
     <div class='flex min-h-0 w-full flex-1 flex-col overflow-x-hidden overflow-y-auto'>
@@ -53,7 +53,7 @@ const AlbumTrackList: Component<AlbumTrackListProps> = (props) => {
                   '?'
                 )
               }
-              menuItems={buildSongMenuItems(song, { insertAfterCurrent, appendToQueue })}
+              menuItems={buildSongMenuItems(song)}
               onClick={onClickEntry}
             />
           );

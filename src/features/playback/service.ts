@@ -1,4 +1,4 @@
-import { commands, events, type PlaybackStatus } from '~/bindings';
+import { commands, events, type PlaybackStatus, type QueueSource } from '~/bindings';
 import { connectStore } from '~/stores/ConnectStore';
 import { playbackStore, setPlaybackStore } from '~/stores/PlaybackStore';
 import { resolvePlaybackDisplayStatus } from './sharedPlaybackStatus';
@@ -144,4 +144,12 @@ export function hasPlaybackCommandError(result: PlaybackCommandResult) {
   }
 
   return false;
+}
+
+export function insertAfterCurrent(items: QueueSource[]) {
+  commands.playbackInsertAfterCurrent({ items }).then(hasPlaybackCommandError);
+}
+
+export function appendToQueue(items: QueueSource[]) {
+  commands.playbackAppendToQueue({ items }).then(hasPlaybackCommandError);
 }

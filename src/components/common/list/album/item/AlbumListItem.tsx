@@ -4,7 +4,6 @@ import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { buildAlbumMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
-import { usePlayback } from '~/features/playback/usePlayback';
 
 export type AlbumItem = AlbumListItem | ArtistAlbum | FolderStructureAlbumItem;
 
@@ -17,15 +16,11 @@ interface AlbumListItemProps {
 }
 
 const AlbumListItem: Component<AlbumListItemProps> = (props) => {
-  const { insertAfterCurrent, appendToQueue } = usePlayback();
   const contextMenuProps = useContextMenu(
-    buildAlbumMenuItems(
-      {
-        albumId: props.album.id,
-        type: 'album',
-      },
-      { insertAfterCurrent, appendToQueue }
-    )
+    buildAlbumMenuItems({
+      albumId: props.album.id,
+      type: 'album',
+    })
   );
   const isClickable = !!(props.onClick || props.onDblClick);
   const { src, loading } = useCoverArt(() => props.album.coverArtId ?? null, CoverArtSizes.sm, {

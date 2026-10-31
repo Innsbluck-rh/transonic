@@ -1,22 +1,18 @@
 import type { QueueSource } from '~/bindings';
+import { appendToQueue, insertAfterCurrent } from '~/features/playback/service';
 import type { MenuItem } from './types';
 
-export interface AlbumMenuCallbacks {
-  insertAfterCurrent: (items: QueueSource[]) => void;
-  appendToQueue: (items: QueueSource[]) => void;
-}
-
-export function buildAlbumMenuItems(source: QueueSource, callbacks: AlbumMenuCallbacks): MenuItem[] {
+export function buildAlbumMenuItems(source: QueueSource): MenuItem[] {
   return [
     {
       icon: 'icon-[material-symbols--next-plan]',
       label: 'Play Next',
-      onClick: () => callbacks.insertAfterCurrent([source]),
+      onClick: () => insertAfterCurrent([source]),
     },
     {
       icon: 'icon-[material-symbols--playlist-add]',
       label: 'Add to Queue',
-      onClick: () => callbacks.appendToQueue([source]),
+      onClick: () => appendToQueue([source]),
     },
   ];
 }

@@ -26,13 +26,10 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
     const albumId = album()?.id;
     if (!albumId) return {};
     return useContextMenu(
-      buildAlbumMenuItems(
-        {
-          albumId,
-          type: 'album',
-        },
-        { insertAfterCurrent, appendToQueue }
-      )
+      buildAlbumMenuItems({
+        albumId,
+        type: 'album',
+      })
     );
   });
   let latestLoadId = 0;

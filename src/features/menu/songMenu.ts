@@ -1,22 +1,18 @@
-import type { QueueSource, SongResponse } from '~/bindings';
+import type { SongResponse } from '~/bindings';
+import { appendToQueue, insertAfterCurrent } from '~/features/playback/service';
 import type { MenuItem } from './types';
 
-export interface SongMenuCallbacks {
-  insertAfterCurrent: (items: QueueSource[]) => void;
-  appendToQueue: (items: QueueSource[]) => void;
-}
-
-export function buildSongMenuItems(song: SongResponse, callbacks: SongMenuCallbacks): MenuItem[] {
+export function buildSongMenuItems(song: SongResponse): MenuItem[] {
   return [
     {
       icon: 'icon-[material-symbols--next-plan]',
       label: 'Play Next',
-      onClick: () => callbacks.insertAfterCurrent([{ type: 'songs', songs: [song] }]),
+      onClick: () => insertAfterCurrent([{ type: 'songs', songs: [song] }]),
     },
     {
       icon: 'icon-[material-symbols--playlist-add]',
       label: 'Add to Queue',
-      onClick: () => callbacks.appendToQueue([{ type: 'songs', songs: [song] }]),
+      onClick: () => appendToQueue([{ type: 'songs', songs: [song] }]),
     },
   ];
 }

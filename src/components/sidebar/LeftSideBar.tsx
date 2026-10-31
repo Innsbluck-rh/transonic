@@ -34,7 +34,7 @@ const LeftSideBar: Component = () => {
   return (
     <div class='bg-primary-plane browse-sidebar border-primary-border flex w-60 max-w-96 min-w-40 flex-col border-r'>
       <div class='relative flex size-full flex-col overflow-y-auto'>
-        <div class='sticky top-0 z-1 box-border flex p-1'>
+        <div class='sticky top-0 z-1 box-border flex p-1.5'>
           <BrowseModeSelect
             defaultMode={browseMode()}
             onSelect={(mode) => {
