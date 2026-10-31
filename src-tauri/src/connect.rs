@@ -67,6 +67,10 @@ struct ConnectRuntimeInner {
     last_android_resume_sync_at: Option<Instant>,
     pending_android_resume_report: Option<PendingAndroidResumeReport>,
     queue_gate: QueueGate,
+    /// Song IDs of the shared queue last applied to, or pushed from, the local
+    /// backend. Kept across reconnects so the first snapshot can tell a copy of
+    /// the shared queue from a queue of the user's own.
+    synced_queue_ids: Option<Vec<String>>,
 }
 
 /// While closed, shared playback is still recorded but neither applied to the
@@ -120,8 +124,14 @@ enum InitialSnapshotAction {
 fn classify_initial_snapshot(
     local_queue: &[SongResponse],
     server_queue: &[SongResponse],
+    synced_queue_ids: Option<&[String]>,
 ) -> InitialSnapshotAction {
     if local_queue.is_empty() {
+        return InitialSnapshotAction::ApplyServer;
+    }
+    let is_synced_copy =
+        synced_queue_ids.is_some_and(|ids| local_queue.iter().map(|song| &song.id).eq(ids.iter()));
+    if is_synced_copy {
         return InitialSnapshotAction::ApplyServer;
     }
     if server_queue.is_empty() {
@@ -136,6 +146,10 @@ fn classify_initial_snapshot(
     } else {
         InitialSnapshotAction::AskUser
     }
+}
+
+fn queue_ids(queue: &[SongResponse]) -> Vec<String> {
+    queue.iter().map(|song| song.id.clone()).collect()
 }
 
 enum ConnectOutbound {
@@ -363,8 +377,11 @@ impl ConnectRuntime {
             shared.updated_by_device_id.as_deref() == Some(device_id.as_str())
                 && shared.update_reason.as_deref() == Some(UPDATE_REASON_PUSH)
         });
-        if is_own_push && matches!(inner.queue_gate, QueueGate::Pushing { .. }) {
-            inner.queue_gate = QueueGate::Open;
+        if is_own_push {
+            inner.synced_queue_ids = Some(queue_ids(&shared.state.queue));
+            if matches!(inner.queue_gate, QueueGate::Pushing { .. }) {
+                inner.queue_gate = QueueGate::Open;
+            }
         }
         inner.shared_playback = Some(shared.clone());
         Some(SharedPlaybackUpdate {
@@ -390,6 +407,21 @@ impl ConnectRuntime {
         if inner.applying_shared_seq == Some(seq) {
             inner.applying_shared_seq = None;
         }
+    }
+
+    fn synced_queue_ids(&self) -> Option<Vec<String>> {
+        self.inner.lock().unwrap().synced_queue_ids.clone()
+    }
+
+    fn record_synced_queue(&self, generation: u64, queue_ids: Vec<String>) {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.generation == generation {
+            inner.synced_queue_ids = Some(queue_ids);
+        }
+    }
+
+    fn clear_synced_queue(&self) {
+        self.inner.lock().unwrap().synced_queue_ids = None;
     }
 
     pub(crate) fn publish_status(&self, status: PlaybackStatus) {
@@ -755,6 +787,12 @@ pub(crate) fn restart(app: &tauri::AppHandle) {
     });
 }
 
+/// Called when the user turns Connect off: the local queue from then on is the
+/// user's own, even if it still matches the last shared queue.
+pub(crate) fn forget_synced_queue(app: &tauri::AppHandle) {
+    app.state::<ConnectState>().0.clear_synced_queue();
+}
+
 #[cfg(target_os = "android")]
 pub(crate) fn sync_after_android_resume(
     app: &tauri::AppHandle,
@@ -1096,15 +1134,22 @@ fn hold_local_queue_for_initial_snapshot(
     shared: &ConnectSharedPlaybackState,
 ) -> bool {
     let local_queue = local_queue_for_initial_snapshot(app);
-    match classify_initial_snapshot(&local_queue, &shared.state.queue) {
+    let synced_queue_ids = runtime.synced_queue_ids();
+    match classify_initial_snapshot(
+        &local_queue,
+        &shared.state.queue,
+        synced_queue_ids.as_deref(),
+    ) {
         InitialSnapshotAction::ApplyServer => false,
         InitialSnapshotAction::AskUser => {
+            runtime.clear_synced_queue();
             if let Some(snapshot) = runtime.begin_queue_resolution(generation) {
                 emit_state_updated(app, snapshot);
             }
             true
         }
         InitialSnapshotAction::PushLocal => {
+            runtime.clear_synced_queue();
             match local_playback_state(app).and_then(|state| runtime.push_local_state(state, false))
             {
                 Ok(()) => {}
@@ -1228,8 +1273,9 @@ async fn apply_shared_playback_state(
     .await
     .map_err(|error| format!("connect: apply shared playback task failed: {error}"));
     runtime.end_apply_shared(seq);
-    let result = result?;
-    result.map(|_| ())
+    let status = result??;
+    runtime.record_synced_queue(generation, queue_ids(&status.queue));
+    Ok(())
 }
 
 fn should_preserve_active_connect_snapshot(app: &tauri::AppHandle) -> bool {
@@ -1895,7 +1941,7 @@ mod tests {
     #[test]
     fn initial_snapshot_keeps_server_when_local_queue_is_empty() {
         assert_eq!(
-            classify_initial_snapshot(&[], &[song("song-a")]),
+            classify_initial_snapshot(&[], &[song("song-a")], None),
             InitialSnapshotAction::ApplyServer
         );
     }
@@ -1903,7 +1949,7 @@ mod tests {
     #[test]
     fn initial_snapshot_pushes_local_when_server_queue_is_empty() {
         assert_eq!(
-            classify_initial_snapshot(&[song("song-a")], &[]),
+            classify_initial_snapshot(&[song("song-a")], &[], None),
             InitialSnapshotAction::PushLocal
         );
     }
@@ -1913,7 +1959,8 @@ mod tests {
         assert_eq!(
             classify_initial_snapshot(
                 &[song("song-a"), song("song-b")],
-                &[song("song-a"), song("song-b")]
+                &[song("song-a"), song("song-b")],
+                None
             ),
             InitialSnapshotAction::ApplyServer
         );
@@ -1922,16 +1969,77 @@ mod tests {
     #[test]
     fn initial_snapshot_asks_user_when_queues_differ() {
         assert_eq!(
-            classify_initial_snapshot(&[song("song-a"), song("song-b")], &[song("song-a")]),
+            classify_initial_snapshot(&[song("song-a"), song("song-b")], &[song("song-a")], None),
             InitialSnapshotAction::AskUser
         );
         assert_eq!(
             classify_initial_snapshot(
                 &[song("song-a"), song("song-b")],
-                &[song("song-b"), song("song-a")]
+                &[song("song-b"), song("song-a")],
+                None
             ),
             InitialSnapshotAction::AskUser
         );
+    }
+
+    #[test]
+    fn initial_snapshot_keeps_server_when_local_queue_is_a_synced_copy() {
+        let synced = vec!["song-a".to_string(), "song-b".to_string()];
+        let local = [song("song-a"), song("song-b")];
+
+        assert_eq!(
+            classify_initial_snapshot(&local, &[], Some(&synced)),
+            InitialSnapshotAction::ApplyServer
+        );
+        assert_eq!(
+            classify_initial_snapshot(&local, &[song("song-c")], Some(&synced)),
+            InitialSnapshotAction::ApplyServer
+        );
+    }
+
+    #[test]
+    fn initial_snapshot_treats_an_edited_copy_as_the_users_own() {
+        let synced = vec!["song-a".to_string()];
+        let local = [song("song-a"), song("song-b")];
+
+        assert_eq!(
+            classify_initial_snapshot(&local, &[], Some(&synced)),
+            InitialSnapshotAction::PushLocal
+        );
+        assert_eq!(
+            classify_initial_snapshot(&local, &[song("song-c")], Some(&synced)),
+            InitialSnapshotAction::AskUser
+        );
+    }
+
+    #[test]
+    fn own_push_update_records_synced_queue() {
+        let (runtime, _receiver) = connected_runtime();
+        let mut shared = shared_playback(Some(UPDATE_REASON_PUSH));
+        shared.seq = 6;
+        shared.state.queue = vec![song("song-a"), song("song-b")];
+
+        runtime.set_shared_playback(7, shared).unwrap();
+
+        assert_eq!(
+            runtime.synced_queue_ids(),
+            Some(vec!["song-a".to_string(), "song-b".to_string()])
+        );
+    }
+
+    #[test]
+    fn synced_queue_survives_reconnects_until_cleared() {
+        let (runtime, _receiver) = connected_runtime();
+        runtime.record_synced_queue(7, vec!["song-a".to_string()]);
+        runtime.record_synced_queue(6, vec!["stale".to_string()]);
+
+        runtime.set_disconnected(7, None, "connect: offline".to_string());
+        let (generation, _) = runtime.begin_restart();
+        runtime.set_disabled(generation);
+        assert_eq!(runtime.synced_queue_ids(), Some(vec!["song-a".to_string()]));
+
+        runtime.clear_synced_queue();
+        assert!(runtime.synced_queue_ids().is_none());
     }
 
     #[test]
