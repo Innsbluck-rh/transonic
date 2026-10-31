@@ -1,7 +1,7 @@
 import { useLocation } from '@solidjs/router';
 import { createMemo, ParentComponent, Show } from 'solid-js';
 import { resolveSPBrowseRoute } from '~/features/navigation/routes';
-import SPBrowseRoot from './browseRoot';
+import SPBrowseIndex from './browseIndex';
 
 const SPBrowseStack: ParentComponent = (props) => {
   const location = useLocation();
@@ -14,7 +14,7 @@ const SPBrowseStack: ParentComponent = (props) => {
 
   return (
     <div class='relative flex size-full overflow-hidden'>
-      <SPBrowseRoot />
+      <SPBrowseIndex />
       <Show when={showDetail()}>
         <div class='bg-primary-bg absolute inset-0 z-30 flex overflow-y-auto'>{props.children}</div>
       </Show>
