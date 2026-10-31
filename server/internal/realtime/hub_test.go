@@ -3,6 +3,13 @@ package realtime
 import (
 	"context"
 	"encoding/json"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -769,6 +776,167 @@ func TestPushStateRequiresState(t *testing.T) {
 	if message := commandErrorMessage(t, a); message != "pushState requires state" {
 		t.Fatalf("unexpected push error: %s", message)
 	}
+}
+
+func TestQueueCommandsKeepPositionElapsedSinceLastReport(t *testing.T) {
+	commands := map[string]string{
+		"insertAfterCurrent": `{"baseSeq":1,"op":"insertAfterCurrent","items":[{"id":"song-x"}]}`,
+		"appendToQueue":      `{"baseSeq":1,"op":"appendToQueue","items":[{"id":"song-x"}]}`,
+		"moveQueueIndex":     `{"baseSeq":1,"op":"moveQueueIndex","fromIndex":1,"toIndex":2}`,
+		"removeQueueIndex":   `{"baseSeq":1,"op":"removeQueueIndex","index":2}`,
+	}
+	for op, payload := range commands {
+		t.Run(op, func(t *testing.T) {
+			ctx := context.Background()
+			st, err := store.OpenMemory(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			hub := NewHub(st, time.Minute)
+
+			zero := int64(0)
+			raw, err := encodePlaybackState(ConnectPlaybackState{
+				PlayingState:      "playing",
+				Queue:             []json.RawMessage{json.RawMessage(`{"id":"song-a"}`), json.RawMessage(`{"id":"song-b"}`), json.RawMessage(`{"id":"song-c"}`)},
+				CurrentIndex:      &zero,
+				CurrentPositionMs: 1000,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := st.SaveSharedPlaybackState(ctx, store.SharedPlaybackState{
+				UserKey:        "user",
+				Seq:            1,
+				ActiveDeviceID: "active",
+				State:          raw,
+				UpdatedAt:      time.Now().UTC().Add(-30 * time.Second),
+			}); err != nil {
+				t.Fatal(err)
+			}
+			active, _ := hub.Register(ctx, store.Session{UserKey: "user", DeviceID: "active", UpstreamServerURL: "https://a/rest", Username: "a"})
+			defer hub.Unregister(ctx, active)
+			drain(active)
+
+			hub.Handle(ctx, active, Envelope{ID: "cmd-1", Type: TypePlaybackCommandRequest, ProtocolVersion: 2, Payload: json.RawMessage(payload)})
+			if position := broadcastPositionMs(t, active); position < 31000 || position > 32000 {
+				t.Fatalf("expected the 30s since the last report kept (about 31000), got %d", position)
+			}
+
+			hub.Handle(ctx, active, Envelope{ID: "cmd-2", Type: TypePlaybackCommandRequest, ProtocolVersion: 2, Payload: json.RawMessage(`{"baseSeq":2,"op":"appendToQueue","items":[{"id":"song-y"}]}`)})
+			if position := broadcastPositionMs(t, active); position < 31000 || position > 32000 {
+				t.Fatalf("expected the next command not to add the elapsed time again (about 31000), got %d", position)
+			}
+		})
+	}
+}
+
+// Reading the store directly skips advanceToNow, and a handler that saves what it
+// read with UpdatedAt = now rolls the active device's values back to its last report.
+func TestSharedStateIsReadOnlyThroughSharedAsOfNow(t *testing.T) {
+	files, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fset := token.NewFileSet()
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		src, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		file, err := parser.ParseFile(fset, name, src, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Body == nil || fn.Name.Name == "sharedAsOfNow" {
+				continue
+			}
+			ast.Inspect(fn.Body, func(node ast.Node) bool {
+				if sel, ok := node.(*ast.SelectorExpr); ok && sel.Sel.Name == "GetSharedPlaybackState" {
+					t.Errorf("%s: %s reads the shared playback state directly; use h.sharedAsOfNow", fset.Position(sel.Pos()), fn.Name.Name)
+				}
+				return true
+			})
+		}
+	}
+}
+
+// Every ConnectPlaybackState field, and whether its value changes on the active
+// device without a report. true: advanceToNow must move it by the elapsed time;
+// a value the server cannot compute that way has to be reported on every change
+// instead, and is then false. false: it changes only with a report or a server
+// command, so the last value stays correct.
+var valuesChangeWithoutReport = map[string]bool{
+	"PlayingState":      false,
+	"Queue":             false,
+	"CurrentIndex":      false,
+	"PlayNextQueueLen":  false,
+	"CurrentPositionMs": true,
+	"CurrentSongID":     false,
+}
+
+func TestValuesChangeWithoutReportListsEveryFieldAndMatchesAdvanceToNow(t *testing.T) {
+	stateType := reflect.TypeOf(ConnectPlaybackState{})
+	for i := 0; i < stateType.NumField(); i++ {
+		name := stateType.Field(i).Name
+		if _, ok := valuesChangeWithoutReport[name]; !ok {
+			t.Errorf("ConnectPlaybackState.%s is missing from valuesChangeWithoutReport: add it, and if its value changes on the active device without a report, advance it in advanceToNow or report it on every change", name)
+		}
+	}
+
+	zero := int64(0)
+	before := ConnectPlaybackState{
+		PlayingState:      "playing",
+		Queue:             []json.RawMessage{json.RawMessage(`{"id":"song-a"}`), json.RawMessage(`{"id":"song-b"}`)},
+		CurrentIndex:      &zero,
+		PlayNextQueueLen:  1,
+		CurrentPositionMs: 1000,
+	}
+	raw, err := encodePlaybackState(before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err = decodePlaybackState(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	reportedAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	advanced := advanceToNow(&store.SharedPlaybackState{State: raw, UpdatedAt: reportedAt}, reportedAt.Add(30*time.Second))
+	after, err := decodePlaybackState(advanced.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeValue, afterValue := reflect.ValueOf(before), reflect.ValueOf(after)
+	for i := 0; i < stateType.NumField(); i++ {
+		name := stateType.Field(i).Name
+		changed := !reflect.DeepEqual(beforeValue.Field(i).Interface(), afterValue.Field(i).Interface())
+		if changed != valuesChangeWithoutReport[name] {
+			t.Errorf("ConnectPlaybackState.%s: advanceToNow changed it = %v, valuesChangeWithoutReport = %v", name, changed, valuesChangeWithoutReport[name])
+		}
+	}
+	if !advanced.UpdatedAt.Equal(reportedAt.Add(30 * time.Second)) {
+		t.Errorf("expected UpdatedAt moved to the time advanced to, got %s", advanced.UpdatedAt)
+	}
+}
+
+func broadcastPositionMs(t *testing.T, client *Client) int64 {
+	t.Helper()
+	got := <-client.Send
+	if got.Type != TypePlaybackSharedUpdated {
+		t.Fatalf("expected playback update, got %s", got.Type)
+	}
+	var payload struct {
+		State ConnectPlaybackState `json:"state"`
+	}
+	if err := json.Unmarshal(got.Payload, &payload); err != nil {
+		t.Fatal(err)
+	}
+	return payload.State.CurrentPositionMs
 }
 
 func commandErrorMessage(t *testing.T, client *Client) string {

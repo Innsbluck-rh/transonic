@@ -77,7 +77,7 @@ func (h *Hub) Register(ctx context.Context, session store.Session) (*Client, err
 
 	_ = h.touchDevice(ctx, session)
 	h.broadcastPresence(ctx, session.UserKey)
-	shared, err := h.sharedOrDefault(ctx, session.UserKey)
+	shared, err := h.sharedAsOfNow(ctx, session.UserKey)
 	if err == nil {
 		h.send(client, TypePlaybackSharedSnapshot, "", sharedPayload(shared, "snapshot"))
 	}
@@ -166,7 +166,7 @@ func (h *Hub) handlePlaybackCommandRequest(ctx context.Context, client *Client, 
 		commandID = randomID()
 	}
 
-	current, err := h.sharedOrDefault(ctx, client.Session.UserKey)
+	current, err := h.sharedAsOfNow(ctx, client.Session.UserKey)
 	if err != nil {
 		h.sendCommandError(client, inbound.ID, commandID, "failed to load shared playback state")
 		return
@@ -251,7 +251,7 @@ func (h *Hub) handlePlaybackReport(ctx context.Context, client *Client, inbound 
 		return
 	}
 
-	current, err := h.sharedOrDefault(ctx, client.Session.UserKey)
+	current, err := h.sharedAsOfNow(ctx, client.Session.UserKey)
 	if err != nil {
 		h.sendCommandError(client, inbound.ID, report.CommandID, "failed to load shared playback state")
 		return
@@ -364,7 +364,6 @@ func (h *Hub) reduceTransferCommand(ctx context.Context, client *Client, current
 	if len(state.Queue) == 0 {
 		return nil, errors.New("playback queue is empty")
 	}
-	state.CurrentPositionMs = estimatedPosition(current, state)
 	raw, err := encodePlaybackState(state)
 	if err != nil {
 		return nil, err
@@ -656,16 +655,13 @@ func (h *Hub) freezeActiveDeviceIfOffline(ctx context.Context, session store.Ses
 	if h.isDeviceOnline(session.UserKey, session.DeviceID) {
 		return
 	}
-	current, err := h.sharedOrDefault(ctx, session.UserKey)
+	current, err := h.sharedAsOfNow(ctx, session.UserKey)
 	if err != nil || current.ActiveDeviceID != session.DeviceID {
 		return
 	}
 	state, err := decodePlaybackState(current.State)
 	if err != nil {
 		return
-	}
-	if state.PlayingState == "playing" {
-		state.CurrentPositionMs = estimatedPosition(current, state)
 	}
 	state.PlayingState = stoppedOrIdle(state.Queue)
 	raw, err := encodePlaybackState(state)
@@ -683,13 +679,18 @@ func (h *Hub) freezeActiveDeviceIfOffline(ctx context.Context, session store.Ses
 	_ = h.saveAndBroadcast(ctx, session.UserKey, &next, session.DeviceID, "activeOffline")
 }
 
-func (h *Hub) sharedOrDefault(ctx context.Context, userKey string) (*store.SharedPlaybackState, error) {
+// sharedAsOfNow is the only way handlers read the shared playback state. The
+// stored state holds the active device's last report, so the values that change
+// on that device without a report are advanced to now here; a handler that saves
+// the result with UpdatedAt = now therefore keeps them instead of rolling them
+// back to the last report.
+func (h *Hub) sharedAsOfNow(ctx context.Context, userKey string) (*store.SharedPlaybackState, error) {
 	current, err := h.store.GetSharedPlaybackState(ctx, userKey)
 	if err != nil {
 		return nil, err
 	}
 	if current != nil {
-		return current, nil
+		return advanceToNow(current, time.Now().UTC()), nil
 	}
 	state, err := encodePlaybackState(emptyPlaybackState())
 	if err != nil {
@@ -701,6 +702,28 @@ func (h *Hub) sharedOrDefault(ctx context.Context, userKey string) (*store.Share
 		State:     state,
 		UpdatedAt: time.Now().UTC(),
 	}, nil
+}
+
+// advanceToNow moves the values that change on the active device without a
+// report by the time elapsed since UpdatedAt, and moves UpdatedAt to now. Which
+// ConnectPlaybackState values those are is listed in valuesChangeWithoutReport
+// (hub_test.go), which a new field has to be added to before the tests pass.
+func advanceToNow(shared *store.SharedPlaybackState, now time.Time) *store.SharedPlaybackState {
+	state, err := decodePlaybackState(shared.State)
+	if err != nil {
+		return shared
+	}
+	if elapsed := now.Sub(shared.UpdatedAt).Milliseconds(); state.PlayingState == "playing" && elapsed > 0 {
+		state.CurrentPositionMs += elapsed
+	}
+	raw, err := encodePlaybackState(state)
+	if err != nil {
+		return shared
+	}
+	advanced := *shared
+	advanced.State = raw
+	advanced.UpdatedAt = now
+	return &advanced
 }
 
 func decodePlaybackState(raw json.RawMessage) (ConnectPlaybackState, error) {
@@ -897,9 +920,6 @@ func sharedPayload(shared *store.SharedPlaybackState, reason string) json.RawMes
 		})
 	}
 	state, err := decodePlaybackState(shared.State)
-	if err == nil {
-		state.CurrentPositionMs = estimatedPosition(shared, state)
-	}
 	var stateValue any = json.RawMessage(shared.State)
 	if err == nil {
 		stateValue = state
@@ -920,17 +940,6 @@ func sharedPayload(shared *store.SharedPlaybackState, reason string) json.RawMes
 		"updatedByDeviceId": updatedByDeviceID,
 		"updateReason":      reason,
 	})
-}
-
-func estimatedPosition(shared *store.SharedPlaybackState, state ConnectPlaybackState) int64 {
-	if state.PlayingState != "playing" {
-		return state.CurrentPositionMs
-	}
-	elapsed := time.Since(shared.UpdatedAt).Milliseconds()
-	if elapsed < 0 {
-		elapsed = 0
-	}
-	return state.CurrentPositionMs + elapsed
 }
 
 func (h *Hub) broadcastPresence(ctx context.Context, userKey string) {
