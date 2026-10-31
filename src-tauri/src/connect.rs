@@ -791,7 +791,16 @@ async fn run_connect_loop(app: tauri::AppHandle, runtime: Arc<ConnectRuntime>, g
                 }
                 return;
             }
-            Ok(ConnectRunResult::Restart) => {}
+            Ok(ConnectRunResult::Restart) => {
+                let server_url = current_connect_server_url(&app);
+                if let Some(snapshot) = runtime.set_disconnected(
+                    generation,
+                    server_url,
+                    "connect: websocket closed".to_string(),
+                ) {
+                    emit_state_updated(&app, snapshot);
+                }
+            }
             Err(error) => {
                 let server_url = current_connect_server_url(&app);
                 log::warn!("connect: {error}");
