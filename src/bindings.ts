@@ -33,6 +33,14 @@ async connectGetSharedPlayback() : Promise<ConnectSharedPlaybackState | null> {
 async connectGetStateSnapshot() : Promise<ConnectStateSnapshot> {
     return await TAURI_INVOKE("connect_get_state_snapshot");
 },
+async connectResolveQueue(payload: ConnectResolveQueueRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("connect_resolve_queue", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async connectTransferPlayback(payload: ConnectTransferPlaybackRequest) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("connect_transfer_playback", { payload }) };
@@ -428,7 +436,15 @@ export type AuthKind = "password" | "api_key"
 export type CapabilityMatrix = { openSubsonic: boolean; rawExtensions: OpenSubsonicExtension[]; apiKeyAuth: boolean; indexBasedQueue: boolean; playbackReport: boolean; transcoding: boolean; transcodeOffset: boolean; songLyrics: boolean }
 export type ConnectDevicePresence = { deviceId: string; displayName: string; platform: string; appVersion: string; lastSeenAt: string; online: boolean }
 export type ConnectPlaybackState = { playingState: PlayingState; queue: SongResponse[]; currentIndex?: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId?: string | null }
-export type ConnectRuntimeStatus = { enabled: boolean; connected: boolean; message: string | null; serverUrl: string | null; deviceId: string | null; seq: number }
+export type ConnectQueueResolution = { pushing: boolean; error: string | null }
+export type ConnectQueueResolutionChoice = "pushLocal" | "pullServer"
+export type ConnectResolveQueueRequest = { choice: ConnectQueueResolutionChoice }
+export type ConnectRuntimeStatus = { enabled: boolean; connected: boolean; message: string | null; serverUrl: string | null; deviceId: string | null; seq: number; 
+/**
+ * Present while the local queue and the Connect server's queue conflict
+ * after connecting and the user has not chosen which one to keep.
+ */
+queueResolution: ConnectQueueResolution | null }
 export type ConnectServerProfileRequest = { profileId: string | null; displayName: string | null; serverUrl: string; auth: AuthInput }
 export type ConnectServerProfileResult = { status: "connected"; activeSession: ActiveSession; profiles: SavedProfileSummary[] } | { status: "auth_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "network_error"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "server_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "unsupported_auth"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] }
 export type ConnectSettings = { enabled?: boolean; useSubsonicServerHost?: boolean; connectServerHost?: string | null; connectServerPort?: number; deviceId?: string; deviceName?: string | null; allowInsecureConnectServer?: boolean }

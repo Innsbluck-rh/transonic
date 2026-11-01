@@ -1,5 +1,5 @@
 import { createStore } from 'solid-js/store';
-import type { ConnectDevicePresence, ConnectSharedPlaybackState } from '~/bindings';
+import type { ConnectDevicePresence, ConnectQueueResolution, ConnectSharedPlaybackState } from '~/bindings';
 
 export type ConnectServerStatus = 'disabled' | 'checking' | 'available' | 'unavailable';
 
@@ -20,6 +20,7 @@ interface ConnectStore {
     message: string | null;
     deviceId: string | null;
     seq: number;
+    queueResolution: ConnectQueueResolution | null;
   };
   devices: ConnectDevicePresence[];
   sharedPlayback: ConnectSharedPlaybackState | null;
@@ -38,6 +39,7 @@ export const [connectStore, setConnectStore] = createStore<ConnectStore>({
     message: null,
     deviceId: null,
     seq: 0,
+    queueResolution: null,
   },
   devices: [],
   sharedPlayback: null,

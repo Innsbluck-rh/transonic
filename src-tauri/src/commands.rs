@@ -23,7 +23,7 @@ pub use browse::folder_structure_roots::{get_folder_structure_roots, get_music_f
 pub use browse::song::get_song;
 pub use connect::{
     connect_get_devices, connect_get_runtime_status, connect_get_shared_playback,
-    connect_get_state_snapshot, connect_transfer_playback,
+    connect_get_state_snapshot, connect_resolve_queue, connect_transfer_playback,
 };
 pub use cover_art::{
     clear_cover_art_cache, get_cover_art, get_cover_art_cache_status, get_cover_art_cached,
@@ -80,9 +80,10 @@ pub use browse::song::{__cmd__get_song, __specta__fn__get_song};
 pub use connect::{
     __cmd__connect_get_devices, __cmd__connect_get_runtime_status,
     __cmd__connect_get_shared_playback, __cmd__connect_get_state_snapshot,
-    __cmd__connect_transfer_playback, __specta__fn__connect_get_devices,
-    __specta__fn__connect_get_runtime_status, __specta__fn__connect_get_shared_playback,
-    __specta__fn__connect_get_state_snapshot, __specta__fn__connect_transfer_playback,
+    __cmd__connect_resolve_queue, __cmd__connect_transfer_playback,
+    __specta__fn__connect_get_devices, __specta__fn__connect_get_runtime_status,
+    __specta__fn__connect_get_shared_playback, __specta__fn__connect_get_state_snapshot,
+    __specta__fn__connect_resolve_queue, __specta__fn__connect_transfer_playback,
 };
 #[doc(hidden)]
 pub use cover_art::{

@@ -196,6 +196,9 @@ pub fn settings_update(
     }
 
     if previous_settings.connect != updated_settings.connect {
+        if previous_settings.connect.enabled && !updated_settings.connect.enabled {
+            crate::connect::forget_synced_queue(&app);
+        }
         crate::connect::restart(&app);
     }
     snapshot_settings(&settings)

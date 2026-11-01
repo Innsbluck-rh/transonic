@@ -22,6 +22,7 @@ pub fn builder() -> Builder<tauri::Wry> {
             commands::connect_get_runtime_status,
             commands::connect_get_shared_playback,
             commands::connect_get_state_snapshot,
+            commands::connect_resolve_queue,
             commands::connect_transfer_playback,
             commands::delete_server_profile,
             commands::export_server_backup,

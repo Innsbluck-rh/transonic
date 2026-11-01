@@ -30,6 +30,7 @@ function snapshot(sharedPlayback: ConnectSharedPlaybackState | null): ConnectSta
       serverUrl: 'https://connect.example.test',
       deviceId: 'own-device',
       seq: sharedPlayback?.seq ?? 0,
+      queueResolution: null,
     },
     devices: [],
     sharedPlayback,

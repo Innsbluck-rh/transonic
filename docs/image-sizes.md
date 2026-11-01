@@ -38,6 +38,7 @@ Tailwind `lg` breakpoint (≥ 1024 CSS px wide), `md:` the `md` breakpoint
 | `ArtistRow` (via `BrowseList`) | artist `coverArtId` | `sm` 48 | `lg`, `md` | 32 × 32, `lg:` 24 × 24, circle |
 | `SongItem` (via `QueueList`, `SearchSongList`) | song `coverArtId` (`displayCoverArtId` in search) | `sm` 48 | `lg`, `md` | 32 × 32 |
 | `AlbumListItem` | album `coverArtId` | `sm` 48 | `lg`, `md` | 36 × 36 |
+| `ConnectQueueResolveDialog` (server and local rows) | current entry `coverArtId` of each queue | `sm` 48 | `lg`, `md` | 32 × 32 |
 | `AlbumGridItem` in `AlbumGrid` | album `coverArtId` | `md` 224 | `lg` | grid cell, min 112 wide, grows to fill the row |
 | `HorizontalAlbumItem` (home, recently played) | album `coverArtId` | `md` 224 | `lg` | 56 × 56 (`size-14`), `md:` 48 × 48, `lg:` 56 × 56 |
 | Album page (`routes/browse/album.tsx`) | album `coverArtId` | `lg` 512 | — | 208 wide (`w-52`), `lg:` 168 (`w-42`) |
@@ -47,9 +48,6 @@ Tailwind `lg` breakpoint (≥ 1024 CSS px wide), `md:` the `md` breakpoint
 | `SPPlayer` (full player) | current entry `coverArtId` | `lg` 512 | — | artwork 184 tall (`h-46`), `object-contain`; background full screen, `object-cover` |
 | Windows SMTC (`playback/smtc_windows.rs`) | current entry `coverArtId` | 512 | — (exact key only) | OS media flyout |
 | Android notification (`playback/android_runtime.rs`) | current entry `coverArtId` | 512 | — (exact key only) | OS media notification |
-
-Not fetched: `ConnectQueueResolveDialog` renders an `<img src=''>` placeholder
-(32 × 32) and requests nothing.
 
 ### Shared entries
 

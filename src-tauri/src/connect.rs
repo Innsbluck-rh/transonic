@@ -22,8 +22,9 @@ use crate::{
     commands::{common::service, playback::active_runtime_parts},
     models::{
         AuthInput, ConnectDevicePresence, ConnectPlaybackCommand, ConnectPlaybackState,
-        ConnectRuntimeStatus, ConnectSettings, ConnectSharedPlaybackState, ConnectStateSnapshot,
-        ConnectStateUpdated, PlaybackStatus, PlayingState,
+        ConnectQueueResolution, ConnectQueueResolutionChoice, ConnectRuntimeStatus,
+        ConnectSettings, ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectStateUpdated,
+        PlaybackStatus, PlayingState, SongResponse,
     },
     playback::PlaybackRuntimeContext,
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
@@ -34,6 +35,7 @@ const TYPE_PLAYBACK_SHARED_SNAPSHOT: &str = "playback.shared.snapshot";
 const TYPE_PLAYBACK_SHARED_UPDATED: &str = "playback.shared.updated";
 const UPDATE_REASON_SNAPSHOT: &str = "snapshot";
 const UPDATE_REASON_ACTIVE_OFFLINE: &str = "activeOffline";
+const UPDATE_REASON_PUSH: &str = "push";
 #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
 const ANDROID_RESUME_SYNC_COOLDOWN: Duration = Duration::from_secs(2);
 const ANDROID_RESUME_REPORT_MAX_AGE: Duration = Duration::from_secs(30);
@@ -64,6 +66,90 @@ struct ConnectRuntimeInner {
     #[cfg_attr(not(any(test, target_os = "android")), allow(dead_code))]
     last_android_resume_sync_at: Option<Instant>,
     pending_android_resume_report: Option<PendingAndroidResumeReport>,
+    queue_gate: QueueGate,
+    /// Song IDs of the shared queue last applied to, or pushed from, the local
+    /// backend. Kept across reconnects so the first snapshot can tell a copy of
+    /// the shared queue from a queue of the user's own.
+    synced_queue_ids: Option<Vec<String>>,
+}
+
+/// While closed, shared playback is still recorded but neither applied to the
+/// local backend nor reported back, so the local queue survives until the
+/// conflict found on connect is resolved.
+#[derive(Debug, Default)]
+enum QueueGate {
+    #[default]
+    Open,
+    AwaitingChoice {
+        error: Option<String>,
+    },
+    Pushing {
+        command_id: String,
+        user_facing: bool,
+    },
+}
+
+impl QueueGate {
+    fn is_closed(&self) -> bool {
+        !matches!(self, Self::Open)
+    }
+
+    fn resolution(&self) -> Option<ConnectQueueResolution> {
+        match self {
+            Self::Open
+            | Self::Pushing {
+                user_facing: false, ..
+            } => None,
+            Self::AwaitingChoice { error } => Some(ConnectQueueResolution {
+                pushing: false,
+                error: error.clone(),
+            }),
+            Self::Pushing {
+                user_facing: true, ..
+            } => Some(ConnectQueueResolution {
+                pushing: true,
+                error: None,
+            }),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum InitialSnapshotAction {
+    ApplyServer,
+    PushLocal,
+    AskUser,
+}
+
+fn classify_initial_snapshot(
+    local_queue: &[SongResponse],
+    server_queue: &[SongResponse],
+    synced_queue_ids: Option<&[String]>,
+) -> InitialSnapshotAction {
+    if local_queue.is_empty() {
+        return InitialSnapshotAction::ApplyServer;
+    }
+    let is_synced_copy =
+        synced_queue_ids.is_some_and(|ids| local_queue.iter().map(|song| &song.id).eq(ids.iter()));
+    if is_synced_copy {
+        return InitialSnapshotAction::ApplyServer;
+    }
+    if server_queue.is_empty() {
+        return InitialSnapshotAction::PushLocal;
+    }
+    let same_songs = local_queue
+        .iter()
+        .map(|song| &song.id)
+        .eq(server_queue.iter().map(|song| &song.id));
+    if same_songs {
+        InitialSnapshotAction::ApplyServer
+    } else {
+        InitialSnapshotAction::AskUser
+    }
+}
+
+fn queue_ids(queue: &[SongResponse]) -> Vec<String> {
+    queue.iter().map(|song| song.id.clone()).collect()
 }
 
 enum ConnectOutbound {
@@ -90,6 +176,7 @@ struct SharedPlaybackUpdate {
     shared: ConnectSharedPlaybackState,
     should_apply: bool,
     allow_preserve_active_track: bool,
+    queue_gate_closed: bool,
     snapshot: ConnectStateSnapshot,
 }
 
@@ -140,14 +227,22 @@ impl Default for ConnectRuntimeStatus {
             server_url: None,
             device_id: None,
             seq: 0,
+            queue_resolution: None,
         }
     }
 }
 
 impl ConnectRuntime {
+    fn status_from_inner(inner: &ConnectRuntimeInner) -> ConnectRuntimeStatus {
+        ConnectRuntimeStatus {
+            queue_resolution: inner.queue_gate.resolution(),
+            ..inner.status.clone()
+        }
+    }
+
     fn snapshot_from_inner(inner: &ConnectRuntimeInner) -> ConnectStateSnapshot {
         ConnectStateSnapshot {
-            runtime: inner.status.clone(),
+            runtime: Self::status_from_inner(inner),
             devices: inner.devices.clone(),
             shared_playback: inner.shared_playback.clone(),
         }
@@ -160,6 +255,7 @@ impl ConnectRuntime {
         inner.device_id = None;
         inner.devices.clear();
         inner.shared_playback = None;
+        inner.queue_gate = QueueGate::Open;
         inner.status.connected = false;
         inner.status.message = Some("connect: restarting".to_string());
         inner.status.device_id = None;
@@ -180,6 +276,7 @@ impl ConnectRuntime {
         inner.device_id = None;
         inner.devices.clear();
         inner.shared_playback = None;
+        inner.queue_gate = QueueGate::Open;
         let seq = inner.status.seq;
         inner.status = ConnectRuntimeStatus::default();
         inner.status.seq = seq;
@@ -200,6 +297,7 @@ impl ConnectRuntime {
         inner.device_id = None;
         inner.devices.clear();
         inner.shared_playback = None;
+        inner.queue_gate = QueueGate::Open;
         inner.status.enabled = server_url.is_some();
         inner.status.connected = false;
         inner.status.server_url = server_url;
@@ -274,11 +372,23 @@ impl ConnectRuntime {
                 && shared.updated_by_device_id.as_deref() == Some(device_id.as_str())
                 && shared.update_reason.as_deref() == Some("report")
         });
+        // The local backend already holds the state this device pushed.
+        let is_own_push = device_id.as_ref().is_some_and(|device_id| {
+            shared.updated_by_device_id.as_deref() == Some(device_id.as_str())
+                && shared.update_reason.as_deref() == Some(UPDATE_REASON_PUSH)
+        });
+        if is_own_push {
+            inner.synced_queue_ids = Some(queue_ids(&shared.state.queue));
+            if matches!(inner.queue_gate, QueueGate::Pushing { .. }) {
+                inner.queue_gate = QueueGate::Open;
+            }
+        }
         inner.shared_playback = Some(shared.clone());
         Some(SharedPlaybackUpdate {
             shared,
-            should_apply: !should_skip_own_report,
+            should_apply: !should_skip_own_report && !is_own_push,
             allow_preserve_active_track: was_active_device && is_active_device,
+            queue_gate_closed: inner.queue_gate.is_closed(),
             snapshot: Self::snapshot_from_inner(&inner),
         })
     }
@@ -299,10 +409,28 @@ impl ConnectRuntime {
         }
     }
 
+    fn synced_queue_ids(&self) -> Option<Vec<String>> {
+        self.inner.lock().unwrap().synced_queue_ids.clone()
+    }
+
+    fn record_synced_queue(&self, generation: u64, queue_ids: Vec<String>) {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.generation == generation {
+            inner.synced_queue_ids = Some(queue_ids);
+        }
+    }
+
+    fn clear_synced_queue(&self) {
+        self.inner.lock().unwrap().synced_queue_ids = None;
+    }
+
     pub(crate) fn publish_status(&self, status: PlaybackStatus) {
         let outbound = {
             let inner = self.inner.lock().unwrap();
-            if !inner.status.connected || inner.applying_shared_seq.is_some() {
+            if !inner.status.connected
+                || inner.applying_shared_seq.is_some()
+                || inner.queue_gate.is_closed()
+            {
                 return;
             }
             let Some(shared) = inner.shared_playback.as_ref() else {
@@ -396,7 +524,7 @@ impl ConnectRuntime {
                 inner.pending_android_resume_report = None;
                 return;
             }
-            if !inner.status.connected {
+            if !inner.status.connected || inner.queue_gate.is_closed() {
                 return;
             }
             let Some(sender) = inner.sender.clone() else {
@@ -454,6 +582,11 @@ impl ConnectRuntime {
             if !inner.status.connected {
                 return Ok(false);
             }
+            // The local queue is what is playing until the conflict is resolved,
+            // so commands act on it instead of on the shared state.
+            if matches!(inner.queue_gate, QueueGate::AwaitingChoice { .. }) {
+                return Ok(false);
+            }
             let sender = inner
                 .sender
                 .clone()
@@ -466,7 +599,10 @@ impl ConnectRuntime {
             (sender, base_seq)
         };
 
-        let command_id = connect_message_id(&command.op);
+        let command_id = command
+            .command_id
+            .clone()
+            .unwrap_or_else(|| connect_message_id(&command.op));
         command.command_id = Some(command_id.clone());
         command.base_seq = Some(base_seq);
         let payload = serde_json::to_value(&command)
@@ -481,8 +617,96 @@ impl ConnectRuntime {
         Ok(true)
     }
 
+    fn begin_queue_resolution(&self, generation: u64) -> Option<ConnectStateSnapshot> {
+        let mut inner = self.inner.lock().unwrap();
+        if inner.generation != generation {
+            return None;
+        }
+        inner.queue_gate = QueueGate::AwaitingChoice { error: None };
+        inner.pending_android_resume_report = None;
+        Some(Self::snapshot_from_inner(&inner))
+    }
+
+    fn is_queue_gate_closed(&self) -> bool {
+        self.inner.lock().unwrap().queue_gate.is_closed()
+    }
+
+    /// Replaces the shared state with the local one. A user-facing push is only
+    /// allowed while the user is being asked to resolve a conflict.
+    fn push_local_state(
+        &self,
+        state: ConnectPlaybackState,
+        user_facing: bool,
+    ) -> Result<(), String> {
+        let command_id = connect_message_id("pushState");
+        {
+            let mut inner = self.inner.lock().unwrap();
+            if user_facing && !matches!(inner.queue_gate, QueueGate::AwaitingChoice { .. }) {
+                return Err("connect: no queue conflict is waiting for a choice".to_string());
+            }
+            inner.queue_gate = QueueGate::Pushing {
+                command_id: command_id.clone(),
+                user_facing,
+            };
+            inner.pending_android_resume_report = None;
+        }
+
+        let result = self
+            .send_playback_command(ConnectPlaybackCommand {
+                command_id: Some(command_id.clone()),
+                op: "pushState".to_string(),
+                state: Some(state),
+                ..Default::default()
+            })
+            .and_then(|sent| {
+                sent.then_some(())
+                    .ok_or_else(|| "connect: websocket is not connected".to_string())
+            });
+        if let Err(error) = &result {
+            self.fail_push(&command_id, error.clone());
+        }
+        result
+    }
+
+    /// Returns whether `command_id` was the push in flight. A failed user-facing
+    /// push goes back to asking the user, with the error shown.
+    fn fail_push(&self, command_id: &str, message: String) -> bool {
+        let mut inner = self.inner.lock().unwrap();
+        let QueueGate::Pushing {
+            command_id: pending_command_id,
+            user_facing,
+        } = &inner.queue_gate
+        else {
+            return false;
+        };
+        if pending_command_id != command_id {
+            return false;
+        }
+        inner.queue_gate = if *user_facing {
+            QueueGate::AwaitingChoice {
+                error: Some(message),
+            }
+        } else {
+            QueueGate::Open
+        };
+        true
+    }
+
+    fn take_pull(&self) -> Result<(u64, ConnectSharedPlaybackState), String> {
+        let mut inner = self.inner.lock().unwrap();
+        if !matches!(inner.queue_gate, QueueGate::AwaitingChoice { .. }) {
+            return Err("connect: no queue conflict is waiting for a choice".to_string());
+        }
+        let shared = inner
+            .shared_playback
+            .clone()
+            .ok_or_else(|| "connect: shared playback state is unavailable".to_string())?;
+        inner.queue_gate = QueueGate::Open;
+        Ok((inner.generation, shared))
+    }
+
     pub(crate) fn status(&self) -> ConnectRuntimeStatus {
-        self.inner.lock().unwrap().status.clone()
+        Self::status_from_inner(&self.inner.lock().unwrap())
     }
 
     pub(crate) fn snapshot(&self) -> ConnectStateSnapshot {
@@ -563,6 +787,12 @@ pub(crate) fn restart(app: &tauri::AppHandle) {
     });
 }
 
+/// Called when the user turns Connect off: the local queue from then on is the
+/// user's own, even if it still matches the last shared queue.
+pub(crate) fn forget_synced_queue(app: &tauri::AppHandle) {
+    app.state::<ConnectState>().0.clear_synced_queue();
+}
+
 #[cfg(target_os = "android")]
 pub(crate) fn sync_after_android_resume(
     app: &tauri::AppHandle,
@@ -604,7 +834,16 @@ async fn run_connect_loop(app: tauri::AppHandle, runtime: Arc<ConnectRuntime>, g
                 }
                 return;
             }
-            Ok(ConnectRunResult::Restart) => {}
+            Ok(ConnectRunResult::Restart) => {
+                let server_url = current_connect_server_url(&app);
+                if let Some(snapshot) = runtime.set_disconnected(
+                    generation,
+                    server_url,
+                    "connect: websocket closed".to_string(),
+                ) {
+                    emit_state_updated(&app, snapshot);
+                }
+            }
             Err(error) => {
                 let server_url = current_connect_server_url(&app);
                 log::warn!("connect: {error}");
@@ -810,6 +1049,17 @@ async fn handle_incoming_message(
                 .map_err(|error| format!("connect: shared playback decode failed: {error}"))?;
             if let Some(update) = runtime.set_shared_playback(generation, shared) {
                 emit_state_updated(app, update.snapshot.clone());
+                if update.queue_gate_closed
+                    || (update.shared.update_reason.as_deref() == Some(UPDATE_REASON_SNAPSHOT)
+                        && hold_local_queue_for_initial_snapshot(
+                            app,
+                            &runtime,
+                            generation,
+                            &update.shared,
+                        ))
+                {
+                    return Ok(());
+                }
                 let should_preserve_android_resume_snapshot = runtime
                     .should_preserve_pending_android_resume_snapshot(generation, &update.shared);
                 let is_active_device = runtime.device_id().as_deref().is_some_and(|device_id| {
@@ -844,6 +1094,13 @@ async fn handle_incoming_message(
         "playback.apply" => {
             let payload: PlaybackApplyPayload = serde_json::from_value(payload)
                 .map_err(|error| format!("connect: playback apply decode failed: {error}"))?;
+            if runtime.is_queue_gate_closed() {
+                log::info!(
+                    "connect: ignored playback apply {:?} while the queue conflict is unresolved",
+                    payload.op
+                );
+                return Ok(());
+            }
             if let Err(error) = execute_playback_apply(app.clone(), payload).await {
                 log::warn!("connect: playback apply failed: {error}");
             }
@@ -853,14 +1110,105 @@ async fn handle_incoming_message(
                 .map_err(|error| format!("connect: command error decode failed: {error}"))?;
             log::warn!(
                 "connect: command failed command_id={} message={}",
-                payload.command_id.unwrap_or_default(),
+                payload.command_id.as_deref().unwrap_or_default(),
                 payload.message
             );
+            if let Some(command_id) = payload.command_id.as_deref() {
+                if runtime.fail_push(command_id, payload.message) {
+                    emit_state_updated(app, runtime.snapshot());
+                }
+            }
         }
         _ => {}
     }
 
     Ok(())
+}
+
+/// Decides what the first snapshot after connecting does to a non-empty local
+/// queue. Returns true when the snapshot must not be applied to the backend.
+fn hold_local_queue_for_initial_snapshot(
+    app: &tauri::AppHandle,
+    runtime: &ConnectRuntime,
+    generation: u64,
+    shared: &ConnectSharedPlaybackState,
+) -> bool {
+    let local_queue = local_queue_for_initial_snapshot(app);
+    let synced_queue_ids = runtime.synced_queue_ids();
+    match classify_initial_snapshot(
+        &local_queue,
+        &shared.state.queue,
+        synced_queue_ids.as_deref(),
+    ) {
+        InitialSnapshotAction::ApplyServer => false,
+        InitialSnapshotAction::AskUser => {
+            runtime.clear_synced_queue();
+            if let Some(snapshot) = runtime.begin_queue_resolution(generation) {
+                emit_state_updated(app, snapshot);
+            }
+            true
+        }
+        InitialSnapshotAction::PushLocal => {
+            runtime.clear_synced_queue();
+            match local_playback_state(app).and_then(|state| runtime.push_local_state(state, false))
+            {
+                Ok(()) => {}
+                Err(error) => log::warn!("connect: failed to push the local queue: {error}"),
+            }
+            true
+        }
+    }
+}
+
+/// While the local restore is deferred for Connect, the controller holds no
+/// local queue of its own, so there is nothing to keep.
+fn local_queue_for_initial_snapshot(app: &tauri::AppHandle) -> Vec<SongResponse> {
+    let Some(profile_id) = app
+        .state::<ActiveSessionState>()
+        .0
+        .lock()
+        .ok()
+        .and_then(|session| session.as_ref().map(|session| session.profile_id.clone()))
+    else {
+        return Vec::new();
+    };
+
+    app.state::<PlaybackControllerState>()
+        .0
+        .lock()
+        .ok()
+        .filter(|controller| controller.is_initialized_for_profile(&profile_id))
+        .map(|mut controller| controller.state().queue)
+        .unwrap_or_default()
+}
+
+fn local_playback_state(app: &tauri::AppHandle) -> Result<ConnectPlaybackState, String> {
+    let playback = app.state::<PlaybackControllerState>();
+    let mut controller = playback
+        .0
+        .lock()
+        .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+    controller.synced_state().map(ConnectPlaybackState::from)
+}
+
+pub(crate) async fn resolve_queue(
+    app: &tauri::AppHandle,
+    choice: ConnectQueueResolutionChoice,
+) -> Result<(), String> {
+    let runtime = app.state::<ConnectState>().0.clone();
+    match choice {
+        ConnectQueueResolutionChoice::PushLocal => {
+            let result =
+                local_playback_state(app).and_then(|state| runtime.push_local_state(state, true));
+            emit_state_updated(app, runtime.snapshot());
+            result
+        }
+        ConnectQueueResolutionChoice::PullServer => {
+            let (generation, shared) = runtime.take_pull()?;
+            emit_state_updated(app, runtime.snapshot());
+            apply_shared_playback_state(app.clone(), runtime, generation, shared, false).await
+        }
+    }
 }
 
 async fn apply_shared_playback_state(
@@ -925,8 +1273,9 @@ async fn apply_shared_playback_state(
     .await
     .map_err(|error| format!("connect: apply shared playback task failed: {error}"));
     runtime.end_apply_shared(seq);
-    let result = result?;
-    result.map(|_| ())
+    let status = result??;
+    runtime.record_synced_queue(generation, queue_ids(&status.queue));
+    Ok(())
 }
 
 fn should_preserve_active_connect_snapshot(app: &tauri::AppHandle) -> bool {
@@ -1555,6 +1904,284 @@ mod tests {
 
         assert!(runtime.mark_android_resume_sync_requested());
         assert!(!runtime.mark_android_resume_sync_requested());
+    }
+
+    fn connected_runtime() -> (ConnectRuntime, mpsc::UnboundedReceiver<ConnectOutbound>) {
+        let runtime = ConnectRuntime::default();
+        let (sender, receiver) = mpsc::unbounded_channel();
+        let mut shared = shared_playback(Some(UPDATE_REASON_SNAPSHOT));
+        shared.seq = 5;
+        shared.active_device_id = Some("device".to_string());
+        {
+            let mut inner = runtime.inner.lock().unwrap();
+            inner.generation = 7;
+            inner.status.connected = true;
+            inner.sender = Some(sender);
+            inner.device_id = Some("device".to_string());
+            inner.shared_playback = Some(shared);
+        }
+        (runtime, receiver)
+    }
+
+    fn pushed_command_id(receiver: &mut mpsc::UnboundedReceiver<ConnectOutbound>) -> String {
+        match receiver.try_recv().unwrap() {
+            ConnectOutbound::Envelope(envelope) => {
+                assert_eq!(envelope.message_type, "playback.command.request");
+                assert_eq!(envelope.payload["op"], "pushState");
+                assert_eq!(envelope.payload["baseSeq"], 5);
+                assert_eq!(envelope.payload["state"]["currentPositionMs"], 42_000);
+                let command_id = envelope.id.unwrap();
+                assert_eq!(envelope.payload["commandId"], command_id.as_str());
+                command_id
+            }
+            ConnectOutbound::PlaybackReport { .. } => panic!("unexpected report"),
+        }
+    }
+
+    #[test]
+    fn initial_snapshot_keeps_server_when_local_queue_is_empty() {
+        assert_eq!(
+            classify_initial_snapshot(&[], &[song("song-a")], None),
+            InitialSnapshotAction::ApplyServer
+        );
+    }
+
+    #[test]
+    fn initial_snapshot_pushes_local_when_server_queue_is_empty() {
+        assert_eq!(
+            classify_initial_snapshot(&[song("song-a")], &[], None),
+            InitialSnapshotAction::PushLocal
+        );
+    }
+
+    #[test]
+    fn initial_snapshot_keeps_server_when_queues_have_the_same_songs() {
+        assert_eq!(
+            classify_initial_snapshot(
+                &[song("song-a"), song("song-b")],
+                &[song("song-a"), song("song-b")],
+                None
+            ),
+            InitialSnapshotAction::ApplyServer
+        );
+    }
+
+    #[test]
+    fn initial_snapshot_asks_user_when_queues_differ() {
+        assert_eq!(
+            classify_initial_snapshot(&[song("song-a"), song("song-b")], &[song("song-a")], None),
+            InitialSnapshotAction::AskUser
+        );
+        assert_eq!(
+            classify_initial_snapshot(
+                &[song("song-a"), song("song-b")],
+                &[song("song-b"), song("song-a")],
+                None
+            ),
+            InitialSnapshotAction::AskUser
+        );
+    }
+
+    #[test]
+    fn initial_snapshot_keeps_server_when_local_queue_is_a_synced_copy() {
+        let synced = vec!["song-a".to_string(), "song-b".to_string()];
+        let local = [song("song-a"), song("song-b")];
+
+        assert_eq!(
+            classify_initial_snapshot(&local, &[], Some(&synced)),
+            InitialSnapshotAction::ApplyServer
+        );
+        assert_eq!(
+            classify_initial_snapshot(&local, &[song("song-c")], Some(&synced)),
+            InitialSnapshotAction::ApplyServer
+        );
+    }
+
+    #[test]
+    fn initial_snapshot_treats_an_edited_copy_as_the_users_own() {
+        let synced = vec!["song-a".to_string()];
+        let local = [song("song-a"), song("song-b")];
+
+        assert_eq!(
+            classify_initial_snapshot(&local, &[], Some(&synced)),
+            InitialSnapshotAction::PushLocal
+        );
+        assert_eq!(
+            classify_initial_snapshot(&local, &[song("song-c")], Some(&synced)),
+            InitialSnapshotAction::AskUser
+        );
+    }
+
+    #[test]
+    fn own_push_update_records_synced_queue() {
+        let (runtime, _receiver) = connected_runtime();
+        let mut shared = shared_playback(Some(UPDATE_REASON_PUSH));
+        shared.seq = 6;
+        shared.state.queue = vec![song("song-a"), song("song-b")];
+
+        runtime.set_shared_playback(7, shared).unwrap();
+
+        assert_eq!(
+            runtime.synced_queue_ids(),
+            Some(vec!["song-a".to_string(), "song-b".to_string()])
+        );
+    }
+
+    #[test]
+    fn synced_queue_survives_reconnects_until_cleared() {
+        let (runtime, _receiver) = connected_runtime();
+        runtime.record_synced_queue(7, vec!["song-a".to_string()]);
+        runtime.record_synced_queue(6, vec!["stale".to_string()]);
+
+        runtime.set_disconnected(7, None, "connect: offline".to_string());
+        let (generation, _) = runtime.begin_restart();
+        runtime.set_disabled(generation);
+        assert_eq!(runtime.synced_queue_ids(), Some(vec!["song-a".to_string()]));
+
+        runtime.clear_synced_queue();
+        assert!(runtime.synced_queue_ids().is_none());
+    }
+
+    #[test]
+    fn queue_resolution_blocks_reports_and_is_published() {
+        let (runtime, mut receiver) = connected_runtime();
+        runtime.queue_android_resume_report(playback_status(PlayingState::Playing));
+
+        let snapshot = runtime.begin_queue_resolution(7).unwrap();
+        runtime.publish_status(playback_status(PlayingState::Playing));
+        runtime.flush_pending_android_resume_report(7);
+
+        let resolution = snapshot.runtime.queue_resolution.unwrap();
+        assert!(!resolution.pushing);
+        assert!(resolution.error.is_none());
+        assert!(receiver.try_recv().is_err());
+        assert!(runtime
+            .inner
+            .lock()
+            .unwrap()
+            .pending_android_resume_report
+            .is_none());
+    }
+
+    #[test]
+    fn shared_update_is_held_while_queue_resolution_is_pending() {
+        let (runtime, _receiver) = connected_runtime();
+        runtime.begin_queue_resolution(7);
+        let mut shared = shared_playback(Some("command"));
+        shared.seq = 6;
+        shared.updated_by_device_id = Some("other".to_string());
+
+        let update = runtime.set_shared_playback(7, shared).unwrap();
+
+        assert!(update.queue_gate_closed);
+        assert_eq!(runtime.shared_playback().unwrap().seq, 6);
+    }
+
+    #[test]
+    fn playback_commands_stay_local_while_queue_resolution_is_pending() {
+        let (runtime, mut receiver) = connected_runtime();
+        runtime.begin_queue_resolution(7);
+
+        let sent = runtime
+            .send_playback_command(ConnectPlaybackCommand {
+                op: "play".to_string(),
+                ..Default::default()
+            })
+            .unwrap();
+
+        assert!(!sent);
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn user_push_sends_command_and_own_push_update_reopens_gate() {
+        let (runtime, mut receiver) = connected_runtime();
+        runtime.begin_queue_resolution(7);
+
+        runtime
+            .push_local_state(playback_status(PlayingState::Playing).into(), true)
+            .unwrap();
+        pushed_command_id(&mut receiver);
+        assert!(runtime.status().queue_resolution.unwrap().pushing);
+
+        let mut shared = shared_playback(Some(UPDATE_REASON_PUSH));
+        shared.seq = 6;
+        shared.updated_by_device_id = Some("device".to_string());
+        let update = runtime.set_shared_playback(7, shared).unwrap();
+
+        assert!(!update.should_apply);
+        assert!(!update.queue_gate_closed);
+        assert!(update.snapshot.runtime.queue_resolution.is_none());
+    }
+
+    #[test]
+    fn user_push_requires_pending_queue_resolution() {
+        let (runtime, mut receiver) = connected_runtime();
+
+        assert!(runtime
+            .push_local_state(playback_status(PlayingState::Playing).into(), true)
+            .is_err());
+        assert!(receiver.try_recv().is_err());
+    }
+
+    #[test]
+    fn failed_user_push_asks_again_with_error() {
+        let (runtime, mut receiver) = connected_runtime();
+        runtime.begin_queue_resolution(7);
+        runtime
+            .push_local_state(playback_status(PlayingState::Playing).into(), true)
+            .unwrap();
+        let command_id = pushed_command_id(&mut receiver);
+
+        assert!(!runtime.fail_push("other-command", "ignored".to_string()));
+        assert!(runtime.fail_push(&command_id, "unsupported playback op".to_string()));
+
+        let resolution = runtime.status().queue_resolution.unwrap();
+        assert!(!resolution.pushing);
+        assert_eq!(resolution.error.as_deref(), Some("unsupported playback op"));
+    }
+
+    #[test]
+    fn failed_automatic_push_reopens_gate_silently() {
+        let (runtime, mut receiver) = connected_runtime();
+        runtime
+            .push_local_state(playback_status(PlayingState::Playing).into(), false)
+            .unwrap();
+        let command_id = pushed_command_id(&mut receiver);
+        assert!(runtime.is_queue_gate_closed());
+        assert!(runtime.status().queue_resolution.is_none());
+
+        assert!(runtime.fail_push(&command_id, "unsupported playback op".to_string()));
+
+        assert!(!runtime.is_queue_gate_closed());
+    }
+
+    #[test]
+    fn pull_reopens_gate_and_returns_latest_shared_state() {
+        let (runtime, _receiver) = connected_runtime();
+        assert!(runtime.take_pull().is_err());
+        runtime.begin_queue_resolution(7);
+
+        let (generation, shared) = runtime.take_pull().unwrap();
+
+        assert_eq!(generation, 7);
+        assert_eq!(shared.seq, 5);
+        assert!(!runtime.is_queue_gate_closed());
+    }
+
+    #[test]
+    fn disconnect_and_restart_clear_queue_resolution() {
+        let (runtime, _receiver) = connected_runtime();
+        runtime.begin_queue_resolution(7);
+        let snapshot = runtime
+            .set_disconnected(7, None, "connect: offline".to_string())
+            .unwrap();
+        assert!(snapshot.runtime.queue_resolution.is_none());
+
+        let (runtime, _receiver) = connected_runtime();
+        runtime.begin_queue_resolution(7);
+        let (_, snapshot) = runtime.begin_restart();
+        assert!(snapshot.runtime.queue_resolution.is_none());
     }
 }
 

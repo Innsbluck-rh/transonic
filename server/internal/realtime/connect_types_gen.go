@@ -3,27 +3,6 @@ package realtime
 
 import "encoding/json"
 
-// Outbound `playback.command.request` payload sent to the Connect server.
-//
-// This is the single authoritative definition of the Connect queue command wire
-// contract; the Go server's `ConnectPlaybackCommand` is generated from it (see
-// `docs/known-issues.md` Tier 1). Only the fields relevant to a given `op` are
-// populated; the rest are omitted from the wire. `command_id` and `base_seq` are
-// filled in by `ConnectState::send_playback_command` just before sending.
-type ConnectPlaybackCommand struct {
-	CommandID      *string           `json:"commandId,omitempty"`
-	BaseSeq        *int64            `json:"baseSeq,omitempty"`
-	Op             string            `json:"op"`
-	Queue          []json.RawMessage `json:"queue,omitempty"`
-	Items          []json.RawMessage `json:"items,omitempty"`
-	CurrentIndex   *int64            `json:"currentIndex,omitempty"`
-	AutoPlay       *bool             `json:"autoPlay,omitempty"`
-	Index          *int64            `json:"index,omitempty"`
-	FromIndex      *int64            `json:"fromIndex,omitempty"`
-	ToIndex        *int64            `json:"toIndex,omitempty"`
-	PositionMs     *int64            `json:"positionMs,omitempty"`
-	TargetDeviceID *string           `json:"targetDeviceId,omitempty"`
-}
 type PlayingState string
 
 const (
@@ -42,4 +21,27 @@ type ConnectPlaybackState struct {
 	PlayNextQueueLen  int64             `json:"playNextQueueLen"`
 	CurrentPositionMs int64             `json:"currentPositionMs"`
 	CurrentSongID     *string           `json:"currentSongId,omitempty"`
+}
+
+// Outbound `playback.command.request` payload sent to the Connect server.
+//
+// This is the single authoritative definition of the Connect queue command wire
+// contract; the Go server's `ConnectPlaybackCommand` is generated from it (see
+// `docs/known-issues.md` Tier 1). Only the fields relevant to a given `op` are
+// populated; the rest are omitted from the wire. `command_id` and `base_seq` are
+// filled in by `ConnectState::send_playback_command` just before sending.
+type ConnectPlaybackCommand struct {
+	CommandID      *string               `json:"commandId,omitempty"`
+	BaseSeq        *int64                `json:"baseSeq,omitempty"`
+	Op             string                `json:"op"`
+	Queue          []json.RawMessage     `json:"queue,omitempty"`
+	Items          []json.RawMessage     `json:"items,omitempty"`
+	CurrentIndex   *int64                `json:"currentIndex,omitempty"`
+	AutoPlay       *bool                 `json:"autoPlay,omitempty"`
+	Index          *int64                `json:"index,omitempty"`
+	FromIndex      *int64                `json:"fromIndex,omitempty"`
+	ToIndex        *int64                `json:"toIndex,omitempty"`
+	PositionMs     *int64                `json:"positionMs,omitempty"`
+	TargetDeviceID *string               `json:"targetDeviceId,omitempty"`
+	State          *ConnectPlaybackState `json:"state,omitempty"`
 }

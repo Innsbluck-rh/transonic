@@ -3,8 +3,8 @@ use tauri::{AppHandle, Manager};
 use crate::{
     connect::ConnectState,
     models::{
-        ConnectDevicePresence, ConnectRuntimeStatus, ConnectSharedPlaybackState,
-        ConnectStateSnapshot, ConnectTransferPlaybackRequest,
+        ConnectDevicePresence, ConnectResolveQueueRequest, ConnectRuntimeStatus,
+        ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectTransferPlaybackRequest,
     },
 };
 
@@ -41,4 +41,13 @@ pub fn connect_transfer_playback(
     app.state::<ConnectState>()
         .0
         .request_transfer_playback(payload.target_device_id)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn connect_resolve_queue(
+    app: AppHandle,
+    payload: ConnectResolveQueueRequest,
+) -> Result<(), String> {
+    crate::connect::resolve_queue(&app, payload.choice).await
 }
