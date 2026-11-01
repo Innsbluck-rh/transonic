@@ -44,7 +44,7 @@ function Home() {
               </Match>
               <Match when={rpAlbums()}>
                 {(albums) => (
-                  <div class='grid w-full gap-x-3 gap-y-2.5 p-3 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3'>
+                  <div class='grid w-full grid-cols-1 gap-x-3 gap-y-2.5 p-3 lg:grid-cols-2 xl:grid-cols-3'>
                     <For each={albums()}>
                       {(album, _i) => {
                         return <HorizontalAlbumItem album={album} />;

@@ -58,7 +58,7 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
                   aria-hidden={mode !== browseMode()}
                 >
                   <i class={`${getIconForMode(mode)} text-base`} />
-                  <p class='archiv truncate text-sm font-bold'>{mode}</p>
+                  <p class='archivo truncate text-sm font-bold'>{mode}</p>
                 </div>
               )}
             </For>

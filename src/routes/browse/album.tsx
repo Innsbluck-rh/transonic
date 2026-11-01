@@ -84,7 +84,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
     <div class='home-surface-root w-full gap-0 p-0'>
       <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
         <div
-          class='ripple hover:bg-primary-hover mr-auto flex cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
+          class='ripple hover:bg-primary-hover sp:text-2xl mr-auto flex cursor-pointer rounded-full p-1 text-xl'
           onClick={() => {
             navigate(-1);
           }}
@@ -93,7 +93,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         </div>
       </div>
 
-      <div class='bg-primary-surface relative z-10 flex w-full flex-col items-center px-3.5 pb-4 lg:flex-row lg:pb-6'>
+      <div class='bg-primary-surface sp:flex-col sp:pb-4 relative z-10 flex w-full flex-row items-center px-3.5 pb-6'>
         <div
           class='group border-secondary-border pointer-events-auto relative z-10 h-auto border shadow-lg'
           onClick={() => {
@@ -105,18 +105,21 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           <Show
             when={coverArt()}
             fallback={
-              <div class='flex aspect-square w-52 items-center justify-center lg:w-42'>
+              <div class='sp:w-52 flex aspect-square w-42 items-center justify-center'>
                 <LoadCircle />
               </div>
             }
           >
-            {(assetUrl) => <img class='w-52 cursor-pointer hover:brightness-75 lg:w-42' src={assetUrl()} loading='lazy' decoding='async' />}
+            {(assetUrl) => <img class='sp:w-52 w-42 cursor-pointer hover:brightness-75' src={assetUrl()} loading='lazy' decoding='async' />}
           </Show>
           <i class='icon-[material-symbols--play-arrow] pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 text-5xl text-white group-hover:visible' />
         </div>
 
-        <div class='mt-6 flex w-full flex-col items-start lg:mt-0 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
-          <MarqueeParagraph text={album()?.name || '[unknown]'} class='archivo w-full text-2xl font-black tracking-tighter lg:mb-1 lg:text-3xl' />
+        <div class='sp:mt-6 sp:h-auto sp:min-w-auto sp:flex-initial sp:px-0 flex h-full w-full min-w-0 flex-1 flex-col items-start px-5'>
+          <MarqueeParagraph
+            text={album()?.name || '[unknown]'}
+            class='archivo sp:mb-0 sp:text-2xl mb-1 w-full text-3xl font-black tracking-tighter'
+          />
           <MarqueeParagraph
             onClick={() => {
               const artistId = album()?.artistId;
@@ -130,7 +133,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           </Show>
 
           <Show when={!isSP()} fallback={<div class='mt-2' />}>
-            <div class='mt-auto mb-2 flex flex-row gap-2'>
+            <div class='mt-auto mb-1 flex flex-row gap-2'>
               <button
                 class='button-borderless flex items-center gap-1.5'
                 onClick={() => {

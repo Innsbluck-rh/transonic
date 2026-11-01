@@ -19,7 +19,7 @@ const ArtistRow: Component<ArtistRowProps> = (props) => {
       }}
       onClick={() => props.onClick?.()}
     >
-      <div class='mr-3.5 flex size-8 shrink-0 items-center justify-center lg:mr-3 lg:size-6'>
+      <div class='sp:mr-3.5 sp:size-8 mr-3 flex size-6 shrink-0 items-center justify-center'>
         <Show
           when={props.coverArtUrl}
           fallback={
@@ -37,7 +37,7 @@ const ArtistRow: Component<ArtistRowProps> = (props) => {
         </Show>
       </div>
       <p
-        class='archivo text-sm lg:text-xs'
+        class='archivo sp:text-sm text-xs'
         classList={{
           'text-accent font-bold': props.active ?? false,
           'text-zinc-950': props.selected ?? false,

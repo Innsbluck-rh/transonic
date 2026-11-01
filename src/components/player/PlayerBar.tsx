@@ -93,7 +93,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
       <div class='from-primary-plane absolute z-0 h-full w-[75%] bg-linear-to-r to-transparent'></div>
       <div class='from-primary-plane/75 absolute right-0 z-0 h-full w-[50%] bg-linear-to-l to-transparent'></div>
 
-      <div class='relative z-10 flex size-full flex-row items-center gap-2.5 px-3.5 shadow-xl lg:px-4'>
+      <div class='sp:px-3.5 relative z-10 flex size-full flex-row items-center gap-2.5 px-4 shadow-xl'>
         <div class='z-10 flex flex-row items-center gap-2'>
           <Show when={iconsVisibility.prev}>
             <PlayerIcon iconClass='text-[28px] -m-0.5' type='prev' disabled={isControlDisabled()} onClick={prev} />

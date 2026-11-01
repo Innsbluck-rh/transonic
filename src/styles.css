@@ -1,5 +1,7 @@
 @import 'tailwindcss';
 @plugin '@iconify/tailwind4';
+/* Smartphone platform, not viewport width: index.tsx sets data-platform on <html> from isSP(). */
+@custom-variant sp (&:where([data-platform=sp], [data-platform=sp] *));
 .ripple {
   position: relative;
 }
@@ -59,11 +61,6 @@
   font-optical-sizing: auto;
   font-variation-settings: 'wdth' 100;
 }
-.public-sans-500 {
-  font-family: 'Public Sans', var(--cjk-fonts), sans-serif;
-  font-weight: 500;
-  font-style: normal;
-}
 
 @theme {
   --color-primary-bg: var(--theme-color-primary-bg);
@@ -110,7 +107,7 @@
   html,
   body {
     @apply bg-primary-plane box-border;
-    font-family: 'Public Sans', var(--cjk-fonts), sans-serif;
+    font-family: 'Archivo', var(--cjk-fonts), sans-serif;
     line-height: 1;
     width: 100dvw;
     overflow-x: hidden;
