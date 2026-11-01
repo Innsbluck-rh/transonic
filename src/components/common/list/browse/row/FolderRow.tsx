@@ -18,11 +18,11 @@ const FolderRow: Component<FolderRowProps> = (props) => {
       }}
       onClick={() => props.onClick?.()}
     >
-      <div class='mr-3.5 flex size-8 shrink-0 items-center justify-center lg:mr-3 lg:size-6'>
-        <i class='icon-[material-symbols--folder-outline] text-secondary-text text-xl lg:text-lg' />
+      <div class='sp:mr-3.5 sp:size-8 mr-3 flex size-6 shrink-0 items-center justify-center'>
+        <i class='icon-[material-symbols--folder-outline] text-secondary-text sp:text-xl text-lg' />
       </div>
       <p
-        class='archivo text-sm lg:text-xs'
+        class='archivo sp:text-sm text-xs'
         classList={{
           'text-accent font-bold': props.active ?? false,
           'text-zinc-950': props.selected ?? false,

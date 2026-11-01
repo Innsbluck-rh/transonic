@@ -57,13 +57,6 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
   async function loadArtistPage(rawArtistId: string) {
     const loadId = ++latestLoadId;
 
-    if (!sessionStore.activeSession) {
-      setArtist(null);
-      setArtistInfo(null);
-      setError(null);
-      return;
-    }
-
     const artistId = decodeURIComponent(rawArtistId || '').trim();
     if (!artistId) {
       setArtist(null);
@@ -146,7 +139,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
           <div class='bg-primary-surface absolute inset-0 size-full opacity-75' />
           <div class='bg-primary-surface flex w-full items-center gap-1 p-2'>
             <div
-              class='ripple hover:bg-primary-hover mr-auto flex cursor-pointer rounded-full p-1 text-2xl lg:text-xl'
+              class='ripple hover:bg-primary-hover sp:text-2xl mr-auto flex cursor-pointer rounded-full p-1 text-xl'
               onClick={() => {
                 navigate(-1);
               }}
@@ -177,7 +170,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
           </div>
           <Switch>
             <Match when={!artist()}>
-              <LoadCircle class='m-3 self-center justify-self-center' />
+              <LoadCircle sizeClass='text-[32px] m-1' class='self-center justify-self-center' />
             </Match>
             <Match when={artist() && settingsStore.appearance.albumDisplayMode === 'grid'}>
               <div class='p-3'>

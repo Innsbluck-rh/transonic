@@ -64,11 +64,11 @@ const ConnectButton: Component = () => {
           aria-expanded={menuOpened()}
           aria-haspopup='menu'
           data-tauri-drag-exclude
-          class='bg-primary-surface hover:bg-primary-hover border-secondary-border flex cursor-pointer flex-row items-center gap-2.5 rounded-full border px-3 py-2 lg:gap-2 lg:px-2.5 lg:py-1.5'
+          class='bg-primary-surface hover:bg-primary-hover border-secondary-border sp:gap-2.5 sp:px-3 sp:py-2 flex cursor-pointer flex-row items-center gap-2 rounded-full border px-2.5 py-1.5'
           onClick={() => setMenuOpened((opened) => !opened)}
         >
           <i
-            class={`${isActiveDevicePlaying() ? 'icon-[material-symbols--volume-up]' : 'icon-[material-symbols--devices]'} scale-125 lg:scale-100`}
+            class={`${isActiveDevicePlaying() ? 'icon-[material-symbols--volume-up]' : 'icon-[material-symbols--devices]'} sp:-m-[1.75px] sp:text-[17.5px] text-sm`}
             classList={{
               'text-accent': isActiveDevicePlaying(),
               'text-primary-text': !isActiveDevicePlaying() && hasActiveDevice(),
@@ -77,7 +77,7 @@ const ConnectButton: Component = () => {
           />
 
           <p
-            class='text-sm leading-none font-bold lg:text-xs'
+            class='sp:text-sm text-xs leading-none font-bold'
             classList={{
               italic: isOwnActiveDevice() || !hasActiveDevice(),
               'text-accent': isActiveDevicePlaying(),

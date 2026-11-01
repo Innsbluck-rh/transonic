@@ -86,7 +86,8 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
               e.stopPropagation();
               togglePlayPause();
             }}
-            iconClass='p-5 m-0'
+            iconClass='text-[28px] p-3.5'
+            loadingClass='text-[32px] p-3'
           />
 
           <div

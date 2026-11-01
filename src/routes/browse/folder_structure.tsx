@@ -47,14 +47,6 @@ function BrowseFolderStructure() {
   const heading = createMemo(() => albumsResponse()?.nodeName ?? rootsResponse()?.libraryName ?? 'Folder Structure');
 
   async function loadFolderStructureView() {
-    if (!sessionStore.activeSession) {
-      setRootsResponse(null);
-      setAlbumsResponse(null);
-      setError(null);
-      setIsLoading(false);
-      return;
-    }
-
     const nextLibraryId = libraryId();
     if (!nextLibraryId) {
       setRootsResponse(null);

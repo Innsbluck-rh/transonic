@@ -43,9 +43,9 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
 
   return (
     <div ref={rootRef} class='relative w-full'>
-      <div class='bg-primary-surface border-secondary-border flex w-full flex-col overflow-hidden rounded-lg border shadow-md'>
+      <div class='bg-primary-surface border-secondary-border flex w-full flex-col overflow-hidden rounded-lg border shadow'>
         <div
-          class='hover:bg-primary-hover ripple flex w-full cursor-pointer flex-row items-center gap-2 px-3 py-1.5'
+          class='hover:bg-primary-hover ripple flex w-full cursor-pointer flex-row items-center gap-2 px-3 py-2'
           onClick={() => setOpen((current) => !current)}
         >
           {/* 全モードを同じセルに重ね、幅を最長のモード名に固定する（選択中以外は invisible） */}
@@ -57,8 +57,8 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
                   classList={{ invisible: mode !== browseMode() }}
                   aria-hidden={mode !== browseMode()}
                 >
-                  <i class={`${getIconForMode(mode)} text-md`} />
-                  <p class='archivo text-md truncate font-bold lg:text-sm'>{mode}</p>
+                  <i class={`${getIconForMode(mode)} text-base`} />
+                  <p class='archivo truncate text-sm font-bold'>{mode}</p>
                 </div>
               )}
             </For>
@@ -82,7 +82,7 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
                 setOpen(false);
               }}
             >
-              <i class={`${getIconForMode(mode)} text-secondary-text text-md`} />
+              <i class={`${getIconForMode(mode)} text-secondary-text text-base`} />
               <p class='archivo truncate text-sm'>{mode}</p>
             </div>
           )}

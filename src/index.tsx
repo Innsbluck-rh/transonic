@@ -4,6 +4,7 @@ import { render } from 'solid-js/web';
 import App from './App';
 import { initializeTheme } from './features/theme/service';
 import { initializeCjkFontOrder } from './utils/CJKFontFallback';
+import { isSP } from './utils/isSP';
 import { initializeRipple } from './utils/ripple';
 
 type SafeAreaInsetSide = 'top' | 'right' | 'bottom' | 'left';
@@ -48,6 +49,7 @@ if ('__TAURI_INTERNALS__' in window) {
   });
 }
 
+document.documentElement.dataset.platform = isSP() ? 'sp' : 'pc';
 initializeSafeAreaInsets();
 initializeCjkFontOrder();
 initializeTheme();

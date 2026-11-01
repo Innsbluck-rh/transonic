@@ -12,10 +12,24 @@ interface AlbumGridProps {
   onItemArtDblClick?: (album: AlbumItem, e: MouseEvent) => void;
 }
 
+export const ALBUM_GRID_MIN_CELL_PX = 112;
+export const ALBUM_GRID_COLUMN_GAP_PX = 10;
+
+/** Number of columns the grid lays out at the given content width (same rule as `auto-fill`). */
+export function getAlbumGridColumnCount(width: number): number {
+  return Math.max(1, Math.floor((width + ALBUM_GRID_COLUMN_GAP_PX) / (ALBUM_GRID_MIN_CELL_PX + ALBUM_GRID_COLUMN_GAP_PX)));
+}
+
 const AlbumGrid: Component<AlbumGridProps> = (props) => {
   return (
     <Show when={props.albums.length > 0} fallback={<div class='px-2 py-6 text-sm text-zinc-400'>{props.emptyMessage ?? 'No albums available.'}</div>}>
-      <div class='grid w-full grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-x-2.5 gap-y-3 lg:grid-cols-[repeat(auto-fill,minmax(112px,1fr))]'>
+      <div
+        class='grid w-full gap-y-3'
+        style={{
+          'grid-template-columns': `repeat(auto-fill, minmax(${ALBUM_GRID_MIN_CELL_PX}px, 1fr))`,
+          'column-gap': `${ALBUM_GRID_COLUMN_GAP_PX}px`,
+        }}
+      >
         <For each={props.albums}>
           {(album) => (
             <AlbumGridItem

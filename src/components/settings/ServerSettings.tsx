@@ -81,7 +81,7 @@ function ServerSettings() {
   return (
     <SettingSection title='Server'>
       <Heading3>Server</Heading3>
-      <Show when={activeSession()} fallback={<p class='text-secondary-text leading-5'>No active server session.</p>}>
+      <Show when={activeSession()}>
         {(session) => (
           <div class='flex flex-col gap-3'>
             <div class='flex gap-3'>

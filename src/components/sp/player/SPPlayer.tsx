@@ -121,15 +121,16 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
                 event.stopPropagation();
               }}
             >
-              <PlayerIcon iconClass='scale-200 p-6' type='prev' disabled={isControlDisabled()} onClick={prev} />
+              <PlayerIcon iconClass='text-[32px] p-4' type='prev' disabled={isControlDisabled()} onClick={prev} />
               <PlayerIcon
-                iconClass='scale-350 p-5'
+                iconClass='text-[56px]'
+                loadingClass='text-[56px]'
                 type={playingState() === 'playing' ? 'pause' : 'play'}
                 disabled={isControlDisabled()}
                 loading={isInterrupted()}
                 onClick={togglePlayPause}
               />
-              <PlayerIcon iconClass='scale-200 p-6' type='next' disabled={isControlDisabled()} onClick={next} />
+              <PlayerIcon iconClass='text-[32px] p-4' type='next' disabled={isControlDisabled()} onClick={next} />
             </div>
           </div>
           <div class='absolute bottom-0 mb-2 flex w-full flex-row justify-between px-2'>
