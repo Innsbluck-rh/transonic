@@ -19,7 +19,7 @@ function SPBrowseIndex() {
           'scroll-padding-bottom': `${SPScrollPaddingStore.collapsedPlayerHeight}px`,
         }}
       >
-        <div class='sticky top-0 z-10 flex items-center px-2 pt-3 pb-2'>
+        <div class='sticky top-0 z-10 flex items-center px-2 pt-3 pb-1'>
           <div>
             <BrowseModeSelect
               defaultMode={browseMode()}

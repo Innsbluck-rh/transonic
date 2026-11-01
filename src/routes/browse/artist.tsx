@@ -177,7 +177,7 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
           </div>
           <Switch>
             <Match when={!artist()}>
-              <LoadCircle class='m-3 self-center justify-self-center' />
+              <LoadCircle sizeClass='text-[32px] m-1' class='self-center justify-self-center' />
             </Match>
             <Match when={artist() && settingsStore.appearance.albumDisplayMode === 'grid'}>
               <div class='p-3'>

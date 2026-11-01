@@ -1,7 +1,7 @@
 import { createSignal, For, Match, onMount, Show, Switch } from 'solid-js';
 import { commands, type AlbumListContext, type AlbumListItem } from '~/bindings';
 import AlbumGrid from '~/components/common/list/album/AlbumGrid';
-import HorizontalAlbumItem from '~/components/common/list/album/HorizontalAlbumItem';
+import HorizontalAlbumItem from '~/components/common/list/album/item/HorizontalAlbumItem';
 import Heading2 from '~/components/common/text/Heading2';
 import RouteHeader from '~/components/common/text/RouteHeader';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
@@ -123,7 +123,7 @@ function Home() {
                         when={section.albums.length > 0}
                         fallback={<p class='archivo text-secondary-text mt-4 text-center italic'>No recent albums.</p>}
                       >
-                        <div class='grid w-full gap-x-3 gap-y-2.5 p-3 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3'>
+                        <div class='grid w-full gap-x-3 gap-y-2 p-3 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3'>
                           <For each={section.albums}>
                             {(album, _i) => {
                               return <HorizontalAlbumItem album={album} />;

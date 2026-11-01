@@ -25,20 +25,20 @@ const HorizontalAlbumItem: Component<HorizontalAlbumItemProps> = (props) => {
 
   return (
     <div
-      class='bg-primary-surface hover:bg-primary-hover ripple flex w-full cursor-pointer items-center gap-0 overflow-hidden rounded-md'
+      class='bg-primary-surface hover:bg-primary-hover ripple flex w-full cursor-pointer items-center gap-0 overflow-hidden rounded-md shadow'
       onClick={() => {
         navigate(resolveAlbumRoute(props.album.id));
       }}
       {...contextMenuProps}
     >
-      <div class='size-14 overflow-hidden md:size-12 lg:size-14'>
+      <div class='size-14 overflow-hidden'>
         <Show when={src()} fallback={<div class='size-full' />}>
           {(assetUrl) => <img src={assetUrl()} class='size-full object-cover' />}
         </Show>
       </div>
 
       <div class='flex flex-1 flex-col justify-center overflow-hidden px-3'>
-        <p class='archivo text-md truncate font-bold'>{props.album.name}</p>
+        <p class='archivo truncate font-bold'>{props.album.name}</p>
         <p class='archivo text-secondary-text truncate text-xs'>{props.album.artist}</p>
       </div>
     </div>

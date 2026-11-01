@@ -73,7 +73,7 @@ const NavigationItem: Component<NavigationItemProps> = (props) => {
       onClick={props.onClick}
     >
       <i
-        class={`${props.icon} scale-150`}
+        class={`${props.icon} -m-1 text-2xl`}
         classList={{
           'text-accent': props.currentMode() === props.targetMode,
         }}

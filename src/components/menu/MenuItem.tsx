@@ -13,7 +13,7 @@ const MenuItem: Component<MenuItem> = (props) => {
       }}
     >
       <div class='flex w-5 items-center justify-center'>
-        <Show when={props.icon}>{(icon) => <i class={`${icon()} scale-150`} />}</Show>
+        <Show when={props.icon}>{(icon) => <i class={`${icon()} -m-[3.5px] text-[21px]`} />}</Show>
       </div>
       <p>{props.label}</p>
     </div>

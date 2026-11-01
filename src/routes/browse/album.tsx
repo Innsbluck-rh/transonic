@@ -117,7 +117,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           >
             {(assetUrl) => <img class='w-52 cursor-pointer hover:brightness-75 lg:w-42' src={assetUrl()} loading='lazy' decoding='async' />}
           </Show>
-          <i class='icon-[material-symbols--play-arrow] pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 scale-300 text-white group-hover:visible' />
+          <i class='icon-[material-symbols--play-arrow] pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 text-5xl text-white group-hover:visible' />
         </div>
 
         <div class='mt-6 flex w-full flex-col items-start lg:mt-0 lg:h-full lg:min-w-0 lg:flex-1 lg:px-5 lg:py-0'>
@@ -143,7 +143,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
                   if (albumId) insertAfterCurrent([{ type: 'album', albumId }]);
                 }}
               >
-                <i class='icon-[material-symbols--next-plan]' />
+                <i class='icon-[material-symbols--next-plan] text-lg' />
                 play next
               </button>
               <button
@@ -153,7 +153,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
                   if (albumId) appendToQueue([{ type: 'album', albumId }]);
                 }}
               >
-                <i class='icon-[material-symbols--playlist-add]' />
+                <i class='icon-[material-symbols--playlist-add] text-lg' />
                 add to queue
               </button>
             </div>

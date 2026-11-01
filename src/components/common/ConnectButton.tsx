@@ -68,7 +68,7 @@ const ConnectButton: Component = () => {
           onClick={() => setMenuOpened((opened) => !opened)}
         >
           <i
-            class={`${isActiveDevicePlaying() ? 'icon-[material-symbols--volume-up]' : 'icon-[material-symbols--devices]'} scale-125 lg:scale-100`}
+            class={`${isActiveDevicePlaying() ? 'icon-[material-symbols--volume-up]' : 'icon-[material-symbols--devices]'} -m-[1.75px] text-[17.5px] lg:m-0 lg:text-sm`}
             classList={{
               'text-accent': isActiveDevicePlaying(),
               'text-primary-text': !isActiveDevicePlaying() && hasActiveDevice(),

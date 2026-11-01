@@ -5,7 +5,9 @@ type PlayerIconTypes = 'play' | 'pause' | 'next' | 'prev';
 
 interface PlayerIconProps {
   type: PlayerIconTypes;
+  // replace the default sizes of the icon and of the loading circle
   iconClass?: string;
+  loadingClass?: string;
   disabled?: boolean;
   loading?: boolean;
   onClick?: (e: MouseEvent) => void;
@@ -38,8 +40,8 @@ const PlayerIcon: Component<PlayerIconProps> = (props) => {
         props.onClick?.(e);
       }}
     >
-      <Show when={!props.loading} fallback={<LoadCircle class={props.iconClass} />}>
-        <i class={`${icon()} ${props.disabled ? 'text-secondary-text' : 'text-primary-text'} scale-175 ${props.iconClass}`} />
+      <Show when={!props.loading} fallback={<LoadCircle sizeClass={props.loadingClass} />}>
+        <i class={`${icon()} ${props.disabled ? 'text-secondary-text' : 'text-primary-text'} ${props.iconClass ?? '-m-1.5 text-[28px]'}`} />
       </Show>
     </div>
   );

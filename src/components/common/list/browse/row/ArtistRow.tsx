@@ -24,7 +24,7 @@ const ArtistRow: Component<ArtistRowProps> = (props) => {
           when={props.coverArtUrl}
           fallback={
             <div class='border-primary-border flex size-full items-center justify-center rounded-full border'>
-              <i class='icon-[material-symbols--person] text-secondary-text text-md opacity-50' />
+              <i class='icon-[material-symbols--person] text-secondary-text opacity-50' />
             </div>
           }
         >

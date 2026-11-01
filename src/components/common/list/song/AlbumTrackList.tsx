@@ -46,7 +46,7 @@ const AlbumTrackList: Component<AlbumTrackListProps> = (props) => {
               conditions={conditions()}
               leadingContent={
                 conditions().current ? (
-                  <i class='icon-[material-symbols--play-arrow] song-item-leading -ml-0.5 scale-125 text-xs' />
+                  <i class='icon-[material-symbols--play-arrow] song-item-leading -m-[1.5px] -ml-[3.5px] text-[15px]' />
                 ) : song.track != null ? (
                   String(song.track)
                 ) : (

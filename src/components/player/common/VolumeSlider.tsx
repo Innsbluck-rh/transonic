@@ -197,7 +197,7 @@ const VolumeSlider: Component<VolumeSliderProps> = (props) => {
       onClick={(event) => event.stopPropagation()}
     >
       <i
-        class={`${volumeIcon()} text-primary-text scale-125 cursor-pointer`}
+        class={`${volumeIcon()} text-primary-text -m-0.5 cursor-pointer text-xl`}
         onClick={(e) => {
           e.stopPropagation();
           if (props.disabled) {
