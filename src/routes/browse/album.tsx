@@ -39,11 +39,6 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
   const loadAlbum = async (rawAlbumId: string) => {
     const loadId = ++latestLoadId;
 
-    if (!sessionStore.activeSession) {
-      setAlbum(null);
-      return;
-    }
-
     const albumId = decodeURIComponent(rawAlbumId || '').trim();
     if (!albumId) {
       setAlbum(null);

@@ -12,7 +12,6 @@ function formatBytes(bytes: number) {
 }
 
 function AlbumArtCacheSettings() {
-  const activeSession = () => sessionStore.activeSession;
   const [coverArtCacheStatus, setCoverArtCacheStatus] = createSignal<CoverArtCacheStatus | null>(null);
   const [coverArtCacheMessage, setCoverArtCacheMessage] = createSignal<string | null>(null);
   const [coverArtCacheBusy, setCoverArtCacheBusy] = createSignal(false);
@@ -67,7 +66,7 @@ function AlbumArtCacheSettings() {
     <SettingSection title='Album Art Cache'>
       <p class='text-secondary-text text-xs leading-5'>{coverArtCacheSummary()}</p>
       <div class='flex w-full justify-end'>
-        <button type='button' disabled={coverArtCacheBusy() || !activeSession()} onClick={() => void clearCoverArtCache()}>
+        <button type='button' disabled={coverArtCacheBusy()} onClick={() => void clearCoverArtCache()}>
           Clear Cache
         </button>
       </div>

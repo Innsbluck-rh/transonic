@@ -57,13 +57,6 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
   async function loadArtistPage(rawArtistId: string) {
     const loadId = ++latestLoadId;
 
-    if (!sessionStore.activeSession) {
-      setArtist(null);
-      setArtistInfo(null);
-      setError(null);
-      return;
-    }
-
     const artistId = decodeURIComponent(rawArtistId || '').trim();
     if (!artistId) {
       setArtist(null);
