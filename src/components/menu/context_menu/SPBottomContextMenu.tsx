@@ -1,8 +1,8 @@
 import { Component, createEffect, createSignal, For, on, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { closeContextMenu, contextMenu, type ContextMenuState } from '~/stores/ContextMenuStore';
+import { closeContextMenu, contextMenu, type ContextMenuState } from '~/components/menu/context_menu/service';
 import { isSP } from '~/utils/isSP';
-import MenuItem from './MenuItem';
+import MenuItem from '../MenuItem';
 
 const TRANSITION_DURATION = 220;
 const DISMISS_DISTANCE = 80; // px: この距離以上スワイプで dismiss

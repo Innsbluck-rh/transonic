@@ -1,3 +1,6 @@
+// Write global signals (like open/close) and functions of the context menus which called from outside components.
+// This will allow components to refresh its layout properly on hot reload (otherwise it doesn't.)
+
 import { createSignal } from 'solid-js';
 import type { MenuItem } from '~/features/menu/types';
 

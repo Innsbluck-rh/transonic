@@ -3,15 +3,7 @@ import type { PlaybackActualStreamInfo, PlaybackStreamInfo } from '~/bindings';
 import { useLocalPlaybackDiagnosticsAvailable, usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 import { settingsStore } from '~/features/settings/service';
 import Heading3 from '../text/Heading3';
-
-const [open, setOpen] = createSignal(false);
-
-export function openPlaybackStreamInfoDialog() {
-  setOpen(true);
-}
-export function closePlaybackStreamInfoDialog() {
-  setOpen(false);
-}
+import { closePlaybackStreamInfoDialog, playbackStreamInfoDialogOpen } from './service';
 
 interface InfoRow {
   key: string;
@@ -175,7 +167,7 @@ export const PlaybackStreamInfoDialog: Component = () => {
   };
 
   return (
-    <Show when={open()}>
+    <Show when={playbackStreamInfoDialogOpen()}>
       <div class='fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4' role='presentation'>
         <section
           class='border-primary-border bg-primary-plane text-primary-text flex max-h-[80dvh] w-full max-w-5xl flex-col overflow-hidden rounded border shadow-xl'

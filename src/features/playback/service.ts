@@ -146,6 +146,10 @@ export function hasPlaybackCommandError(result: PlaybackCommandResult) {
   return false;
 }
 
+export function playNow(items: QueueSource[]) {
+  commands.playbackSetQueue({ items, currentIndex: null, autoPlay: true }).then(hasPlaybackCommandError);
+}
+
 export function insertAfterCurrent(items: QueueSource[]) {
   commands.playbackInsertAfterCurrent({ items }).then(hasPlaybackCommandError);
 }

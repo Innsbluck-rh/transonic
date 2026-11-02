@@ -14,7 +14,7 @@ interface AlbumGridProps {
 }
 
 export const ALBUM_GRID_MIN_CELL_PX_SP = 112;
-export const ALBUM_GRID_MIN_CELL_PX_PC = 144;
+export const ALBUM_GRID_MIN_CELL_PX_PC = 140;
 export const ALBUM_GRID_COLUMN_GAP_PX = 10;
 
 const albumGridMinimumCellPx = isSP() ? ALBUM_GRID_MIN_CELL_PX_SP : ALBUM_GRID_MIN_CELL_PX_PC;

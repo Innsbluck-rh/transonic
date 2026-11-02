@@ -8,7 +8,7 @@ import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice
 import { usePlayback } from '~/features/playback/usePlayback';
 import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 import { connectStore } from '~/stores/ConnectStore';
-import { openPlaybackStreamInfoDialog } from '../common/dialog/PlaybackStreamInfoDialog';
+import { openPlaybackStreamInfoDialog } from '../common/dialog/service';
 import LoadCircle from '../common/LoadCircle';
 import PlaybackStatusText from '../player/common/PlaybackStatusText';
 import VolumeSlider from '../player/common/VolumeSlider';
@@ -80,7 +80,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
   };
 
   return (
-    <div class='bg-primary-plane relative flex h-[92px] w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0/0.05)]'>
+    <div class='bg-primary-plane relative flex h-23 w-full flex-col shadow-[0_-1px_2px_0_rgb(0_0_0/0.05)]'>
       <div class='absolute z-30 w-full translate-y-[-50%]'>
         <PlayerSlider valueMs={currentPositionMs()} maxMs={durationMs()} disabled={!canSeek()} onPreview={previewSeek} onCommit={seek} />
       </div>
@@ -122,7 +122,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
               </div>
             }
           >
-            <div class='relative mr-4.5 aspect-square h-[48px] w-auto'>
+            <div class='relative mr-4.5 aspect-square h-12 w-auto'>
               <Show
                 when={coverArt()}
                 fallback={

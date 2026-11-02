@@ -1,5 +1,5 @@
 import { useLocation, useNavigate, type NavigateOptions } from '@solidjs/router';
-import { closePlayerBar } from '~/components/sp/player/SPExpandablePlayerBar';
+import { closeSPExpandablePlayerBar } from '~/components/sp/player/service';
 import { isSP } from '~/utils/isSP';
 import { resolveSPBrowseRoute } from './routes';
 
@@ -34,7 +34,7 @@ export function useSPNavigate() {
       navigate(to, options);
     } else {
       // Dismiss the player before the transition snapshot to avoid overlaying it.
-      closePlayerBar(true);
+      closeSPExpandablePlayerBar(true);
 
       const direction: NavDirection = typeof to === 'number' && to < 0 ? 'backward' : 'forward';
       setNavDirection(direction);

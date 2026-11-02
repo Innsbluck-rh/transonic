@@ -1,6 +1,5 @@
 import { createMemo, createResource, type Accessor } from 'solid-js';
 import { sessionStore } from '~/stores/SessionStore';
-import { CoverArtSizes } from './CoverArtSizes';
 import { fetchCoverArtAssetUrl, type CoverArtResourceRequest } from './service';
 
 export interface CoverArtState {
@@ -39,11 +38,7 @@ function coverArtRequestKey(payload: CoverArtResourceRequest): string {
   ].join('\0');
 }
 
-export function useCoverArt(
-  coverArtId: Accessor<string | null | undefined>,
-  size: number = CoverArtSizes.md,
-  options: CoverArtOptions = {}
-): CoverArtState {
+export function useCoverArt(coverArtId: Accessor<string | null | undefined>, size: number | null, options: CoverArtOptions = {}): CoverArtState {
   const request = createMemo(() => {
     const id = coverArtId()?.trim();
     if (!id) return null;

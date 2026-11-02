@@ -1,4 +1,4 @@
-import { openContextMenu } from '~/stores/ContextMenuStore';
+import { openContextMenu } from '~/components/menu/context_menu/service';
 import { cancelRipple } from '~/utils/ripple';
 import type { MenuItem } from './types';
 

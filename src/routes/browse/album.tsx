@@ -1,6 +1,7 @@
 import { useParams, type RouteSectionProps } from '@solidjs/router';
 import { createEffect, createMemo, createSignal, Show } from 'solid-js';
 import { commands, type AlbumSongsResponse } from '~/bindings';
+import { openAlbumArtOverlayDialog } from '~/components/common/dialog/service';
 import AlbumTrackList from '~/components/common/list/song/AlbumTrackList';
 import LoadCircle from '~/components/common/LoadCircle';
 import Heading3 from '~/components/common/text/Heading3';
@@ -93,14 +94,14 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         </div>
       </div>
 
-      <div class='bg-primary-surface sp:flex-col sp:pb-4 relative z-10 flex w-full flex-row items-center px-3.5 pb-6'>
+      <div class='bg-primary-surface sp:flex-col sp:pb-4 sp:pt-0 relative z-10 flex w-full flex-row items-center px-3.5 pt-1 pb-5'>
         {/* fit cover div in square space */}
         <div class='sp:w-52 sp:h-52 flex h-48 w-48 items-center justify-center'>
           <div
             class='group border-secondary-border sp:w-52 pointer-events-auto relative z-10 w-48 border shadow-lg'
             onClick={() => {
-              const albumId = album()?.id;
-              if (albumId) playAlbum(albumId);
+              const coverArtId = album()?.coverArtId;
+              if (coverArtId) openAlbumArtOverlayDialog(coverArtId);
             }}
             {...contextMenuProps()}
           >
@@ -114,7 +115,6 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
             >
               {(assetUrl) => <img class='sp:w-52 w-48 cursor-pointer hover:brightness-75' src={assetUrl()} loading='lazy' decoding='async' />}
             </Show>
-            <i class='icon-[material-symbols--play-arrow] pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 text-5xl text-white group-hover:visible' />
           </div>
         </div>
 
@@ -136,34 +136,46 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           </Show>
 
           <Show when={!isSP()} fallback={<div class='mt-2' />}>
-            <div class='mt-auto mb-1 flex flex-row gap-2'>
+            <div class='mt-auto mb-1 flex flex-row flex-wrap gap-3'>
               <button
-                class='button-borderless flex items-center gap-1.5'
+                class='button-borderless text-accent bg-accent/10 hover:bg-accent/20 flex items-center gap-1.5'
                 onClick={() => {
                   const albumId = album()?.id;
-                  if (albumId) insertAfterCurrent([{ type: 'album', albumId }]);
+                  if (albumId) playAlbum(albumId);
                 }}
               >
-                <i class='icon-[material-symbols--next-plan] text-lg' />
-                play next
+                <i class='icon-[material-symbols--play-arrow] text-accent text-lg' />
+                play
               </button>
-              <button
-                class='button-borderless flex items-center gap-1.5'
-                onClick={() => {
-                  const albumId = album()?.id;
-                  if (albumId) appendToQueue([{ type: 'album', albumId }]);
-                }}
-              >
-                <i class='icon-[material-symbols--playlist-add] text-lg' />
-                add to queue
-              </button>
+              <div class='mt-auto flex flex-row gap-1'>
+                <button
+                  class='button-borderless text-secondary-text flex items-center gap-1.5'
+                  onClick={() => {
+                    const albumId = album()?.id;
+                    if (albumId) insertAfterCurrent([{ type: 'album', albumId }]);
+                  }}
+                >
+                  <i class='icon-[material-symbols--next-plan] text-primary-text text-lg' />
+                  play next
+                </button>
+                <button
+                  class='button-borderless text-secondary-text flex items-center gap-1.5'
+                  onClick={() => {
+                    const albumId = album()?.id;
+                    if (albumId) appendToQueue([{ type: 'album', albumId }]);
+                  }}
+                >
+                  <i class='icon-[material-symbols--playlist-add] text-primary-text text-lg' />
+                  add to queue
+                </button>
+              </div>
             </div>
           </Show>
         </div>
       </div>
 
       <div class='border-secondary-border z-20 flex w-full flex-col border-t pb-2'>
-        <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b p-2'>
+        <div class='border-secondary-border bg-primary-bg sticky top-0 left-0 z-10 flex w-full flex-row items-center border-b px-2 py-1.5'>
           <Heading3 class='text-secondary-text'>songs</Heading3>
         </div>
         <div

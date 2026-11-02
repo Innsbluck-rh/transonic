@@ -1,4 +1,5 @@
 import { Component, JSX, Show } from 'solid-js';
+import { openPlaybackStreamInfoDialog } from '~/components/common/dialog/service';
 import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
 import PlaybackStatusText from '~/components/player/common/PlaybackStatusText';
 import PlayerIcon from '~/components/player/PlayerIcon';
@@ -9,11 +10,10 @@ import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/rou
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
-import { openPlaybackStreamInfoDialog } from '../../common/dialog/PlaybackStreamInfoDialog';
 import QueueList from '../../common/list/song/QueueList';
 import LoadCircle from '../../common/LoadCircle';
 import Heading3 from '../../common/text/Heading3';
-import { closePlayerBar } from './SPExpandablePlayerBar';
+import { closeSPExpandablePlayerBar } from './service';
 
 interface SPPlayerProps {
   topSectionProps?: JSX.HTMLAttributes<HTMLDivElement>;
@@ -59,7 +59,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
             <div
               class='ripple mr-auto flex cursor-pointer p-2 text-2xl'
               onClick={() => {
-                closePlayerBar(true);
+                closeSPExpandablePlayerBar(true);
               }}
             >
               <i class='icon-[material-symbols--keyboard-arrow-down]' />
