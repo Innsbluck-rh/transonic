@@ -254,6 +254,16 @@
 }
 
 /* SP screen page transitions via View Transitions API */
+/* The transition overlay, the root snapshot and every named element swallow taps while a transition runs (adr/26).
+   Drop the root snapshot and let taps pass through the overlay, so unnamed elements (e.g. the bottom navigation) stay tappable. */
+:root {
+  view-transition-name: none;
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
 ::view-transition-group(sp-screen) {
   z-index: 0;
 }
@@ -271,19 +281,16 @@
   animation: none;
 }
 
-::view-transition-group(sp-header),
-::view-transition-group(sp-bottom-navigation) {
+::view-transition-group(sp-header) {
   z-index: 2;
 }
 
-::view-transition-old(sp-header),
-::view-transition-old(sp-bottom-navigation) {
+::view-transition-old(sp-header) {
   opacity: 0;
   animation: none;
 }
 
-::view-transition-new(sp-header),
-::view-transition-new(sp-bottom-navigation) {
+::view-transition-new(sp-header) {
   animation: none;
 }
 

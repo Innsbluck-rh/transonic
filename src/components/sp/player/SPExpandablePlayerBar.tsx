@@ -311,6 +311,26 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
     });
   });
 
+  // A fast swipe on the sheet is still recognized as a fling by the browser (touch-action: none does not stop that),
+  // and the next tap within the fling is suppressed as a "fling cancel" tap, so it fires no click.
+  // Cancelling touchmove keeps the browser from starting the scroll gesture, so no fling is created.
+  // Swipes inside a scroll container (the queue list) are left alone so they keep scrolling natively.
+  const isInsideScrollContainer = (target: EventTarget | null) => {
+    for (let el = target instanceof Element ? target : null; el && el !== containerRef; el = el.parentElement) {
+      const overflowY = getComputedStyle(el).overflowY;
+      if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const preventSheetTouchMove = (event: TouchEvent) => {
+    if (dragPointerId() !== null || !isInsideScrollContainer(event.target)) {
+      event.preventDefault();
+    }
+  };
+
   onMount(() => {
     syncContainerHeight();
 
@@ -323,10 +343,12 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
     }
 
     window.addEventListener('resize', syncContainerHeight);
+    containerRef?.addEventListener('touchmove', preventSheetTouchMove, { passive: false });
 
     onCleanup(() => {
       rootObserver.disconnect();
       window.removeEventListener('resize', syncContainerHeight);
+      containerRef?.removeEventListener('touchmove', preventSheetTouchMove);
       setSPScrollPaddingStore('collapsedPlayerHeight', 0);
     });
   });

@@ -16,10 +16,7 @@ const SPBottomNavigation: Component = () => {
   const current = createMemo<'home' | 'search' | 'browse' | 'settings'>(() => getCurrent(location.pathname));
 
   return (
-    <div
-      class='bg-primary-plane z-50 flex h-15 w-full flex-row shadow-[0_-2px_10px_rgba(0,0,0,0.2)]'
-      style={{ 'view-transition-name': 'sp-bottom-navigation' }}
-    >
+    <div class='bg-primary-plane z-50 flex h-15 w-full flex-row shadow-[0_-2px_10px_rgba(0,0,0,0.2)]'>
       <NavigationItem icon='icon-[pixelarticons--home-sharp]' currentMode={current} targetMode='home' onClick={() => navigate(resolveHomeRoute())} />
 
       <NavigationItem
