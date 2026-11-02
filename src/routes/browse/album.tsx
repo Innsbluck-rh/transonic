@@ -94,25 +94,28 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
       </div>
 
       <div class='bg-primary-surface sp:flex-col sp:pb-4 relative z-10 flex w-full flex-row items-center px-3.5 pb-6'>
-        <div
-          class='group border-secondary-border pointer-events-auto relative z-10 h-auto border shadow-lg'
-          onClick={() => {
-            const albumId = album()?.id;
-            if (albumId) playAlbum(albumId);
-          }}
-          {...contextMenuProps()}
-        >
-          <Show
-            when={coverArt()}
-            fallback={
-              <div class='sp:w-52 flex aspect-square w-42 items-center justify-center'>
-                <LoadCircle />
-              </div>
-            }
+        {/* fit cover div in square space */}
+        <div class='sp:w-52 sp:h-52 flex h-48 w-48 items-center justify-center'>
+          <div
+            class='group border-secondary-border sp:w-52 pointer-events-auto relative z-10 w-48 border shadow-lg'
+            onClick={() => {
+              const albumId = album()?.id;
+              if (albumId) playAlbum(albumId);
+            }}
+            {...contextMenuProps()}
           >
-            {(assetUrl) => <img class='sp:w-52 w-42 cursor-pointer hover:brightness-75' src={assetUrl()} loading='lazy' decoding='async' />}
-          </Show>
-          <i class='icon-[material-symbols--play-arrow] pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 text-5xl text-white group-hover:visible' />
+            <Show
+              when={coverArt()}
+              fallback={
+                <div class='sp:w-52 flex aspect-square w-48 items-center justify-center'>
+                  <LoadCircle />
+                </div>
+              }
+            >
+              {(assetUrl) => <img class='sp:w-52 w-48 cursor-pointer hover:brightness-75' src={assetUrl()} loading='lazy' decoding='async' />}
+            </Show>
+            <i class='icon-[material-symbols--play-arrow] pointer-events-none collapse absolute top-1/2 left-1/2 -translate-1/2 text-5xl text-white group-hover:visible' />
+          </div>
         </div>
 
         <div class='sp:mt-6 sp:h-auto sp:min-w-auto sp:flex-initial sp:px-0 flex h-full w-full min-w-0 flex-1 flex-col items-start px-5'>
