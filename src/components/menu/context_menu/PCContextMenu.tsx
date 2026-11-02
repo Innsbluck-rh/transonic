@@ -1,8 +1,8 @@
 import { Component, createEffect, For, on, onCleanup, Show } from 'solid-js';
 import { Portal } from 'solid-js/web';
-import { closeContextMenu, contextMenu } from '~/stores/ContextMenuStore';
+import { closeContextMenu, contextMenu } from '~/components/menu/context_menu/service';
 import { isSP } from '~/utils/isSP';
-import MenuItem from './MenuItem';
+import MenuItem from '../MenuItem';
 
 const PCContextMenu: Component = () => {
   let menuRef: HTMLDivElement | undefined;
@@ -61,7 +61,7 @@ const PCContextMenu: Component = () => {
         <Portal>
           <div
             ref={menuRef}
-            class='border-secondary-border bg-primary-surface fixed z-[110] min-w-44 rounded-md border py-1 shadow-lg'
+            class='border-secondary-border bg-primary-surface fixed z-110 min-w-44 rounded-md border py-1 shadow-lg'
             style={{ left: `${state().anchorX}px`, top: `${state().anchorY}px`, opacity: '0' }}
           >
             <For each={state().items}>

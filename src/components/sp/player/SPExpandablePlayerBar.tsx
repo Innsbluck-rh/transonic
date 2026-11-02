@@ -7,21 +7,7 @@ import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { setSPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import SPPlayer from './SPPlayer';
-
-export interface PlayerBarRequest {
-  expanded: boolean;
-  immediate: boolean;
-}
-
-export const [playerBarRequest, setPlayerBarRequest] = createSignal<PlayerBarRequest | null>(null);
-
-export function openPlayerBar(immediate = false) {
-  setPlayerBarRequest({ expanded: true, immediate });
-}
-
-export function closePlayerBar(immediate = false) {
-  setPlayerBarRequest({ expanded: false, immediate });
-}
+import { spPlayerBarRequest } from './service';
 
 interface SPExpandablePlayerBarProps {
   topOffsetPx?: number;
@@ -236,7 +222,7 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
 
   // 外部からのリクエストを監視してローカルstateに反映する
   createEffect(
-    on(playerBarRequest, (request) => {
+    on(spPlayerBarRequest, (request) => {
       if (!request) return;
 
       if (!shouldShowPlayerBar()) {

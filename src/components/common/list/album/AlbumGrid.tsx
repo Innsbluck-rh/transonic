@@ -1,4 +1,5 @@
 import { Component, For, Show } from 'solid-js';
+import { isSP } from '~/utils/isSP';
 import AlbumGridItem, { AlbumItem } from './item/AlbumGridItem';
 
 interface AlbumGridProps {
@@ -12,12 +13,15 @@ interface AlbumGridProps {
   onItemArtDblClick?: (album: AlbumItem, e: MouseEvent) => void;
 }
 
-export const ALBUM_GRID_MIN_CELL_PX = 112;
+export const ALBUM_GRID_MIN_CELL_PX_SP = 112;
+export const ALBUM_GRID_MIN_CELL_PX_PC = 140;
 export const ALBUM_GRID_COLUMN_GAP_PX = 10;
+
+const albumGridMinimumCellPx = isSP() ? ALBUM_GRID_MIN_CELL_PX_SP : ALBUM_GRID_MIN_CELL_PX_PC;
 
 /** Number of columns the grid lays out at the given content width (same rule as `auto-fill`). */
 export function getAlbumGridColumnCount(width: number): number {
-  return Math.max(1, Math.floor((width + ALBUM_GRID_COLUMN_GAP_PX) / (ALBUM_GRID_MIN_CELL_PX + ALBUM_GRID_COLUMN_GAP_PX)));
+  return Math.max(1, Math.floor((width + ALBUM_GRID_COLUMN_GAP_PX) / (albumGridMinimumCellPx + ALBUM_GRID_COLUMN_GAP_PX)));
 }
 
 const AlbumGrid: Component<AlbumGridProps> = (props) => {
@@ -26,7 +30,7 @@ const AlbumGrid: Component<AlbumGridProps> = (props) => {
       <div
         class='grid w-full gap-y-3'
         style={{
-          'grid-template-columns': `repeat(auto-fill, minmax(${ALBUM_GRID_MIN_CELL_PX}px, 1fr))`,
+          'grid-template-columns': `repeat(auto-fill, minmax(${albumGridMinimumCellPx}px, 1fr))`,
           'column-gap': `${ALBUM_GRID_COLUMN_GAP_PX}px`,
         }}
       >

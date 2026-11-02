@@ -1,4 +1,5 @@
 import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
+import { AlbumArtOverlayDialog } from '~/components/common/dialog/AlbumArtOverlayDialog';
 import Header from '~/components/common/header/Header';
 import PlayerBar from '~/components/player/PlayerBar';
 import LeftSideBar from '~/components/sidebar/LeftSideBar';
@@ -49,6 +50,7 @@ const DesktopHomeLayout: ParentComponent = (props) => {
             <LeftSideBar />
             <div class='bg-primary-plane relative flex h-full min-w-0 flex-1'>
               <div class='border-secondary-border absolute inset-0 m-2 flex flex-col overflow-hidden rounded-xl border'>{props.children}</div>
+              <AlbumArtOverlayDialog />
             </div>
             <RightSidebar />
           </div>

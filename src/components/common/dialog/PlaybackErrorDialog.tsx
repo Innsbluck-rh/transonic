@@ -68,7 +68,7 @@ export default function PlaybackErrorDialog() {
                 <i class='icon-[material-symbols--close]' />
               </button>
             </header>
-            <pre class='text-primary-text overflow-auto p-4 text-xs leading-5 break-words whitespace-pre-wrap'>{error()}</pre>
+            <pre class='text-primary-text overflow-auto p-4 text-xs leading-5 wrap-break-word whitespace-pre-wrap'>{error()}</pre>
             <footer class='border-secondary-border flex items-center justify-end gap-2 border-t px-4 py-3'>
               <Show when={copyState()}>{(state) => <span class='text-secondary-text mr-auto text-xs'>{state()}</span>}</Show>
               <button class='flex items-center gap-1' type='button' onClick={copy}>

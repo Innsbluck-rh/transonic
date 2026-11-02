@@ -1,8 +1,10 @@
 import { onCleanup, onMount, ParentComponent, Show } from 'solid-js';
 import { commands, events } from '~/bindings';
+import { AlbumArtOverlayDialog } from '~/components/common/dialog/AlbumArtOverlayDialog';
 import SPBottomNavigation from '~/components/sp/SPBottomNavigation';
 import SPHeader from '~/components/sp/SPHeader';
-import SPExpandablePlayerBar, { openPlayerBar } from '~/components/sp/player/SPExpandablePlayerBar';
+import SPExpandablePlayerBar from '~/components/sp/player/SPExpandablePlayerBar';
+import { openSPExpandablePlayerBar } from '~/components/sp/player/service';
 import ConnectSync from '~/features/connect/ConnectSync';
 import { startPlaybackStateSync } from '~/features/playback/service';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
@@ -25,7 +27,7 @@ const SPHomeLayout: ParentComponent = (props) => {
     // Android: 通知タップでプレイヤーバーを展開するイベントリスナー
     void events.mediaNotificationTap
       .listen(() => {
-        openPlayerBar();
+        openSPExpandablePlayerBar();
       })
       .then((nextUnlisten) => {
         if (disposed) {
@@ -43,7 +45,7 @@ const SPHomeLayout: ParentComponent = (props) => {
     // Android: コールドスタート時に通知タップで起動された場合の処理
     void commands.consumePendingNotificationTap().then((pending) => {
       if (pending && !disposed) {
-        openPlayerBar();
+        openSPExpandablePlayerBar();
       }
     });
   });
@@ -77,6 +79,7 @@ const SPHomeLayout: ParentComponent = (props) => {
             {props.children}
           </div>
           <SPExpandablePlayerBar />
+          <AlbumArtOverlayDialog />
         </div>
 
         <SPBottomNavigation />

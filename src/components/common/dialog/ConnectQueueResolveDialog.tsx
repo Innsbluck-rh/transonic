@@ -61,7 +61,7 @@ export default function ConnectQueueResolveDialog() {
               playingState={connectStore.sharedPlayback?.state.playingState}
             />
 
-            <div class='flex items-center justify-end justify-evenly gap-2 px-4 py-3'>
+            <div class='flex items-center justify-evenly gap-2 px-4 py-3'>
               <button class='flex items-center gap-1' type='button' disabled={pushing()} onClick={() => void resolve('pushLocal')}>
                 <i class='icon-[material-symbols--arrow-upward]' />
                 <span>Push Local</span>
