@@ -19,6 +19,11 @@
 //! - `ITaskbarList3` may only be used once the window has received the
 //!   registered `TaskbarButtonCreated` message. Explorer sends it again after
 //!   it restarts, for a new taskbar button that needs the toolbar added again.
+//! - Tauri creates the (visible) main window before running `setup`, so the
+//!   first `TaskbarButtonCreated` is already delivered to tao's window
+//!   procedure by the time [`init`] subclasses the window. [`init`] therefore
+//!   adds the toolbar right away; if the button doesn't exist yet, that fails
+//!   and the later message adds it.
 //! - `ThumbBarAddButtons` fixes the set and order of the buttons; later
 //!   changes (glyph, enabled state) go through `ThumbBarUpdateButtons`.
 //! - Clicks arrive as `WM_COMMAND` with HIWORD = `THBN_CLICKED` and LOWORD =
@@ -92,8 +97,7 @@ pub struct ThumbBarReporter {
 ///
 /// Best-effort: any failure is logged and `None` is returned so the app runs
 /// normally without the toolbar. Must be called on the main thread (it is,
-/// from `create_playback_controller` during Tauri `setup`). The toolbar itself
-/// is added once `TaskbarButtonCreated` arrives.
+/// from `create_playback_controller` during Tauri `setup`).
 pub fn init(app: &AppHandle) -> Option<ThumbBarReporter> {
     let window = match app.get_webview_window("main") {
         Some(window) => window,
@@ -147,6 +151,9 @@ pub fn init(app: &AppHandle) -> Option<ThumbBarReporter> {
         return None;
     }
     log::info!("thumbbar: initialized");
+    // The first `TaskbarButtonCreated` has normally been delivered already
+    // (see the module docs), so don't wait for it.
+    apply();
 
     Some(ThumbBarReporter {
         app: app.clone(),
@@ -273,23 +280,28 @@ fn apply() {
     }
 
     // The taskbar copies the icons, so `icons` can be dropped after the call.
-    let result = unsafe {
-        if added {
-            taskbar.ThumbBarUpdateButtons(hwnd, &buttons)
-        } else {
-            taskbar.ThumbBarAddButtons(hwnd, &buttons)
+    if added {
+        if let Err(error) = unsafe { taskbar.ThumbBarUpdateButtons(hwnd, &buttons) } {
+            log::warn!("thumbbar: failed to update toolbar buttons: {error}");
         }
-    };
-    match result {
-        Ok(()) if !added => {
+        return;
+    }
+    match unsafe { taskbar.ThumbBarAddButtons(hwnd, &buttons) } {
+        Ok(()) => {
             with_thumbbar(|bar| bar.added = true);
             log::info!("thumbbar: toolbar added");
         }
-        Ok(()) => {}
-        Err(error) => {
-            let action = if added { "update" } else { "add" };
-            log::warn!("thumbbar: failed to {action} toolbar buttons: {error}");
-        }
+        // Adding fails both before the taskbar button exists and when this
+        // button already has the toolbar (added by `init`, with the button's
+        // `TaskbarButtonCreated` delivered only afterwards). Updating succeeds
+        // only in the latter case.
+        Err(add_error) => match unsafe { taskbar.ThumbBarUpdateButtons(hwnd, &buttons) } {
+            Ok(()) => {
+                with_thumbbar(|bar| bar.added = true);
+                log::info!("thumbbar: toolbar already present; updated");
+            }
+            Err(_) => log::info!("thumbbar: toolbar not added yet: {add_error}"),
+        },
     }
 }
 
