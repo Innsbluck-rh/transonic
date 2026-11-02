@@ -78,7 +78,11 @@ windows = { version = "0.61", features = [
     "Win32_Media_MediaFoundation",
     "Win32_Media_Audio",
     "Win32_System_Com",
+    "Win32_System_Registry",
     "Win32_System_Variant",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
 ] }
 souvlaki = { version = "0.8.3", default-features = false }
 
