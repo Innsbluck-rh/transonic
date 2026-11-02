@@ -6,6 +6,10 @@ mod reporting;
 mod server_reporting;
 #[cfg(all(target_os = "windows", not(test)))]
 mod smtc_windows;
+#[cfg(any(target_os = "windows", test))]
+mod thumbbar;
+#[cfg(all(target_os = "windows", not(test)))]
+mod thumbbar_windows;
 #[cfg(all(target_os = "windows", not(test)))]
 mod windows_runtime;
 use crate::models::{normalize_output_device_id, PlaybackOutputDevice};
@@ -103,6 +107,10 @@ pub(crate) fn create_playback_controller(
     {
         if let Some(smtc_reporter) = smtc_windows::init(_app) {
             reporters.push(Box::new(smtc_reporter));
+        }
+        // Taskbar thumbnail toolbar (prev / play-pause / next), same pattern.
+        if let Some(thumbbar_reporter) = thumbbar_windows::init(_app) {
+            reporters.push(Box::new(thumbbar_reporter));
         }
     }
     let reporter: Box<dyn reporting::PlaybackReporter> =
