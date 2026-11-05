@@ -9,8 +9,11 @@ export interface SongItemProps {
   song: SongResponse;
   conditions?: SongItemConditions;
   leadingContent?: string | JSX.Element;
-  /** Shown after the duration. */
-  trailingContent?: JSX.Element;
+  /** Shows a checkbox in place of `leadingContent`; no checkbox while undefined. */
+  checked?: boolean;
+  /** A ⋮ button after the duration; `onMenuClick` receives its clicks. */
+  withMenuButton?: boolean;
+  onMenuClick?: (event: MouseEvent) => void;
   coverArt?: boolean;
   coverArtUrl?: string | null;
   emphasizeTitle?: boolean;
@@ -33,16 +36,25 @@ const SongItem: Component<SongItemProps> = (props) => {
   return (
     <div
       ref={props.ref}
-      class='song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden px-4 py-2'
+      class={`song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2 ${props.withMenuButton ? 'pr-1 pl-4' : 'px-4'}`}
       onClick={() => props.onClick?.()}
       {...songItemConditionAttrs(conditions())}
       {...menuHandlers}
     >
       {props.children}
 
-      <Show when={leadingContent() != null}>
+      <Show when={props.checked !== undefined || leadingContent() != null}>
         <div class='flex w-8 flex-row items-start'>
-          {typeof leadingContent() === 'string' ? <p class='song-item-leading archivo text-xs font-bold'>{leadingContent()}</p> : leadingContent()}
+          <Show
+            when={props.checked === undefined}
+            fallback={
+              <i
+                class={`${props.checked ? 'icon-[material-symbols--check-box]' : 'icon-[material-symbols--check-box-outline-blank]'} song-item-leading -ml-[3px] text-[16px]`}
+              />
+            }
+          >
+            {typeof leadingContent() === 'string' ? <p class='song-item-leading archivo text-xs font-bold'>{leadingContent()}</p> : leadingContent()}
+          </Show>
         </div>
       </Show>
 
@@ -70,7 +82,22 @@ const SongItem: Component<SongItemProps> = (props) => {
 
       <p class='song-item-meta archivo ml-2 text-xs'>{formatCompactDuration(props.song.duration ?? 0)}</p>
 
-      {props.trailingContent}
+      <Show when={props.withMenuButton}>
+        {/* Its presses stay with the button: they neither click the row nor start a press on it. */}
+        <div
+          role='button'
+          aria-label='More'
+          data-ripple='off'
+          class='song-item-meta ml-1 flex items-center self-stretch px-2'
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onMenuClick?.(event);
+          }}
+        >
+          <i class='icon-[material-symbols--more-vert] text-lg' />
+        </div>
+      </Show>
     </div>
   );
 };

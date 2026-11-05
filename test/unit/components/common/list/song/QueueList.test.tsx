@@ -130,7 +130,7 @@ describe('QueueList', () => {
   it('on SP plays a tapped row, toggles it while selecting, and opens the row menu only from the ⋮ button', () => {
     platform.current = 'android';
     renderQueue();
-    const menuButton = (index: number) => container.querySelectorAll<HTMLElement>('[data-queue-menu-button]')[index];
+    const menuButton = (index: number) => container.querySelectorAll<HTMLElement>('[aria-label="More"]')[index];
 
     click(row(2));
     expect(bindingMocks.playbackPlayQueueIndex).toHaveBeenCalledWith({ index: 2 });
@@ -148,6 +148,6 @@ describe('QueueList', () => {
   it('on PC has no ⋮ button', () => {
     renderQueue();
 
-    expect(container.querySelector('[data-queue-menu-button]')).toBeNull();
+    expect(container.querySelector('[aria-label="More"]')).toBeNull();
   });
 });

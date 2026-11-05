@@ -129,13 +129,8 @@ const QueueList: Component<QueueListProps> = (props) => {
     cachedFallbackSizes: [CoverArtSizes.lg, CoverArtSizes.md],
   });
 
-  const isMenuButtonTarget = (target: EventTarget | null) => target instanceof Element && target.closest('[data-queue-menu-button]') !== null;
-
   const onPointerDown = (event: PointerEvent) => {
     gestures.resetClick();
-    if (isMenuButtonTarget(event.target)) {
-      return;
-    }
     const index = queueRowIndexAt(event.target);
     if (!isSP()) {
       gestures.pressPC(event, index);
@@ -146,7 +141,7 @@ const QueueList: Component<QueueListProps> = (props) => {
 
   // While rows are selected a click on a row only turns it on or off; otherwise it plays the row.
   const onClick = (event: MouseEvent) => {
-    if (gestures.consumeClick() || isMenuButtonTarget(event.target)) {
+    if (gestures.consumeClick()) {
       return;
     }
     const index = queueRowIndexAt(event.target);
@@ -248,20 +243,12 @@ const QueueList: Component<QueueListProps> = (props) => {
 
           const menuItems = buildQueueItemMenuItems(entry, i, navigate);
 
-          const leadingContent = () => {
-            if (isQueueSelecting()) {
-              return isQueueIndexSelected(i()) ? (
-                <i class='icon-[material-symbols--check-box] song-item-leading -ml-[3px] text-[16px]' />
-              ) : (
-                <i class='icon-[material-symbols--check-box-outline-blank] song-item-leading -ml-[3px] text-[16px]' />
-              );
-            }
-            return conditions().current ? (
+          const leadingContent = () =>
+            conditions().current ? (
               <i class='icon-[material-symbols--play-arrow] song-item-leading -m-[1.5px] -ml-[3.5px] text-[15px]' />
             ) : (
               String(i() + 1)
             );
-          };
 
           return (
             <div class='border-secondary-border border-b' data-queue-index={i()}>
@@ -269,6 +256,7 @@ const QueueList: Component<QueueListProps> = (props) => {
                 ref={setItemElement}
                 song={entry}
                 leadingContent={leadingContent()}
+                checked={isQueueSelecting() ? isQueueIndexSelected(i()) : undefined}
                 coverArt
                 coverArtUrl={coverArtMap.src(coverArtId())}
                 emphasizeTitle
@@ -276,20 +264,8 @@ const QueueList: Component<QueueListProps> = (props) => {
                 conditions={conditions()}
                 // SP opens the row menu from the ⋮ button; a long-press on the row lifts it instead.
                 menuItems={isSP() ? undefined : menuItems}
-                trailingContent={
-                  isSP() ? (
-                    <div
-                      data-queue-menu-button
-                      data-ripple='off'
-                      role='button'
-                      aria-label='More'
-                      class='song-item-meta -my-2 -mr-4 ml-1 flex items-center self-stretch px-3'
-                      onClick={(event) => showContextMenu(event, menuItems)}
-                    >
-                      <i class='icon-[material-symbols--more-vert] text-lg' />
-                    </div>
-                  ) : undefined
-                }
+                withMenuButton={isSP()}
+                onMenuClick={(event) => showContextMenu(event, menuItems)}
               >
                 <Show when={dropIndicatorEdge()}>
                   {(edge) => (
