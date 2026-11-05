@@ -1,4 +1,4 @@
-import { Component, createMemo, JSX, Show } from 'solid-js';
+import { Component, JSX, Match, Show, Switch } from 'solid-js';
 import type { SongResponse } from '~/bindings';
 import { type SongItemConditions, songItemConditionAttrs } from '~/features/items/SongItemConditions';
 import type { MenuItem } from '~/features/menu/types';
@@ -8,10 +8,12 @@ import { formatCompactDuration } from '~/utils/duration';
 export interface SongItemProps {
   song: SongResponse;
   conditions?: SongItemConditions;
-  leadingContent?: string | JSX.Element;
-  /** Shows a checkbox in place of `leadingContent`; no checkbox while undefined. */
+  /** Whether to hide leading contents (index/playing/checkbox) */
+  noIndexContent?: boolean;
+  index?: number;
+  playing?: boolean;
+  /** Shows a checkbox instead of index or playing icon; no checkbox while undefined. */
   checked?: boolean;
-  /** A ⋮ button after the duration; `onMenuClick` receives its clicks. */
   withMenuButton?: boolean;
   onMenuClick?: (event: MouseEvent) => void;
   coverArt?: boolean;
@@ -31,30 +33,32 @@ const SongItem: Component<SongItemProps> = (props) => {
   const menuHandlers = props.menuItems ? useContextMenu(props.menuItems) : {};
 
   const conditions = (): SongItemConditions => props.conditions ?? { current: false, selected: false };
-  const leadingContent = createMemo(() => props.leadingContent);
 
   return (
     <div
       ref={props.ref}
-      class={`song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2 ${props.withMenuButton ? 'pr-1 pl-4' : 'px-4'}`}
+      class={`song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2`}
       onClick={() => props.onClick?.()}
       {...songItemConditionAttrs(conditions())}
       {...menuHandlers}
     >
       {props.children}
 
-      <Show when={props.checked !== undefined || leadingContent() != null}>
-        <div class='flex w-8 flex-row items-start'>
-          <Show
-            when={props.checked === undefined}
-            fallback={
-              <i
-                class={`${props.checked ? 'icon-[material-symbols--check-box]' : 'icon-[material-symbols--check-box-outline-blank]'} song-item-leading -ml-[3px] text-[16px]`}
-              />
-            }
-          >
-            {typeof leadingContent() === 'string' ? <p class='song-item-leading archivo text-xs font-bold'>{leadingContent()}</p> : leadingContent()}
-          </Show>
+      <Show when={!props.noIndexContent} fallback={<div class='ml-4' />}>
+        <div class='flex w-13 flex-row items-center justify-center'>
+          <Switch>
+            <Match when={props.checked !== undefined}>
+              <Show when={props.checked} fallback={<i class={'icon-[material-symbols--check-box-outline-blank] song-item-leading text-xl'} />}>
+                <i class={'icon-[material-symbols--check-box] song-item-leading text-xl'} />
+              </Show>
+            </Match>
+            <Match when={props.playing}>
+              <i class='icon-[material-symbols--play-arrow] song-item-leading text-lg' />
+            </Match>
+            <Match when={props.index !== undefined}>
+              <p class='song-item-leading text-sm font-bold'>{props.index}</p>
+            </Match>
+          </Switch>
         </div>
       </Show>
 
@@ -69,26 +73,25 @@ const SongItem: Component<SongItemProps> = (props) => {
           <Show when={props.playNext}>
             <i class='icon-[material-symbols--next-plan] text-secondary-text text-xs' />
           </Show>
-          <p class='song-item-title archivo min-w-0 flex-1 truncate' classList={{ 'font-bold': props.emphasizeTitle }} title={props.song.title}>
+          <p class='song-item-title min-w-0 flex-1 truncate' classList={{ 'font-bold': props.emphasizeTitle }} title={props.song.title}>
             {props.song.title}
           </p>
         </div>
         <Show when={props.song.artist}>
-          <p class='song-item-meta archivo truncate text-[11px]' title={props.song.artist ?? undefined}>
+          <p class='song-item-meta truncate text-[11px]' title={props.song.artist ?? undefined}>
             {props.song.artist}
           </p>
         </Show>
       </div>
 
-      <p class='song-item-meta archivo ml-2 text-xs'>{formatCompactDuration(props.song.duration ?? 0)}</p>
+      <p class={`song-item-meta ml-3 text-xs`}>{formatCompactDuration(props.song.duration ?? 0)}</p>
 
-      <Show when={props.withMenuButton}>
+      <Show when={props.withMenuButton} fallback={<div class='mr-4' />}>
         {/* Its presses stay with the button: they neither click the row nor start a press on it. */}
         <div
           role='button'
           aria-label='More'
-          data-ripple='off'
-          class='song-item-meta ml-1 flex items-center self-stretch px-2'
+          class='song-item-meta ripple ml-2 flex items-center justify-center self-stretch rounded-full p-2'
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();

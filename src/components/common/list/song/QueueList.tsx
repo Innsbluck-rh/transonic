@@ -243,19 +243,13 @@ const QueueList: Component<QueueListProps> = (props) => {
 
           const menuItems = buildQueueItemMenuItems(entry, i, navigate);
 
-          const leadingContent = () =>
-            conditions().current ? (
-              <i class='icon-[material-symbols--play-arrow] song-item-leading -m-[1.5px] -ml-[3.5px] text-[15px]' />
-            ) : (
-              String(i() + 1)
-            );
-
           return (
             <div class='border-secondary-border border-b' data-queue-index={i()}>
               <SongItem
                 ref={setItemElement}
                 song={entry}
-                leadingContent={leadingContent()}
+                playing={conditions().current}
+                index={i() + 1}
                 checked={isQueueSelecting() ? isQueueIndexSelected(i()) : undefined}
                 coverArt
                 coverArtUrl={coverArtMap.src(coverArtId())}

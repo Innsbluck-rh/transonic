@@ -44,15 +44,8 @@ const AlbumTrackList: Component<AlbumTrackListProps> = (props) => {
             <SongItem
               song={song}
               conditions={conditions()}
-              leadingContent={
-                conditions().current ? (
-                  <i class='icon-[material-symbols--play-arrow] song-item-leading -m-[1.5px] -ml-[3.5px] text-[15px]' />
-                ) : song.track != null ? (
-                  String(song.track)
-                ) : (
-                  '?'
-                )
-              }
+              playing={conditions().current}
+              index={song.track ?? undefined}
               menuItems={buildSongMenuItems(song)}
               onClick={onClickEntry}
             />

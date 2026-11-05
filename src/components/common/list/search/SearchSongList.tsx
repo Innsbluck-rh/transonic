@@ -28,6 +28,7 @@ const SearchSongList: Component<SearchSongListProps> = (props) => {
           <SongItem
             song={song}
             conditions={conditions()}
+            noIndexContent
             coverArt
             coverArtUrl={coverArtMap.src(song.displayCoverArtId ?? song.coverArtId)}
             menuItems={buildSongMenuItems(song)}
