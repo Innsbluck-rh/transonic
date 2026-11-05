@@ -32,7 +32,7 @@ interface QueueListGestureOptions {
   move: (indices: number[], insertBefore: number) => void;
   /** Rectangle selection; `rows` is null while the rectangle covers no row. */
   selectRect: (rows: { from: number; to: number } | null, anchor: number) => void;
-  /** SP: a lifted row was let go without moving. */
+  /** SP: a long-press on a row that does not lift, or a lifted row let go without moving. */
   longPress: (index: number) => void;
 }
 
@@ -277,11 +277,21 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
 
   /**
    * SP press on a row. Moving before the long-press time is a scroll and lets
-   * the press go; holding still lifts the row (see `startDrag`).
+   * the press go. Held still, a `liftable` row lifts (see `startDrag`); any
+   * other row counts as a long-press right away.
    */
-  const pressSP = (event: PointerEvent, index: number) => {
+  const pressSP = (event: PointerEvent, index: number, liftable: boolean) => {
     let latest = event;
-    const timer = setTimeout(() => startDrag(index, event, latest, true), LONG_PRESS_MS);
+    const timer = setTimeout(() => {
+      if (liftable) {
+        startDrag(index, event, latest, true);
+        return;
+      }
+      endGesture?.();
+      cancelRipple();
+      suppressClick = true;
+      options.longPress(index);
+    }, LONG_PRESS_MS);
     track(event, false, {
       move: (next) => {
         latest = next;

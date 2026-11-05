@@ -58,8 +58,9 @@ const QueueList: Component<QueueListProps> = (props) => {
       commands.playbackMoveQueueIndices({ indices, insertBefore }).then(hasPlaybackCommandError);
     },
     selectRect: setQueueSelectionSpan,
+    // SP: a long-press turns the row on; only rows already on lift for a drag.
     longPress: (index) => {
-      if (!isQueueSelecting()) {
+      if (!isQueueIndexSelected(index)) {
         toggleQueueSelection(index);
       }
     },
@@ -135,7 +136,7 @@ const QueueList: Component<QueueListProps> = (props) => {
     if (!isSP()) {
       gestures.pressPC(event, index);
     } else if (index !== null) {
-      gestures.pressSP(event, index);
+      gestures.pressSP(event, index, isQueueIndexSelected(index));
     }
   };
 
