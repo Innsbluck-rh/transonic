@@ -31,9 +31,10 @@ pub use cover_art::{
 pub use playback::{
     consume_pending_notification_tap, playback_append_to_queue, playback_clear_queue,
     playback_get_output_devices, playback_get_state, playback_insert_after_current,
-    playback_move_queue_index, playback_next, playback_pause, playback_play,
-    playback_play_queue_index, playback_prev, playback_remove_queue_index, playback_seek,
-    playback_set_position, playback_set_queue, playback_set_volume, playback_stop,
+    playback_move_queue_indices, playback_next, playback_pause, playback_play,
+    playback_play_queue_index, playback_prev, playback_remove_queue_index,
+    playback_remove_queue_indices, playback_seek, playback_set_position, playback_set_queue,
+    playback_set_volume, playback_stop,
 };
 pub use search::search;
 pub use session::{bootstrap_app_state, connect_server_profile, delete_server_profile};
@@ -95,19 +96,21 @@ pub use cover_art::{
 pub use playback::{
     __cmd__consume_pending_notification_tap, __cmd__playback_append_to_queue,
     __cmd__playback_clear_queue, __cmd__playback_get_output_devices, __cmd__playback_get_state,
-    __cmd__playback_insert_after_current, __cmd__playback_move_queue_index, __cmd__playback_next,
+    __cmd__playback_insert_after_current, __cmd__playback_move_queue_indices, __cmd__playback_next,
     __cmd__playback_pause, __cmd__playback_play, __cmd__playback_play_queue_index,
-    __cmd__playback_prev, __cmd__playback_remove_queue_index, __cmd__playback_seek,
-    __cmd__playback_set_position, __cmd__playback_set_queue, __cmd__playback_set_volume,
-    __cmd__playback_stop, __specta__fn__consume_pending_notification_tap,
-    __specta__fn__playback_append_to_queue, __specta__fn__playback_clear_queue,
-    __specta__fn__playback_get_output_devices, __specta__fn__playback_get_state,
-    __specta__fn__playback_insert_after_current, __specta__fn__playback_move_queue_index,
-    __specta__fn__playback_next, __specta__fn__playback_pause, __specta__fn__playback_play,
+    __cmd__playback_prev, __cmd__playback_remove_queue_index, __cmd__playback_remove_queue_indices,
+    __cmd__playback_seek, __cmd__playback_set_position, __cmd__playback_set_queue,
+    __cmd__playback_set_volume, __cmd__playback_stop,
+    __specta__fn__consume_pending_notification_tap, __specta__fn__playback_append_to_queue,
+    __specta__fn__playback_clear_queue, __specta__fn__playback_get_output_devices,
+    __specta__fn__playback_get_state, __specta__fn__playback_insert_after_current,
+    __specta__fn__playback_move_queue_indices, __specta__fn__playback_next,
+    __specta__fn__playback_pause, __specta__fn__playback_play,
     __specta__fn__playback_play_queue_index, __specta__fn__playback_prev,
-    __specta__fn__playback_remove_queue_index, __specta__fn__playback_seek,
-    __specta__fn__playback_set_position, __specta__fn__playback_set_queue,
-    __specta__fn__playback_set_volume, __specta__fn__playback_stop,
+    __specta__fn__playback_remove_queue_index, __specta__fn__playback_remove_queue_indices,
+    __specta__fn__playback_seek, __specta__fn__playback_set_position,
+    __specta__fn__playback_set_queue, __specta__fn__playback_set_volume,
+    __specta__fn__playback_stop,
 };
 #[doc(hidden)]
 pub use search::{__cmd__search, __specta__fn__search};

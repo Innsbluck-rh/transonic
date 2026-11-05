@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -198,6 +199,100 @@ func TestInsertAfterCurrentIntoEmptyQueueInitializesPlayNextArea(t *testing.T) {
 	}
 	if got := songIDAt(state.Queue, 0); got == nil || *got != "song-x" {
 		t.Fatalf("unexpected current song: %#v", got)
+	}
+}
+
+func sharedQueueState(t *testing.T, ids []string, currentIndex int64, playingState PlayingState) *store.SharedPlaybackState {
+	t.Helper()
+	queue := make([]json.RawMessage, 0, len(ids))
+	for _, id := range ids {
+		queue = append(queue, json.RawMessage(`{"id":"`+id+`"}`))
+	}
+	raw, err := encodePlaybackState(ConnectPlaybackState{
+		PlayingState:      playingState,
+		Queue:             queue,
+		CurrentIndex:      &currentIndex,
+		CurrentPositionMs: 5000,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &store.SharedPlaybackState{UserKey: "user", Seq: 1, State: raw}
+}
+
+func reducedQueueState(t *testing.T, current *store.SharedPlaybackState, command ConnectPlaybackCommand) ConnectPlaybackState {
+	t.Helper()
+	next, err := reduceQueueCommand(current, command, "device")
+	if err != nil {
+		t.Fatal(err)
+	}
+	state, err := decodePlaybackState(next.State)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return state
+}
+
+func queueIDs(state ConnectPlaybackState) string {
+	ids := []string{}
+	for index := range state.Queue {
+		ids = append(ids, *songIDAt(state.Queue, int64(index)))
+	}
+	return strings.Join(ids, "")
+}
+
+func TestMoveQueueIndicesKeepsQueueOrderAndRecordsIndexMap(t *testing.T) {
+	current := sharedQueueState(t, []string{"a", "b", "c", "d", "e"}, 4, "playing")
+	insertBefore := int64(1)
+
+	state := reducedQueueState(t, current, ConnectPlaybackCommand{Op: "moveQueueIndices", Indices: []int64{4, 2}, InsertBefore: &insertBefore})
+
+	if got := queueIDs(state); got != "acebd" {
+		t.Fatalf("unexpected queue %s", got)
+	}
+	if state.CurrentIndex == nil || *state.CurrentIndex != 2 || state.CurrentPositionMs != 5000 {
+		t.Fatalf("expected current entry e at index 2 still at 5000, got %#v at %d", state.CurrentIndex, state.CurrentPositionMs)
+	}
+	if state.QueueRevision == nil || *state.QueueRevision != 1 {
+		t.Fatalf("expected queue revision 1, got %#v", state.QueueRevision)
+	}
+	if state.QueueIndexMap == nil || !slices.Equal(*state.QueueIndexMap, []int{0, 3, 1, 4, 2}) {
+		t.Fatalf("unexpected queue index map %#v", state.QueueIndexMap)
+	}
+
+	insertBefore = 2
+	state = reducedQueueState(t, current, ConnectPlaybackCommand{Op: "moveQueueIndices", Indices: []int64{2, 4}, InsertBefore: &insertBefore})
+	if got := queueIDs(state); got != "abced" {
+		t.Fatalf("unexpected queue %s", got)
+	}
+}
+
+func TestRemoveQueueIndicesWithCurrentEntryPausesNextSurvivor(t *testing.T) {
+	current := sharedQueueState(t, []string{"1", "2", "3", "4", "5"}, 2, "playing")
+
+	state := reducedQueueState(t, current, ConnectPlaybackCommand{Op: "removeQueueIndices", Indices: []int64{1, 2, 3}})
+
+	if got := queueIDs(state); got != "15" {
+		t.Fatalf("unexpected queue %s", got)
+	}
+	if state.CurrentIndex == nil || *state.CurrentIndex != 1 || state.PlayingState != "paused" || state.CurrentPositionMs != 0 {
+		t.Fatalf("expected 5 paused at 0, got %#v %s at %d", state.CurrentIndex, state.PlayingState, state.CurrentPositionMs)
+	}
+	if state.QueueIndexMap == nil || !slices.Equal(*state.QueueIndexMap, []int{0, -1, -1, -1, 1}) {
+		t.Fatalf("unexpected queue index map %#v", state.QueueIndexMap)
+	}
+
+	state = reducedQueueState(t, current, ConnectPlaybackCommand{Op: "removeQueueIndices", Indices: []int64{2, 3, 4}})
+	if got := queueIDs(state); got != "12" {
+		t.Fatalf("unexpected queue %s", got)
+	}
+	if state.CurrentIndex == nil || *state.CurrentIndex != 1 || state.PlayingState != "stopped" {
+		t.Fatalf("expected 2 stopped, got %#v %s", state.CurrentIndex, state.PlayingState)
+	}
+
+	state = reducedQueueState(t, current, ConnectPlaybackCommand{Op: "removeQueueIndices", Indices: []int64{0, 1, 2, 3, 4}})
+	if len(state.Queue) != 0 || state.CurrentIndex != nil || state.PlayingState != "idle" {
+		t.Fatalf("expected empty idle queue, got %#v", state)
 	}
 }
 
@@ -753,6 +848,9 @@ func TestPushStateReplacesSharedStateAndClaimsActiveDevice(t *testing.T) {
 	if state.PlayNextQueueLen != 1 {
 		t.Fatalf("expected play-next queue length clamped to 1, got %d", state.PlayNextQueueLen)
 	}
+	if state.QueueRevision == nil || *state.QueueRevision != 2 || state.QueueIndexMap == nil || len(*state.QueueIndexMap) != 0 {
+		t.Fatalf("expected the shared queue revision advanced with no index map, got %#v %#v", state.QueueRevision, state.QueueIndexMap)
+	}
 }
 
 func TestPushStateRequiresState(t *testing.T) {
@@ -782,7 +880,8 @@ func TestQueueCommandsKeepPositionElapsedSinceLastReport(t *testing.T) {
 	commands := map[string]string{
 		"insertAfterCurrent": `{"baseSeq":1,"op":"insertAfterCurrent","items":[{"id":"song-x"}]}`,
 		"appendToQueue":      `{"baseSeq":1,"op":"appendToQueue","items":[{"id":"song-x"}]}`,
-		"moveQueueIndex":     `{"baseSeq":1,"op":"moveQueueIndex","fromIndex":1,"toIndex":2}`,
+		"moveQueueIndices":   `{"baseSeq":1,"op":"moveQueueIndices","indices":[1],"insertBefore":3}`,
+		"removeQueueIndices": `{"baseSeq":1,"op":"removeQueueIndices","indices":[2]}`,
 		"removeQueueIndex":   `{"baseSeq":1,"op":"removeQueueIndex","index":2}`,
 	}
 	for op, payload := range commands {
@@ -878,6 +977,8 @@ var valuesChangeWithoutReport = map[string]bool{
 	"PlayNextQueueLen":  false,
 	"CurrentPositionMs": true,
 	"CurrentSongID":     false,
+	"QueueRevision":     false,
+	"QueueIndexMap":     false,
 }
 
 func TestValuesChangeWithoutReportListsEveryFieldAndMatchesAdvanceToNow(t *testing.T) {

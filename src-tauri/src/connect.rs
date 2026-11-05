@@ -1633,6 +1633,8 @@ mod tests {
                 play_next_queue_len: 0,
                 current_position_ms: 0,
                 current_song_id: None,
+                queue_revision: 0,
+                queue_index_map: Vec::new(),
             },
             updated_at: "2026-05-25T00:00:00Z".to_string(),
             updated_by_device_id: Some("device".to_string()),

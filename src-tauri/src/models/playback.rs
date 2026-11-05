@@ -98,9 +98,17 @@ pub struct PlaybackRemoveQueueIndexRequest {
 
 #[derive(Debug, Clone, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
-pub struct PlaybackMoveQueueIndexRequest {
-    pub from_index: u32,
-    pub to_index: u32,
+pub struct PlaybackRemoveQueueIndicesRequest {
+    pub indices: Vec<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize, specta::Type)]
+#[serde(rename_all = "camelCase")]
+pub struct PlaybackMoveQueueIndicesRequest {
+    pub indices: Vec<u32>,
+    /// Gap in the current queue to move the entries to: they end up right
+    /// before the entry now at this index (`queue.len()` = the end).
+    pub insert_before: u32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
@@ -202,6 +210,13 @@ pub struct PlaybackStatus {
     pub play_next_queue_len: u32,
     pub current_position_ms: u32,
     pub current_song_id: Option<String>,
+    /// Advanced by every queue mutation; see `queue_index_map`.
+    pub queue_revision: u32,
+    /// For the mutation that produced `queue_revision`: the new index of each
+    /// entry of the previous queue, `-1` for a removed one. Empty when the
+    /// queue was replaced wholesale. Lets the frontend carry the queue
+    /// selection across a change; see docs/playback-queue-semantics.md.
+    pub queue_index_map: Vec<i32>,
     /// Audio API the currently applied output device is reached through.
     ///
     /// `None` for the system default and for platforms without output device
@@ -245,6 +260,8 @@ impl PlaybackStatus {
             play_next_queue_len: 0,
             current_position_ms: 0,
             current_song_id: None,
+            queue_revision: 0,
+            queue_index_map: Vec::new(),
             output_host: None,
             playback_error: None,
             active_stream_info: None,

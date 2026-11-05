@@ -28,7 +28,7 @@ vi.mock('~/features/navigation/useSPNavigate', () => ({
 
 vi.mock('~/bindings', () => ({
   commands: {
-    playbackMoveQueueIndex: vi.fn().mockResolvedValue({ status: 'ok' }),
+    playbackMoveQueueIndices: vi.fn().mockResolvedValue({ status: 'ok' }),
     playbackPlayQueueIndex: vi.fn(),
   },
 }));

@@ -82,6 +82,12 @@ pub struct ConnectPlaybackState {
     pub current_position_ms: u32,
     #[serde(default)]
     pub current_song_id: Option<String>,
+    /// Same meaning as `PlaybackStatus::queue_revision` / `queue_index_map`,
+    /// maintained by the Go reducer while Connect is on.
+    #[serde(default)]
+    pub queue_revision: u32,
+    #[serde(default)]
+    pub queue_index_map: Vec<i32>,
 }
 
 impl From<PlaybackStatus> for ConnectPlaybackState {
@@ -93,6 +99,8 @@ impl From<PlaybackStatus> for ConnectPlaybackState {
             play_next_queue_len: status.play_next_queue_len,
             current_position_ms: status.current_position_ms,
             current_song_id: status.current_song_id,
+            queue_revision: status.queue_revision,
+            queue_index_map: status.queue_index_map,
         }
     }
 }
@@ -145,9 +153,9 @@ pub struct ConnectPlaybackCommand {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub index: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub from_index: Option<u32>,
+    pub indices: Option<Vec<u32>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub to_index: Option<u32>,
+    pub insert_before: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub position_ms: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

@@ -237,9 +237,9 @@ const QueueList: Component<QueueListProps> = (props) => {
                   }
 
                   commands
-                    .playbackMoveQueueIndex({
-                      fromIndex,
-                      toIndex,
+                    .playbackMoveQueueIndices({
+                      indices: [fromIndex],
+                      insertBefore: self.data.edge === 'top' ? self.data.index : self.data.index + 1,
                     })
                     .then(hasPlaybackCommandError);
                 },

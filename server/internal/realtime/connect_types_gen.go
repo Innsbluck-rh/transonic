@@ -21,6 +21,10 @@ type ConnectPlaybackState struct {
 	PlayNextQueueLen  int64             `json:"playNextQueueLen"`
 	CurrentPositionMs int64             `json:"currentPositionMs"`
 	CurrentSongID     *string           `json:"currentSongId,omitempty"`
+	// Same meaning as `PlaybackStatus::queue_revision` / `queue_index_map`,
+	// maintained by the Go reducer while Connect is on.
+	QueueRevision *int64 `json:"queueRevision,omitempty"`
+	QueueIndexMap *[]int `json:"queueIndexMap,omitempty"`
 }
 
 // Outbound `playback.command.request` payload sent to the Connect server.
@@ -39,8 +43,8 @@ type ConnectPlaybackCommand struct {
 	CurrentIndex   *int64                `json:"currentIndex,omitempty"`
 	AutoPlay       *bool                 `json:"autoPlay,omitempty"`
 	Index          *int64                `json:"index,omitempty"`
-	FromIndex      *int64                `json:"fromIndex,omitempty"`
-	ToIndex        *int64                `json:"toIndex,omitempty"`
+	Indices        []int64               `json:"indices,omitempty"`
+	InsertBefore   *int64                `json:"insertBefore,omitempty"`
 	PositionMs     *int64                `json:"positionMs,omitempty"`
 	TargetDeviceID *string               `json:"targetDeviceId,omitempty"`
 	State          *ConnectPlaybackState `json:"state,omitempty"`
