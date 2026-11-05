@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  clearCoverArtCache: vi.fn(),
   convertFileSrc: vi.fn((path: string) => `asset://${path}`),
   getCoverArt: vi.fn(),
   getCoverArtCached: vi.fn(),
@@ -12,6 +13,7 @@ vi.mock('@tauri-apps/api/core', () => ({
 
 vi.mock('~/bindings', () => ({
   commands: {
+    clearCoverArtCache: mocks.clearCoverArtCache,
     getCoverArt: mocks.getCoverArt,
     getCoverArtCached: mocks.getCoverArtCached,
   },
@@ -24,6 +26,7 @@ async function loadService() {
 describe('album cover art service', () => {
   beforeEach(() => {
     vi.resetModules();
+    mocks.clearCoverArtCache.mockReset();
     mocks.getCoverArt.mockReset();
     mocks.getCoverArtCached.mockReset();
     mocks.getCoverArtCached.mockResolvedValue({ status: 'ok', data: null });
@@ -121,6 +124,29 @@ describe('album cover art service', () => {
 
     expect(withoutFallback).toBe('asset://cache/cover-48.png');
     expect(withFallback).toBe('asset://cache/cover-48-with-fallback.png');
+    expect(mocks.getCoverArt).toHaveBeenCalledTimes(2);
+  });
+
+  it('resolves cover art again after the cover art cache is cleared', async () => {
+    mocks.getCoverArt
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: { localPath: 'cache/art.1.jpg' },
+      })
+      .mockResolvedValueOnce({
+        status: 'ok',
+        data: { localPath: 'cache/art.2.jpg' },
+      });
+    mocks.clearCoverArtCache.mockResolvedValue({ status: 'ok', data: {} });
+    const { clearCoverArtCache, fetchCoverArtAssetUrl } = await loadService();
+    const payload = { profileId: 'profile-a', coverArtId: 'cover-1', size: 48 };
+
+    const beforeClear = await fetchCoverArtAssetUrl(payload);
+    await clearCoverArtCache();
+    const afterClear = await fetchCoverArtAssetUrl(payload);
+
+    expect(beforeClear).toBe('asset://cache/art.1.jpg');
+    expect(afterClear).toBe('asset://cache/art.2.jpg');
     expect(mocks.getCoverArt).toHaveBeenCalledTimes(2);
   });
 
