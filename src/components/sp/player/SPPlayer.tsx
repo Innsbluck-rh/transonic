@@ -1,4 +1,4 @@
-import { Component, JSX, Show } from 'solid-js';
+import { Component, createSignal, JSX, Show } from 'solid-js';
 import { openPlaybackStreamInfoDialog } from '~/components/common/dialog/service';
 import MarqueeParagraph from '~/components/common/text/MarqueeParagraph';
 import PlaybackStatusText from '~/components/player/common/PlaybackStatusText';
@@ -11,6 +11,7 @@ import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 import QueueList from '../../common/list/song/QueueList';
+import QueueSelectionToolbar from '../../common/list/song/QueueSelectionToolbar';
 import LoadCircle from '../../common/LoadCircle';
 import Heading3 from '../../common/text/Heading3';
 import { closeSPExpandablePlayerBar } from './service';
@@ -50,6 +51,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
     initialBehavior: 'instant',
     queueChangeBehavior: 'instant',
   });
+  const [scrollContainer, setScrollContainer] = createSignal<HTMLDivElement>();
 
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
@@ -155,9 +157,16 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
       <div class='border-primary-border bg-primary-bg flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
-      <div ref={setScrollContainerRef} class='bg-primary-bg flex-1 overflow-y-auto pb-3'>
-        <QueueList queue={queue()} itemRef={setItemRef} />
+      <div
+        ref={(element) => {
+          setScrollContainerRef(element);
+          setScrollContainer(element);
+        }}
+        class='bg-primary-bg flex flex-1 flex-col overflow-y-auto pb-3'
+      >
+        <QueueList queue={queue()} scrollContainer={scrollContainer()} itemRef={setItemRef} />
       </div>
+      <QueueSelectionToolbar />
     </div>
   );
 };

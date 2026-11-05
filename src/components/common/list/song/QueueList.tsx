@@ -1,68 +1,36 @@
-import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
-import { draggable, dropTargetForElements, type ElementDragPayload } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { Component, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
 import SongItem from '~/components/common/list/song/SongItem';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArtMap } from '~/features/albums/useCoverArtMap';
 import { resolveSongItemConditions } from '~/features/items/SongItemConditions';
-import { buildQueueItemMenuItems } from '~/features/menu';
+import { buildQueueItemMenuItems, buildQueueSelectionMenuItems, showContextMenu } from '~/features/menu';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { hasPlaybackCommandError } from '~/features/playback/service';
 import { usePlayback } from '~/features/playback/usePlayback';
+import {
+  addToQueueSelection,
+  clearQueueSelection,
+  isQueueIndexSelected,
+  isQueueSelecting,
+  queueSelection,
+  selectQueueRangeTo,
+  setQueueSelectionSpan,
+  toggleQueueSelection,
+} from '~/stores/QueueSelectionStore';
+import { isSP } from '~/utils/isSP';
+import { createQueueListGestures, isQueueHandleTarget, queueRowIndexAt } from './queueListGestures';
 
 interface QueueListProps {
   queue: SongResponse[];
+  /** Scrolled while a dragged row nears its top or bottom edge. */
+  scrollContainer?: HTMLElement;
   itemRef?: (index: number, element: HTMLDivElement | undefined) => void;
   onClickQueue?: (song: SongResponse, index: number, songs: SongResponse[]) => void;
 }
 
-const QUEUE_ITEM_DND_TYPE = 'queue-item';
-const QUEUE_ITEM_DROP_TARGET_TYPE = 'queue-item-drop-target';
-
-type QueueDropEdge = 'top' | 'bottom';
-
-interface QueueDropIndicator {
-  index: number;
-  edge: QueueDropEdge;
-}
-
-type QueueItemDragData = Record<string, unknown> & {
-  type: typeof QUEUE_ITEM_DND_TYPE;
-  index: number;
-};
-
-type QueueItemDropTargetData = Record<string | symbol, unknown> & {
-  type: typeof QUEUE_ITEM_DROP_TARGET_TYPE;
-  index: number;
-  edge: QueueDropEdge;
-};
-
 function queueCoverArtId(song: SongResponse) {
   return song.displayCoverArtId ?? song.coverArtId;
-}
-
-function isQueueIndex(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 0;
-}
-
-function isQueueItemDragData(data: ElementDragPayload['data']): data is QueueItemDragData {
-  return data.type === QUEUE_ITEM_DND_TYPE && isQueueIndex(data.index);
-}
-
-function isQueueItemDropTargetData(data: Record<string | symbol, unknown>): data is QueueItemDropTargetData {
-  return data.type === QUEUE_ITEM_DROP_TARGET_TYPE && isQueueIndex(data.index) && (data.edge === 'top' || data.edge === 'bottom');
-}
-
-function closestVerticalEdge(clientY: number, element: Element): QueueDropEdge {
-  const rect = element.getBoundingClientRect();
-  return clientY < rect.top + rect.height / 2 ? 'top' : 'bottom';
-}
-
-function moveDestinationIndex(sourceIndex: number, targetIndex: number, edge: QueueDropEdge, queueLength: number) {
-  const insertionIndex = Math.min(Math.max(edge === 'top' ? targetIndex : targetIndex + 1, 0), queueLength);
-  const destinationIndex = sourceIndex < insertionIndex ? insertionIndex - 1 : insertionIndex;
-  return Math.min(Math.max(destinationIndex, 0), queueLength - 1);
 }
 
 const QueueList: Component<QueueListProps> = (props) => {
@@ -70,10 +38,33 @@ const QueueList: Component<QueueListProps> = (props) => {
   const { isPlayNextQueueIndex, status: playbackStatus } = usePlayback();
   const requestedCoverArtIdSet = new Set<string>();
   const [requestedCoverArtIds, setRequestedCoverArtIds] = createSignal<readonly string[]>([]);
-  const [dropIndicator, setDropIndicator] = createSignal<QueueDropIndicator | null>(null);
+  const [hoveredHandle, setHoveredHandle] = createSignal<number | null>(null);
+  let rootElement: HTMLDivElement | undefined;
   let coverArtObserver: IntersectionObserver | undefined;
-  let suppressNextClick = false;
-  let suppressClickResetId: number | undefined;
+
+  const gestures = createQueueListGestures({
+    root: () => rootElement,
+    scrollContainer: () => props.scrollContainer,
+    queueLength: () => props.queue.length,
+    beginMove: (index) => {
+      if (!isQueueSelecting()) {
+        return [index];
+      }
+      if (!isQueueIndexSelected(index)) {
+        addToQueueSelection(index);
+      }
+      return queueSelection().indices;
+    },
+    move: (indices, insertBefore) => {
+      commands.playbackMoveQueueIndices({ indices, insertBefore }).then(hasPlaybackCommandError);
+    },
+    selectRect: setQueueSelectionSpan,
+    longPress: (index) => {
+      if (!isQueueSelecting()) {
+        toggleQueueSelection(index);
+      }
+    },
+  });
 
   const requestCoverArtId = (coverArtId: string | null | undefined) => {
     const normalizedId = coverArtId?.trim();
@@ -116,49 +107,106 @@ const QueueList: Component<QueueListProps> = (props) => {
     return nextQueueKey;
   }, undefined);
 
-  const suppressFollowingClick = () => {
-    suppressNextClick = true;
-    if (suppressClickResetId !== undefined) {
-      window.clearTimeout(suppressClickResetId);
-      suppressClickResetId = undefined;
+  // PC: any click outside the list, its toolbar and its menu ends the selection, as does Esc.
+  createEffect(() => {
+    if (isSP() || !isQueueSelecting()) {
+      return;
     }
-  };
 
-  const resetSuppressFollowingClickSoon = () => {
-    if (suppressClickResetId !== undefined) {
-      window.clearTimeout(suppressClickResetId);
-    }
-    suppressClickResetId = window.setTimeout(() => {
-      suppressNextClick = false;
-      suppressClickResetId = undefined;
-    }, 250);
-  };
-
-  const consumeSuppressedClick = () => {
-    if (!suppressNextClick) {
-      return false;
-    }
-    suppressNextClick = false;
-    if (suppressClickResetId !== undefined) {
-      window.clearTimeout(suppressClickResetId);
-      suppressClickResetId = undefined;
-    }
-    return true;
-  };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Element) || !event.target.closest('[data-queue-selection-scope]')) {
+        clearQueueSelection();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        clearQueueSelection();
+      }
+    };
+    document.addEventListener('pointerdown', onPointerDown, true);
+    document.addEventListener('keydown', onKeyDown);
+    onCleanup(() => {
+      document.removeEventListener('pointerdown', onPointerDown, true);
+      document.removeEventListener('keydown', onKeyDown);
+    });
+  });
 
   onCleanup(() => {
     coverArtObserver?.disconnect();
-    if (suppressClickResetId !== undefined) {
-      window.clearTimeout(suppressClickResetId);
-    }
   });
 
   const coverArtMap = useCoverArtMap(requestedCoverArtIds, CoverArtSizes.sm, {
     cachedFallbackSizes: [CoverArtSizes.lg, CoverArtSizes.md],
   });
 
+  const onPointerDown = (event: PointerEvent) => {
+    gestures.resetClick();
+    const index = queueRowIndexAt(event.target);
+    if (isSP()) {
+      if (index !== null && isQueueHandleTarget(event.target)) {
+        gestures.pressSPHandle(event, index, !isQueueSelecting());
+      }
+      return;
+    }
+    gestures.pressPC(event, index);
+  };
+
+  const onClick = (event: MouseEvent) => {
+    if (gestures.consumeClick()) {
+      return;
+    }
+    const index = queueRowIndexAt(event.target);
+    if (index === null) {
+      return;
+    }
+    const onHandle = isQueueHandleTarget(event.target);
+
+    if (isSP()) {
+      if (onHandle) {
+        if (isQueueSelecting()) {
+          toggleQueueSelection(index);
+        }
+        return;
+      }
+    } else if (event.shiftKey) {
+      if (!event.ctrlKey) {
+        selectQueueRangeTo(index);
+      }
+      return;
+    } else if (event.ctrlKey || onHandle) {
+      toggleQueueSelection(index);
+      return;
+    } else if (isQueueSelecting()) {
+      clearQueueSelection();
+    }
+
+    const entry = props.queue[index];
+    if (!entry) return;
+    props.onClickQueue?.(entry, index, props.queue);
+    commands.playbackPlayQueueIndex({ index });
+  };
+
+  // While rows are selected, a right-click anywhere in the list opens the selection menu instead of the row's own.
+  const onContextMenuCapture = (event: MouseEvent) => {
+    if (isSP() || !isQueueSelecting()) {
+      return;
+    }
+    showContextMenu(event, buildQueueSelectionMenuItems(queueSelection().indices));
+  };
+
   return (
-    <div class='flex w-full flex-col'>
+    <div
+      ref={(element) => {
+        rootElement = element;
+        element.addEventListener('contextmenu', onContextMenuCapture, true);
+      }}
+      data-queue-selection-scope
+      class='relative flex w-full flex-1 flex-col select-none'
+      onPointerDown={onPointerDown}
+      onClick={onClick}
+      // The browser's own image drag would take the pointer away from a row drag.
+      onDragStart={(event) => event.preventDefault()}
+    >
       <For
         each={props.queue}
         fallback={
@@ -170,81 +218,19 @@ const QueueList: Component<QueueListProps> = (props) => {
         {(entry, i) => {
           const coverArtId = createMemo(() => queueCoverArtId(entry));
           const dropIndicatorEdge = () => {
-            const current = dropIndicator();
+            const current = gestures.dropIndicator();
             return current?.index === i() ? current.edge : null;
           };
           let itemElement: HTMLDivElement | undefined;
-          let itemDndCleanup: (() => void) | undefined;
           onCleanup(() => {
-            itemDndCleanup?.();
             if (itemElement) {
               coverArtObserver?.unobserve(itemElement);
             }
           });
 
-          const updateDropIndicator = (source: ElementDragPayload, targetData: Record<string | symbol, unknown>) => {
-            const sourceIndex = isQueueItemDragData(source.data) ? source.data.index : null;
-            if (sourceIndex === null || !isQueueItemDropTargetData(targetData)) {
-              setDropIndicator(null);
-              return;
-            }
-
-            const destinationIndex = moveDestinationIndex(sourceIndex, targetData.index, targetData.edge, props.queue.length);
-            setDropIndicator(destinationIndex === sourceIndex ? null : { index: targetData.index, edge: targetData.edge });
-          };
-
           const setItemElement = (element: HTMLDivElement) => {
             itemElement = element;
             props.itemRef?.(i(), element);
-            itemDndCleanup?.();
-            itemDndCleanup = combine(
-              draggable({
-                element,
-                getInitialData: () => ({ type: QUEUE_ITEM_DND_TYPE, index: i() }),
-                onDragStart: () => {
-                  suppressFollowingClick();
-                },
-                onDrop: () => {
-                  setDropIndicator(null);
-                  resetSuppressFollowingClickSoon();
-                },
-              }),
-              dropTargetForElements({
-                element,
-                canDrop: ({ source }) => props.queue.length > 1 && isQueueItemDragData(source.data),
-                getData: ({ input, element }) => ({
-                  type: QUEUE_ITEM_DROP_TARGET_TYPE,
-                  index: i(),
-                  edge: closestVerticalEdge(input.clientY, element),
-                }),
-                onDrag: ({ source, self }) => updateDropIndicator(source, self.data),
-                onDragEnter: ({ source, self }) => updateDropIndicator(source, self.data),
-                onDragLeave: ({ self }) => {
-                  if (isQueueItemDropTargetData(self.data) && dropIndicator()?.index === self.data.index) {
-                    setDropIndicator(null);
-                  }
-                },
-                onDrop: ({ source, self }) => {
-                  setDropIndicator(null);
-                  const fromIndex = isQueueItemDragData(source.data) ? source.data.index : null;
-                  if (fromIndex === null || !isQueueItemDropTargetData(self.data)) {
-                    return;
-                  }
-
-                  const toIndex = moveDestinationIndex(fromIndex, self.data.index, self.data.edge, props.queue.length);
-                  if (toIndex === fromIndex) {
-                    return;
-                  }
-
-                  commands
-                    .playbackMoveQueueIndices({
-                      indices: [fromIndex],
-                      insertBefore: self.data.edge === 'top' ? self.data.index : self.data.index + 1,
-                    })
-                    .then(hasPlaybackCommandError);
-                },
-              })
-            );
 
             const normalizedId = coverArtId()?.trim();
             if (!normalizedId) {
@@ -261,17 +247,6 @@ const QueueList: Component<QueueListProps> = (props) => {
             observer.observe(element);
           };
 
-          const onClickEntry = () => {
-            if (consumeSuppressedClick()) {
-              return;
-            }
-            if (!props.queue) return;
-            props.onClickQueue?.(entry, i(), props.queue);
-
-            commands.playbackPlayQueueIndex({
-              index: i(),
-            });
-          };
           const conditions = () =>
             resolveSongItemConditions({
               playbackStatus: playbackStatus(),
@@ -279,26 +254,50 @@ const QueueList: Component<QueueListProps> = (props) => {
               queueIndex: i(),
             });
 
+          const leadingContent = () => {
+            const touched = gestures.touchedHandle();
+            if (touched?.index === i() && touched.stage === 'checkbox') {
+              return <i class='icon-[material-symbols--check-box-outline-blank] song-item-leading -ml-[3px] text-[16px]' />;
+            }
+            if (hoveredHandle() === i() || touched?.index === i()) {
+              return <i class='icon-[material-symbols--drag-indicator] song-item-leading -ml-[3px] text-[16px]' />;
+            }
+            if (isQueueSelecting()) {
+              return isQueueIndexSelected(i()) ? (
+                <i class='icon-[material-symbols--check-box] song-item-leading -ml-[3px] text-[16px]' />
+              ) : (
+                <i class='icon-[material-symbols--check-box-outline-blank] song-item-leading -ml-[3px] text-[16px]' />
+              );
+            }
+            return conditions().current ? (
+              <i class='icon-[material-symbols--play-arrow] song-item-leading -m-[1.5px] -ml-[3.5px] text-[15px]' />
+            ) : (
+              String(i() + 1)
+            );
+          };
+
           return (
-            <div class='border-secondary-border border-b'>
+            <div class='border-secondary-border border-b' data-queue-index={i()}>
               <SongItem
                 ref={setItemElement}
                 song={entry}
-                leadingContent={
-                  conditions().current ? (
-                    <i class='icon-[material-symbols--play-arrow] song-item-leading -m-[1.5px] -ml-[3.5px] text-[15px]' />
-                  ) : (
-                    String(i() + 1)
-                  )
-                }
+                leadingContent={leadingContent()}
                 coverArt
                 coverArtUrl={coverArtMap.src(coverArtId())}
                 emphasizeTitle
                 playNext={isPlayNextQueueIndex(i())}
                 conditions={conditions()}
                 menuItems={buildQueueItemMenuItems(entry, i, navigate)}
-                onClick={onClickEntry}
               >
+                {/* Move handle: the row's left padding plus the number column. */}
+                <div
+                  data-queue-handle
+                  data-ripple='off'
+                  class='absolute inset-y-0 left-0 z-10 w-12 touch-none'
+                  onPointerEnter={(event) => event.pointerType === 'mouse' && setHoveredHandle(i())}
+                  onPointerLeave={() => hoveredHandle() === i() && setHoveredHandle(null)}
+                  onTouchStart={(event) => event.stopPropagation()}
+                />
                 <Show when={dropIndicatorEdge()}>
                   {(edge) => (
                     <div
@@ -315,6 +314,14 @@ const QueueList: Component<QueueListProps> = (props) => {
           );
         }}
       </For>
+      <Show when={gestures.rect()}>
+        {(rect) => (
+          <div
+            class='border-accent bg-accent/15 pointer-events-none absolute z-30 border'
+            style={{ left: `${rect().left}px`, top: `${rect().top}px`, width: `${rect().width}px`, height: `${rect().height}px` }}
+          />
+        )}
+      </Show>
     </div>
   );
 };

@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createRoot, createSignal, on } from 'solid-js';
+import { commands } from '~/bindings';
 import {
   addQueueIndex,
   emptyQueueSelection,
@@ -9,6 +10,7 @@ import {
   toggleQueueIndex,
   type QueueSelection,
 } from '~/features/playback/queueSelection';
+import { hasPlaybackCommandError } from '~/features/playback/service';
 import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 
 // Module level, not component state: on SP the queue list unmounts whenever the
@@ -65,3 +67,11 @@ export const setQueueSelectionSpan = (rows: { from: number; to: number } | null,
 export const selectAllQueueRows = () => setQueueSelection(selectAllQueue(queueStatus.queueLength()));
 
 export const clearQueueSelection = () => setQueueSelection(emptyQueueSelection);
+
+/** Remove from Queue: removing the rows ends the selection. */
+export const removeSelectedQueueRows = (indices = queueSelection().indices) => {
+  clearQueueSelection();
+  if (indices.length) {
+    commands.playbackRemoveQueueIndices({ indices }).then(hasPlaybackCommandError);
+  }
+};

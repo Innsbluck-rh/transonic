@@ -1,7 +1,9 @@
 import interact from 'interactjs';
+import { createSignal } from 'solid-js';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
 import QueueList from '../common/list/song/QueueList';
+import QueueSelectionToolbar from '../common/list/song/QueueSelectionToolbar';
 import Heading3 from '../common/text/Heading3';
 
 const RightSideBar = () => {
@@ -38,6 +40,7 @@ const RightSideBar = () => {
     initialBehavior: 'instant',
     queueChangeBehavior: 'instant',
   });
+  const [scrollContainer, setScrollContainer] = createSignal<HTMLDivElement>();
 
   return (
     <div class='bg-primary-plane queue-sidebar border-primary-border flex min-h-0 w-80 max-w-[50%] min-w-56 flex-col gap-0 overflow-y-hidden border-l'>
@@ -54,9 +57,16 @@ const RightSideBar = () => {
             <p class='text-secondary-text group-hover:text-accent px-1 text-center text-xs font-bold tracking-tight'>Clear</p>
           </div>
         </div>
-        <div ref={setScrollContainerRef} class='flex-1 overflow-y-auto pb-2'>
-          <QueueList queue={queue()} itemRef={setItemRef} />
+        <div
+          ref={(element) => {
+            setScrollContainerRef(element);
+            setScrollContainer(element);
+          }}
+          class='flex flex-1 flex-col overflow-y-auto pb-2'
+        >
+          <QueueList queue={queue()} scrollContainer={scrollContainer()} itemRef={setItemRef} />
         </div>
+        <QueueSelectionToolbar />
       </div>
       {/*<div class='bg-primary-border h-px w-full' />
       <ConnectSidebarSection />*/}
