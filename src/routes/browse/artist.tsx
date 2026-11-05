@@ -16,6 +16,19 @@ import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 
 const SIMILAR_ARTIST_COUNT = 8;
 
+type ArtistImageRequest = { type: 'external'; url: string } | { type: 'coverArt'; profileId: string; coverArtId: string; size: number };
+
+type ArtistImageResourceValue = {
+  requestKey: string;
+  src: string | null;
+};
+
+function artistImageRequestKey(request: ArtistImageRequest): string {
+  return request.type === 'external'
+    ? ['external', request.url].join('\0')
+    : ['coverArt', request.profileId, request.coverArtId, request.size].join('\0');
+}
+
 function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
   const params = useParams();
   const navigate = useSPNavigate();
@@ -29,29 +42,41 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
     () => artistInfo()?.largeImageUrl ?? artistInfo()?.mediumImageUrl ?? artistInfo()?.smallImageUrl ?? artist()?.artistImageUrl ?? null
   );
 
-  const artistImageRequest = createMemo(() => {
+  const artistImageRequest = createMemo((): ArtistImageRequest | null => {
     const url = externalImageUrl();
-    if (url) return { type: 'external' as const, url };
+    if (url) return { type: 'external', url };
 
     const coverArtId = artist()?.coverArtId;
     const profileId = sessionStore.activeSession?.profileId;
     if (!coverArtId || !profileId) return null;
 
-    return { type: 'coverArt' as const, profileId, coverArtId, size: CoverArtSizes.lg };
+    return { type: 'coverArt', profileId, coverArtId, size: CoverArtSizes.lg };
+  });
+  const requestKey = createMemo(() => {
+    const req = artistImageRequest();
+    return req ? artistImageRequestKey(req) : null;
   });
 
-  const [artistImage] = createResource(artistImageRequest, (req) => {
-    if (req.type === 'external') {
-      return fetchArtistImageAssetUrl(req.url);
+  // A null source leaves the previous value in the resource, so the value carries its request key.
+  const [artistImage] = createResource(requestKey, async (key): Promise<ArtistImageResourceValue | undefined> => {
+    const req = artistImageRequest();
+    if (!req || artistImageRequestKey(req) !== key) {
+      return undefined;
     }
-    return fetchCoverArtAssetUrl(req);
+
+    return {
+      requestKey: key,
+      src: req.type === 'external' ? await fetchArtistImageAssetUrl(req.url) : await fetchCoverArtAssetUrl(req),
+    };
   });
 
   const [failedSrc, setFailedSrc] = createSignal<string | null>(null);
   const effectiveArtistImageSrc = createMemo(() => {
-    if (artistImage.loading) return null;
-    const src = artistImage() ?? null;
-    return src !== null && src === failedSrc() ? null : src;
+    const key = requestKey();
+    if (!key || artistImage.loading) return null;
+    const image = artistImage();
+    if (!image || image.requestKey !== key) return null;
+    return image.src !== null && image.src === failedSrc() ? null : image.src;
   });
 
   async function loadArtistPage(rawArtistId: string) {
