@@ -12,10 +12,12 @@ vi.mock('@tauri-apps/plugin-os', () => ({
   platform: () => platform.current,
 }));
 
+const menuMocks = vi.hoisted(() => ({ showContextMenu: vi.fn() }));
+
 vi.mock('~/features/menu', () => ({
   buildQueueItemMenuItems: () => [],
   buildQueueSelectionMenuItems: () => [],
-  showContextMenu: vi.fn(),
+  showContextMenu: menuMocks.showContextMenu,
 }));
 
 vi.mock('~/features/menu/useContextMenu', () => ({
@@ -79,15 +81,17 @@ describe('QueueList', () => {
     expect(rows[1].getAttribute('data-current')).toBe('true');
   });
 
-  it('selects with the move handle and Ctrl+click instead of playing', () => {
+  it('starts a selection with Ctrl+click and, while selecting, turns rows on and off with a plain click', () => {
     renderQueue();
 
-    click(handle(1));
-    click(row(3), { ctrlKey: true });
-
+    click(row(1), { ctrlKey: true });
+    click(row(3));
     expect(queueSelection()).toEqual({ indices: [1, 3], anchor: 3 });
-    expect(bindingMocks.playbackPlayQueueIndex).not.toHaveBeenCalled();
     expect(container.querySelectorAll('.icon-\\[material-symbols--check-box\\]')).toHaveLength(2);
+
+    click(row(1));
+    expect(queueSelection().indices).toEqual([3]);
+    expect(bindingMocks.playbackPlayQueueIndex).not.toHaveBeenCalled();
   });
 
   it('selects anchor..row on Shift+click', () => {
@@ -99,11 +103,10 @@ describe('QueueList', () => {
     expect(queueSelection()).toEqual({ indices: [1, 2, 3], anchor: 1 });
   });
 
-  it('plays a row and ends the selection on a plain click', () => {
+  it('plays a row on a plain click, the number column included, when nothing is selected', () => {
     renderQueue();
-    click(handle(1));
 
-    click(row(2));
+    click(row(2).querySelector<HTMLElement>('.song-item-leading')!);
 
     expect(bindingMocks.playbackPlayQueueIndex).toHaveBeenCalledWith({ index: 2 });
     expect(queueSelection().indices).toEqual([]);
@@ -111,7 +114,7 @@ describe('QueueList', () => {
 
   it('ends the selection on a plain click below the rows, not on a click outside the list', () => {
     renderQueue();
-    click(handle(1));
+    click(row(1), { ctrlKey: true });
 
     click(document.body);
     expect(queueSelection().indices).toEqual([1]);
@@ -124,20 +127,27 @@ describe('QueueList', () => {
     expect(bindingMocks.playbackPlayQueueIndex).not.toHaveBeenCalled();
   });
 
-  it('on SP plays a row without ending the selection, and taps on the handle only toggle once selecting', () => {
+  it('on SP plays a tapped row, toggles it while selecting, and opens the row menu only from the ⋮ button', () => {
     platform.current = 'android';
     renderQueue();
-
-    click(handle(1));
-    expect(queueSelection().indices).toEqual([]);
-    expect(bindingMocks.playbackPlayQueueIndex).not.toHaveBeenCalled();
-
-    toggleQueueSelection(0);
-    click(handle(1));
-    expect(queueSelection().indices).toEqual([0, 1]);
+    const menuButton = (index: number) => container.querySelectorAll<HTMLElement>('[data-queue-menu-button]')[index];
 
     click(row(2));
     expect(bindingMocks.playbackPlayQueueIndex).toHaveBeenCalledWith({ index: 2 });
+
+    toggleQueueSelection(0);
+    click(row(1));
     expect(queueSelection().indices).toEqual([0, 1]);
+    expect(bindingMocks.playbackPlayQueueIndex).toHaveBeenCalledTimes(1);
+
+    click(menuButton(3));
+    expect(menuMocks.showContextMenu).toHaveBeenCalledTimes(1);
+    expect(queueSelection().indices).toEqual([0, 1]);
+  });
+
+  it('on PC has no ⋮ button', () => {
+    renderQueue();
+
+    expect(container.querySelector('[data-queue-menu-button]')).toBeNull();
   });
 });

@@ -19,7 +19,7 @@ import {
   toggleQueueSelection,
 } from '~/stores/QueueSelectionStore';
 import { isSP } from '~/utils/isSP';
-import { createQueueListGestures, isQueueHandleTarget, queueRowIndexAt } from './queueListGestures';
+import { createQueueListGestures, queueRowIndexAt } from './queueListGestures';
 
 interface QueueListProps {
   queue: SongResponse[];
@@ -129,20 +129,24 @@ const QueueList: Component<QueueListProps> = (props) => {
     cachedFallbackSizes: [CoverArtSizes.lg, CoverArtSizes.md],
   });
 
+  const isMenuButtonTarget = (target: EventTarget | null) => target instanceof Element && target.closest('[data-queue-menu-button]') !== null;
+
   const onPointerDown = (event: PointerEvent) => {
     gestures.resetClick();
-    const index = queueRowIndexAt(event.target);
-    if (isSP()) {
-      if (index !== null && isQueueHandleTarget(event.target)) {
-        gestures.pressSPHandle(event, index, !isQueueSelecting());
-      }
+    if (isMenuButtonTarget(event.target)) {
       return;
     }
-    gestures.pressPC(event, index);
+    const index = queueRowIndexAt(event.target);
+    if (!isSP()) {
+      gestures.pressPC(event, index);
+    } else if (index !== null) {
+      gestures.pressSP(event, index);
+    }
   };
 
+  // While rows are selected a click on a row only turns it on or off; otherwise it plays the row.
   const onClick = (event: MouseEvent) => {
-    if (gestures.consumeClick()) {
+    if (gestures.consumeClick() || isMenuButtonTarget(event.target)) {
       return;
     }
     const index = queueRowIndexAt(event.target);
@@ -153,25 +157,16 @@ const QueueList: Component<QueueListProps> = (props) => {
       }
       return;
     }
-    const onHandle = isQueueHandleTarget(event.target);
 
-    if (isSP()) {
-      if (onHandle) {
-        if (isQueueSelecting()) {
-          toggleQueueSelection(index);
-        }
-        return;
-      }
-    } else if (event.shiftKey) {
+    if (!isSP() && event.shiftKey) {
       if (!event.ctrlKey) {
         selectQueueRangeTo(index);
       }
       return;
-    } else if (event.ctrlKey || onHandle) {
+    }
+    if (isQueueSelecting() || (!isSP() && event.ctrlKey)) {
       toggleQueueSelection(index);
       return;
-    } else if (isQueueSelecting()) {
-      clearQueueSelection();
     }
 
     const entry = props.queue[index];
@@ -180,12 +175,16 @@ const QueueList: Component<QueueListProps> = (props) => {
     commands.playbackPlayQueueIndex({ index });
   };
 
-  // While rows are selected, a right-click anywhere in the list opens the selection menu instead of the row's own.
   const onContextMenuCapture = (event: MouseEvent) => {
-    if (isSP() || !isQueueSelecting()) {
+    // SP: a long-press lifts the row, so the system's long-press menu must not open; row menus come from the ⋮ button.
+    if (isSP()) {
+      event.preventDefault();
       return;
     }
-    showContextMenu(event, buildQueueSelectionMenuItems(queueSelection().indices));
+    // PC: while rows are selected, a right-click anywhere in the list opens the selection menu instead of the row's own.
+    if (isQueueSelecting()) {
+      showContextMenu(event, buildQueueSelectionMenuItems(queueSelection().indices));
+    }
   };
 
   return (
@@ -247,10 +246,9 @@ const QueueList: Component<QueueListProps> = (props) => {
               queueIndex: i(),
             });
 
+          const menuItems = buildQueueItemMenuItems(entry, i, navigate);
+
           const leadingContent = () => {
-            if (gestures.longPressPreview() === i()) {
-              return <i class='icon-[material-symbols--check-box-outline-blank] song-item-leading -ml-[3px] text-[16px]' />;
-            }
             if (isQueueSelecting()) {
               return isQueueIndexSelected(i()) ? (
                 <i class='icon-[material-symbols--check-box] song-item-leading -ml-[3px] text-[16px]' />
@@ -276,15 +274,23 @@ const QueueList: Component<QueueListProps> = (props) => {
                 emphasizeTitle
                 playNext={isPlayNextQueueIndex(i())}
                 conditions={conditions()}
-                menuItems={buildQueueItemMenuItems(entry, i, navigate)}
+                // SP opens the row menu from the ⋮ button; a long-press on the row lifts it instead.
+                menuItems={isSP() ? undefined : menuItems}
+                trailingContent={
+                  isSP() ? (
+                    <div
+                      data-queue-menu-button
+                      data-ripple='off'
+                      role='button'
+                      aria-label='More'
+                      class='song-item-meta -my-2 -mr-4 ml-1 flex items-center self-stretch px-3'
+                      onClick={(event) => showContextMenu(event, menuItems)}
+                    >
+                      <i class='icon-[material-symbols--more-vert] text-lg' />
+                    </div>
+                  ) : undefined
+                }
               >
-                {/* Move handle: the row's left padding plus the number column. */}
-                <div
-                  data-queue-handle
-                  data-ripple='off'
-                  class='absolute inset-y-0 left-0 z-10 w-12 touch-none'
-                  onTouchStart={(event) => event.stopPropagation()}
-                />
                 <Show when={dropIndicatorEdge()}>
                   {(edge) => (
                     <div

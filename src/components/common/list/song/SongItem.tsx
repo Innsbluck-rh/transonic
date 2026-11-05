@@ -9,6 +9,8 @@ export interface SongItemProps {
   song: SongResponse;
   conditions?: SongItemConditions;
   leadingContent?: string | JSX.Element;
+  /** Shown after the duration. */
+  trailingContent?: JSX.Element;
   coverArt?: boolean;
   coverArtUrl?: string | null;
   emphasizeTitle?: boolean;
@@ -67,6 +69,8 @@ const SongItem: Component<SongItemProps> = (props) => {
       </div>
 
       <p class='song-item-meta archivo ml-2 text-xs'>{formatCompactDuration(props.song.duration ?? 0)}</p>
+
+      {props.trailingContent}
     </div>
   );
 };

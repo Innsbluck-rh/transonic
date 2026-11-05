@@ -4,9 +4,8 @@ import { cancelRipple } from '~/utils/ripple';
 
 /** Distance a pointer has to travel before a press becomes a drag or a rectangle. */
 const DRAG_THRESHOLD_PX = 5;
-/** SP long-press on the move handle: the empty checkbox shows, then the row gets selected. */
-export const LONG_PRESS_CHECKBOX_MS = 300;
-export const LONG_PRESS_SELECT_MS = 600;
+/** SP: holding a row this long lifts it; moving then drags it, letting go selects it. */
+export const LONG_PRESS_MS = 450;
 const AUTO_SCROLL_EDGE_PX = 48;
 const AUTO_SCROLL_MAX_STEP_PX = 16;
 
@@ -33,7 +32,7 @@ interface QueueListGestureOptions {
   move: (indices: number[], insertBefore: number) => void;
   /** Rectangle selection; `rows` is null while the rectangle covers no row. */
   selectRect: (rows: { from: number; to: number } | null, anchor: number) => void;
-  /** SP long-press on the move handle, once held long enough. */
+  /** SP: a lifted row was let go without moving. */
   longPress: (index: number) => void;
 }
 
@@ -46,21 +45,15 @@ export function queueRowIndexAt(target: EventTarget | null): number | null {
   return row ? Number(row.dataset.queueIndex) : null;
 }
 
-export function isQueueHandleTarget(target: EventTarget | null) {
-  return target instanceof Element && target.closest('[data-queue-handle]') !== null;
-}
-
 /**
  * Pointer gestures of the queue list that a click cannot express: dragging rows
- * (PC: from anywhere on a row, SP: from the move handle), the PC Shift+drag
- * rectangle and the SP long-press on the move handle. Clicks and taps stay with
- * the list's click handler; `consumeClick` tells it when a gesture used them up.
+ * (PC: press and move, SP: long-press and move), the PC Shift+drag rectangle
+ * and the SP long-press that selects. Clicks and taps stay with the list's
+ * click handler; `consumeClick` tells it when a gesture used them up.
  */
 export function createQueueListGestures(options: QueueListGestureOptions) {
   const [dropIndicator, setDropIndicator] = createSignal<QueueDropIndicator | null>(null);
   const [rect, setRect] = createSignal<QueueRect | null>(null);
-  /** Row showing the empty checkbox while an SP long-press on its move handle is held. */
-  const [longPressPreview, setLongPressPreview] = createSignal<number | null>(null);
   let suppressClick = false;
   let endGesture: (() => void) | undefined;
 
@@ -134,14 +127,19 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     };
   };
 
-  /** `event` is the press the drag grew out of, `current` the move that crossed the threshold. */
-  const startDrag = (sourceIndex: number, event: PointerEvent, current: PointerEvent) => {
+  /**
+   * Shows the grabbed row under the pointer and moves rows where it is let go.
+   * `event` is the press, `current` where the pointer is now. A `lifted` row
+   * (SP long-press) only becomes a drag once it moves; let go before that, it
+   * counts as a long-press.
+   */
+  const startDrag = (sourceIndex: number, event: PointerEvent, current: PointerEvent, lifted: boolean) => {
     const root = options.root();
     const sourceRow = root ? rowElements(root)[sourceIndex] : undefined;
     if (!root || !sourceRow) return;
     cancelRipple();
     suppressClick = true;
-    const indices = options.beginMove(sourceIndex);
+    let indices = lifted ? null : options.beginMove(sourceIndex);
 
     // The ghost is a copy of the grabbed row that follows the pointer.
     const box = sourceRow.getBoundingClientRect();
@@ -161,14 +159,23 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     ghost.classList.add('bg-primary-plane', 'shadow-lg');
     document.body.appendChild(ghost);
 
+    // Once a row is lifted the finger drags it instead of scrolling the list.
+    const preventScroll = (touch: TouchEvent) => touch.cancelable && touch.preventDefault();
+    window.addEventListener('touchmove', preventScroll, { passive: false });
+
+    const liftX = current.clientX;
+    const liftY = current.clientY;
     let clientX = current.clientX;
     let clientY = current.clientY;
     let insertBefore: number | null = null;
     let frame = 0;
     const update = () => {
       ghost.style.transform = `translate(${clientX - offsetX}px, ${clientY - offsetY}px)`;
-      insertBefore = insertBeforeAt(clientY);
-      if (insertBefore === null || isQueueMoveNoop(indices, insertBefore)) {
+      if (!indices && Math.hypot(clientX - liftX, clientY - liftY) >= DRAG_THRESHOLD_PX) {
+        indices = options.beginMove(sourceIndex);
+      }
+      insertBefore = indices ? insertBeforeAt(clientY) : null;
+      if (!indices || insertBefore === null || isQueueMoveNoop(indices, insertBefore)) {
         setDropIndicator(null);
       } else {
         const length = options.queueLength();
@@ -176,12 +183,15 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
       }
     };
     const tick = () => {
-      autoScroll(clientY);
+      if (indices) {
+        autoScroll(clientY);
+      }
       update();
       frame = requestAnimationFrame(tick);
     };
     const stop = () => {
       cancelAnimationFrame(frame);
+      window.removeEventListener('touchmove', preventScroll);
       ghost.remove();
       setDropIndicator(null);
     };
@@ -199,7 +209,9 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
         clientY = next.clientY;
         update();
         stop();
-        if (insertBefore !== null && !isQueueMoveNoop(indices, insertBefore)) {
+        if (!indices) {
+          options.longPress(sourceIndex);
+        } else if (insertBefore !== null && !isQueueMoveNoop(indices, insertBefore)) {
           options.move(indices, insertBefore);
         }
       },
@@ -256,42 +268,29 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
         if (event.shiftKey) {
           startRect(index, event, next);
         } else if (index !== null) {
-          startDrag(index, event, next);
+          startDrag(index, event, next, false);
         }
       },
       up: () => {},
     });
   };
 
-  /** SP press on a row's move handle: drag when it travels, long-press when it is held. */
-  const pressSPHandle = (event: PointerEvent, index: number, canLongPress: boolean) => {
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    let longPressed = false;
-    const clearTimers = () => {
-      timers.forEach(clearTimeout);
-      setLongPressPreview(null);
-    };
-    if (canLongPress) {
-      timers.push(setTimeout(() => setLongPressPreview(index), LONG_PRESS_CHECKBOX_MS));
-      timers.push(
-        setTimeout(() => {
-          longPressed = true;
-          suppressClick = true;
-          setLongPressPreview(null);
-          options.longPress(index);
-        }, LONG_PRESS_SELECT_MS)
-      );
-    }
+  /**
+   * SP press on a row. Moving before the long-press time is a scroll and lets
+   * the press go; holding still lifts the row (see `startDrag`).
+   */
+  const pressSP = (event: PointerEvent, index: number) => {
+    let latest = event;
+    const timer = setTimeout(() => startDrag(index, event, latest, true), LONG_PRESS_MS);
     track(event, false, {
       move: (next) => {
-        if (longPressed || Math.hypot(next.clientX - startX, next.clientY - startY) < DRAG_THRESHOLD_PX) return;
-        clearTimers();
-        startDrag(index, event, next);
+        latest = next;
+        if (Math.hypot(next.clientX - event.clientX, next.clientY - event.clientY) >= DRAG_THRESHOLD_PX) {
+          endGesture?.();
+        }
       },
-      up: clearTimers,
-      cancel: clearTimers,
+      up: () => clearTimeout(timer),
+      cancel: () => clearTimeout(timer),
     });
   };
 
@@ -304,5 +303,5 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
 
   onCleanup(() => endGesture?.());
 
-  return { dropIndicator, rect, longPressPreview, pressPC, pressSPHandle, consumeClick, resetClick: () => (suppressClick = false) };
+  return { dropIndicator, rect, pressPC, pressSP, consumeClick, resetClick: () => (suppressClick = false) };
 }
