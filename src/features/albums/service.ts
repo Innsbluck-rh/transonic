@@ -82,6 +82,12 @@ async function fetchCachedCoverArtAssetUrl(payload: CoverArtRequest): Promise<st
   }
 }
 
+export async function clearCoverArtCache() {
+  const result = await commands.clearCoverArtCache();
+  resolvedCoverArtAssets.clear();
+  return result;
+}
+
 export async function fetchCoverArtAssetUrl(payload: CoverArtResourceRequest): Promise<string | null> {
   const normalizedPayload = normalizedCoverArtPayload(payload);
   const key = coverArtCacheKey(normalizedPayload);
