@@ -8,7 +8,9 @@ import Heading3 from '../common/text/Heading3';
 
 const RightSideBar = () => {
   interact('.queue-sidebar').resizable({
-    edges: { left: true },
+    // A handle element rather than `left: true`, so a press on the edge resizes
+    // without also reaching the queue rows underneath (which drag on press).
+    edges: { left: '.queue-sidebar-resize-edge' },
     listeners: {
       move: function (event) {
         event.preventDefault();
@@ -43,7 +45,7 @@ const RightSideBar = () => {
   const [scrollContainer, setScrollContainer] = createSignal<HTMLDivElement>();
 
   return (
-    <div class='bg-primary-plane queue-sidebar border-primary-border flex min-h-0 w-80 max-w-[50%] min-w-56 flex-col gap-0 overflow-y-hidden border-l'>
+    <div class='bg-primary-plane queue-sidebar border-primary-border relative flex min-h-0 w-80 max-w-[50%] min-w-56 flex-col gap-0 overflow-y-hidden border-l'>
       <div class='flex min-h-0 w-full flex-1 flex-col overflow-y-auto'>
         <div class='border-primary-border flex w-full flex-row items-center border-b px-2 py-1'>
           <Heading3 class='text-secondary-text'>Queue</Heading3>
@@ -70,6 +72,8 @@ const RightSideBar = () => {
       </div>
       {/*<div class='bg-primary-border h-px w-full' />
       <ConnectSidebarSection />*/}
+      {/* Same 20px as interact's default resize margin the edge used before. */}
+      <div class='queue-sidebar-resize-edge absolute inset-y-0 left-0 z-30 w-5' />
     </div>
   );
 };
