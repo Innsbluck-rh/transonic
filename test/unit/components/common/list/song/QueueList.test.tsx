@@ -109,6 +109,21 @@ describe('QueueList', () => {
     expect(queueSelection().indices).toEqual([]);
   });
 
+  it('ends the selection on a plain click below the rows, not on a click outside the list', () => {
+    renderQueue();
+    click(handle(1));
+
+    click(document.body);
+    expect(queueSelection().indices).toEqual([1]);
+
+    click(container.firstElementChild as HTMLElement, { ctrlKey: true });
+    expect(queueSelection().indices).toEqual([1]);
+
+    click(container.firstElementChild as HTMLElement);
+    expect(queueSelection().indices).toEqual([]);
+    expect(bindingMocks.playbackPlayQueueIndex).not.toHaveBeenCalled();
+  });
+
   it('on SP plays a row without ending the selection, and taps on the handle only toggle once selecting', () => {
     platform.current = 'android';
     renderQueue();

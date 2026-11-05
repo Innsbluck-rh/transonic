@@ -107,28 +107,19 @@ const QueueList: Component<QueueListProps> = (props) => {
     return nextQueueKey;
   }, undefined);
 
-  // PC: any click outside the list, its toolbar and its menu ends the selection, as does Esc.
+  // PC: Esc ends the selection.
   createEffect(() => {
     if (isSP() || !isQueueSelecting()) {
       return;
     }
 
-    const onPointerDown = (event: PointerEvent) => {
-      if (!(event.target instanceof Element) || !event.target.closest('[data-queue-selection-scope]')) {
-        clearQueueSelection();
-      }
-    };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         clearQueueSelection();
       }
     };
-    document.addEventListener('pointerdown', onPointerDown, true);
     document.addEventListener('keydown', onKeyDown);
-    onCleanup(() => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-      document.removeEventListener('keydown', onKeyDown);
-    });
+    onCleanup(() => document.removeEventListener('keydown', onKeyDown));
   });
 
   onCleanup(() => {
@@ -157,6 +148,10 @@ const QueueList: Component<QueueListProps> = (props) => {
     }
     const index = queueRowIndexAt(event.target);
     if (index === null) {
+      // PC: a plain click on the list below the rows ends the selection.
+      if (!isSP() && !event.ctrlKey && !event.shiftKey) {
+        clearQueueSelection();
+      }
       return;
     }
     const onHandle = isQueueHandleTarget(event.target);
@@ -200,7 +195,6 @@ const QueueList: Component<QueueListProps> = (props) => {
         rootElement = element;
         element.addEventListener('contextmenu', onContextMenuCapture, true);
       }}
-      data-queue-selection-scope
       class='relative flex w-full flex-1 flex-col select-none'
       onPointerDown={onPointerDown}
       onClick={onClick}

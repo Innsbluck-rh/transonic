@@ -16,7 +16,7 @@ const QueueSelectionToolbar: Component = () => {
 
   return (
     <Show when={isQueueSelecting()}>
-      <div data-queue-selection-scope class='border-primary-border flex shrink-0 flex-row items-center border-t px-2 py-1.5'>
+      <div class='border-primary-border flex shrink-0 flex-row items-center border-t px-2 py-1.5'>
         <p class='archivo mr-auto truncate px-1 text-xs font-bold'>
           {count()} {count() === 1 ? 'item' : 'items'} selected
         </p>
