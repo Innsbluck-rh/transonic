@@ -59,7 +59,8 @@ export function isQueueHandleTarget(target: EventTarget | null) {
 export function createQueueListGestures(options: QueueListGestureOptions) {
   const [dropIndicator, setDropIndicator] = createSignal<QueueDropIndicator | null>(null);
   const [rect, setRect] = createSignal<QueueRect | null>(null);
-  const [touchedHandle, setTouchedHandle] = createSignal<{ index: number; stage: 'handle' | 'checkbox' } | null>(null);
+  /** Row showing the empty checkbox while an SP long-press on its move handle is held. */
+  const [longPressPreview, setLongPressPreview] = createSignal<number | null>(null);
   let suppressClick = false;
   let endGesture: (() => void) | undefined;
 
@@ -266,17 +267,19 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
   const pressSPHandle = (event: PointerEvent, index: number, canLongPress: boolean) => {
     const startX = event.clientX;
     const startY = event.clientY;
-    setTouchedHandle({ index, stage: 'handle' });
     const timers: ReturnType<typeof setTimeout>[] = [];
     let longPressed = false;
-    const clearTimers = () => timers.forEach(clearTimeout);
+    const clearTimers = () => {
+      timers.forEach(clearTimeout);
+      setLongPressPreview(null);
+    };
     if (canLongPress) {
-      timers.push(setTimeout(() => setTouchedHandle({ index, stage: 'checkbox' }), LONG_PRESS_CHECKBOX_MS));
+      timers.push(setTimeout(() => setLongPressPreview(index), LONG_PRESS_CHECKBOX_MS));
       timers.push(
         setTimeout(() => {
           longPressed = true;
           suppressClick = true;
-          setTouchedHandle(null);
+          setLongPressPreview(null);
           options.longPress(index);
         }, LONG_PRESS_SELECT_MS)
       );
@@ -285,17 +288,10 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
       move: (next) => {
         if (longPressed || Math.hypot(next.clientX - startX, next.clientY - startY) < DRAG_THRESHOLD_PX) return;
         clearTimers();
-        setTouchedHandle(null);
         startDrag(index, event, next);
       },
-      up: () => {
-        clearTimers();
-        setTouchedHandle(null);
-      },
-      cancel: () => {
-        clearTimers();
-        setTouchedHandle(null);
-      },
+      up: clearTimers,
+      cancel: clearTimers,
     });
   };
 
@@ -308,5 +304,5 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
 
   onCleanup(() => endGesture?.());
 
-  return { dropIndicator, rect, touchedHandle, pressPC, pressSPHandle, consumeClick, resetClick: () => (suppressClick = false) };
+  return { dropIndicator, rect, longPressPreview, pressPC, pressSPHandle, consumeClick, resetClick: () => (suppressClick = false) };
 }

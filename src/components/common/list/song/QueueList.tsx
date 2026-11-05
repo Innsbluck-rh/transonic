@@ -38,7 +38,6 @@ const QueueList: Component<QueueListProps> = (props) => {
   const { isPlayNextQueueIndex, status: playbackStatus } = usePlayback();
   const requestedCoverArtIdSet = new Set<string>();
   const [requestedCoverArtIds, setRequestedCoverArtIds] = createSignal<readonly string[]>([]);
-  const [hoveredHandle, setHoveredHandle] = createSignal<number | null>(null);
   let rootElement: HTMLDivElement | undefined;
   let coverArtObserver: IntersectionObserver | undefined;
 
@@ -249,12 +248,8 @@ const QueueList: Component<QueueListProps> = (props) => {
             });
 
           const leadingContent = () => {
-            const touched = gestures.touchedHandle();
-            if (touched?.index === i() && touched.stage === 'checkbox') {
+            if (gestures.longPressPreview() === i()) {
               return <i class='icon-[material-symbols--check-box-outline-blank] song-item-leading -ml-[3px] text-[16px]' />;
-            }
-            if (hoveredHandle() === i() || touched?.index === i()) {
-              return <i class='icon-[material-symbols--drag-indicator] song-item-leading -ml-[3px] text-[16px]' />;
             }
             if (isQueueSelecting()) {
               return isQueueIndexSelected(i()) ? (
@@ -288,8 +283,6 @@ const QueueList: Component<QueueListProps> = (props) => {
                   data-queue-handle
                   data-ripple='off'
                   class='absolute inset-y-0 left-0 z-10 w-12 touch-none'
-                  onPointerEnter={(event) => event.pointerType === 'mouse' && setHoveredHandle(i())}
-                  onPointerLeave={() => hoveredHandle() === i() && setHoveredHandle(null)}
                   onTouchStart={(event) => event.stopPropagation()}
                 />
                 <Show when={dropIndicatorEdge()}>
