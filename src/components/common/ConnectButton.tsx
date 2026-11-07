@@ -64,7 +64,7 @@ const ConnectButton: Component = () => {
           aria-expanded={menuOpened()}
           aria-haspopup='menu'
           data-tauri-drag-exclude
-          class='bg-primary-surface hover:bg-primary-hover border-secondary-border sp:gap-2.5 sp:px-3 sp:py-2 flex cursor-pointer flex-row items-center gap-2 rounded-full border px-2.5 py-1.5'
+          class='bg-accent/10 hover:bg-accent/25 border-secondary-border sp:gap-2.5 sp:px-3 sp:py-2 flex cursor-pointer flex-row items-center gap-2 rounded-full border px-2.5 py-1.5'
           onClick={() => setMenuOpened((opened) => !opened)}
         >
           <i
