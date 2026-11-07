@@ -34,8 +34,6 @@ interface QueueListGestureOptions {
   selectedIndices: () => number[];
   /** Rectangle selection; `rows` is null while the rectangle covers no row, `base` the rows it adds to. */
   selectRect: (rows: { from: number; to: number } | null, anchor: number, base: readonly number[]) => void;
-  /** SP: a long-press on a row that does not lift, or a lifted row let go without moving. */
-  longPress: (index: number) => void;
 }
 
 function rowElements(root: HTMLElement) {
@@ -132,8 +130,7 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
   /**
    * Shows the grabbed row under the pointer and moves rows where it is let go.
    * `event` is the press, `current` where the pointer is now. A `lifted` row
-   * (SP long-press) only becomes a drag once it moves; let go before that, it
-   * counts as a long-press.
+   * (SP long-press) only becomes a drag once it moves; let go before that, nothing happens.
    */
   const startDrag = (sourceIndex: number, event: PointerEvent, current: PointerEvent, lifted: boolean) => {
     const root = options.root();
@@ -211,9 +208,7 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
         clientY = next.clientY;
         update();
         stop();
-        if (!indices) {
-          options.longPress(sourceIndex);
-        } else if (insertBefore !== null && !isQueueMoveNoop(indices, insertBefore)) {
+        if (indices && insertBefore !== null && !isQueueMoveNoop(indices, insertBefore)) {
           options.move(indices, insertBefore);
         }
       },
@@ -221,7 +216,12 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     });
   };
 
-  const startRect = (startIndex: number | null, event: PointerEvent, current: PointerEvent) => {
+  /**
+   * Selects the rows between the press and the pointer. On PC (Shift+drag) it draws the
+   * rectangle and adds to the earlier selection only while Ctrl is held; an SP long-press
+   * (`touch`) selects the rows the finger runs over, always adding, framed row to row.
+   */
+  const startRect = (startIndex: number | null, event: PointerEvent, current: PointerEvent, touch = false) => {
     const root = options.root();
     if (!root) return;
     cancelRipple();
@@ -231,14 +231,20 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     const start = { x: event.clientX - rootBox.left, y: event.clientY - rootBox.top };
     // Ctrl (pressed or let go at any point) makes the rectangle add to the selection it started with.
     const base = options.selectedIndices();
-    let adding = current.ctrlKey;
+    let adding = touch || current.ctrlKey;
     const onKey = (key: KeyboardEvent) => {
       if (key.key === 'Control') {
         adding = key.type === 'keydown';
       }
     };
-    window.addEventListener('keydown', onKey);
-    window.addEventListener('keyup', onKey);
+    // Once the long-press holds, the finger selects instead of scrolling the list.
+    const preventScroll = (move: TouchEvent) => move.cancelable && move.preventDefault();
+    if (touch) {
+      window.addEventListener('touchmove', preventScroll, { passive: false });
+    } else {
+      window.addEventListener('keydown', onKey);
+      window.addEventListener('keyup', onKey);
+    }
 
     const update = (clientX: number, clientY: number) => {
       // Root-relative content coordinates; the point is kept inside the visible list.
@@ -248,12 +254,20 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
       const y = Math.min(Math.max(clientY, Math.max(box.top, visible.top)), Math.min(box.bottom, visible.bottom)) - box.top;
       const top = Math.min(start.y, y);
       const bottom = Math.max(start.y, y);
-      setRect({ left: Math.min(start.x, x), top, width: Math.abs(x - start.x), height: bottom - top });
-
+      // The row the press started on always counts, so a long-press let go in place selects it.
       const covered = rowElements(root)
         .map((row, index) => ({ index, top: row.offsetTop, bottom: row.offsetTop + row.offsetHeight }))
-        .filter((row) => row.bottom > top && row.top <= bottom);
-      options.selectRect(covered.length ? { from: covered[0].index, to: covered[covered.length - 1].index } : null, anchor, adding ? base : []);
+        .filter((row) => (row.bottom > top && row.top <= bottom) || row.index === startIndex);
+      const first = covered[0];
+      const last = covered[covered.length - 1];
+      options.selectRect(first ? { from: first.index, to: last.index } : null, anchor, adding ? base : []);
+
+      if (!touch) {
+        setRect({ left: Math.min(start.x, x), top, width: Math.abs(x - start.x), height: bottom - top });
+      } else if (first) {
+        // SP: the frame encloses the covered rows, whatever the finger's exact positions.
+        setRect({ left: 0, top: first.top, width: box.width, height: last.bottom - first.top });
+      }
     };
     // The rectangle stays inside the visible list, but the list scrolls under it
     // while the pointer is near or past its top or bottom edge, as for a drag.
@@ -267,6 +281,7 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     };
     const stop = () => {
       cancelAnimationFrame(frame);
+      window.removeEventListener('touchmove', preventScroll);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKey);
       setRect(null);
@@ -278,7 +293,7 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
       move: (next) => {
         clientX = next.clientX;
         clientY = next.clientY;
-        adding = next.ctrlKey;
+        adding = touch || next.ctrlKey;
         update(clientX, clientY);
       },
       up: stop,
@@ -312,19 +327,16 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
   /**
    * SP press on a row. Moving before the long-press time is a scroll and lets
    * the press go. Held still, a `liftable` row lifts (see `startDrag`); any
-   * other row counts as a long-press right away.
+   * other row starts selecting the rows the finger then runs over (see `startRect`).
    */
   const pressSP = (event: PointerEvent, index: number, liftable: boolean) => {
     let latest = event;
     const timer = setTimeout(() => {
       if (liftable) {
         startDrag(index, event, latest, true);
-        return;
+      } else {
+        startRect(index, event, latest, true);
       }
-      endGesture?.();
-      cancelRipple();
-      suppressClick = true;
-      options.longPress(index);
     }, LONG_PRESS_MS);
     track(event, false, {
       move: (next) => {

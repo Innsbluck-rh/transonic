@@ -59,12 +59,6 @@ const QueueList: Component<QueueListProps> = (props) => {
     },
     selectedIndices: () => queueSelection().indices,
     selectRect: setQueueSelectionSpan,
-    // SP: a long-press turns the row on; only rows already on lift for a drag.
-    longPress: (index) => {
-      if (!isQueueIndexSelected(index)) {
-        toggleQueueSelection(index);
-      }
-    },
   });
 
   const requestCoverArtId = (coverArtId: string | null | undefined) => {
@@ -190,7 +184,8 @@ const QueueList: Component<QueueListProps> = (props) => {
         rootElement = element;
         element.addEventListener('contextmenu', onContextMenuCapture, true);
       }}
-      class='relative flex w-full flex-1 flex-col select-none'
+      // isolate: the list's own layers (selection bar, drop line, rectangle) stay under whatever overlays the list, such as the selection toolbar.
+      class='relative isolate flex w-full flex-1 flex-col select-none'
       onPointerDown={onPointerDown}
       onClick={onClick}
       // The browser's own image drag would take the pointer away from a row drag.
