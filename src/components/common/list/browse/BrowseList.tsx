@@ -4,6 +4,7 @@ import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArtMap } from '~/features/albums/useCoverArtMap';
 import type { BrowseListItem } from '~/features/browse/service';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { orUnknown } from '~/utils/unknownValue';
 import ArtistRow from './row/ArtistRow';
 import FolderRow from './row/FolderRow';
 
@@ -115,7 +116,7 @@ const BrowseList: Component<BrowseListProps> = (props) => {
                     {(artist) => (
                       <ArtistRow
                         ref={observeCoverArt(artist().coverArtId)}
-                        label={artist().name}
+                        label={orUnknown(artist().name)}
                         coverArtUrl={coverArtMap.src(artist().coverArtId)}
                         active={active()}
                         selected={selected()}
@@ -124,7 +125,7 @@ const BrowseList: Component<BrowseListProps> = (props) => {
                     )}
                   </Match>
                   <Match when={item.type === 'folder' && item}>
-                    {(folder) => <FolderRow label={folder().name} active={active()} selected={selected()} onClick={onClick} />}
+                    {(folder) => <FolderRow label={orUnknown(folder().name)} active={active()} selected={selected()} onClick={onClick} />}
                   </Match>
                 </Switch>
                 <div class='bg-secondary-border h-px w-full'></div>

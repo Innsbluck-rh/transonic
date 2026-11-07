@@ -16,6 +16,7 @@ import { usePlayback } from '~/features/playback/usePlayback';
 import { sessionStore } from '~/stores/SessionStore';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import { isSP } from '~/utils/isSP';
+import { orUnknown } from '~/utils/unknownValue';
 
 function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
   const navigate = useSPNavigate();
@@ -70,7 +71,8 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
 
   const infoText = createMemo<string | null>(() => {
     if (album() === null) return null;
-    const infoText = [album()?.year, album()?.genre, `${album()?.songCount} songs`]
+    const songCount = album()?.songCount;
+    const infoText = [album()?.year, album()?.genre, songCount != null ? `${songCount} songs` : null]
       .map((value) => {
         if (!value) return null;
         return String(value);
@@ -120,7 +122,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
 
         <div class='sp:mt-6 sp:h-auto sp:min-w-auto sp:flex-initial sp:px-0 flex h-full w-full min-w-0 flex-1 flex-col items-start px-5'>
           <MarqueeParagraph
-            text={album()?.name || '[unknown]'}
+            text={album() ? orUnknown(album()?.name) : ''}
             class='archivo sp:mb-0 sp:text-2xl mb-1 w-full text-3xl font-black tracking-tighter'
           />
           <MarqueeParagraph
@@ -129,7 +131,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
               if (artistId) navigate(resolveArtistRoute(artistId));
             }}
             class='archivo text-secondary-text hover:text-accent mt-0.5 cursor-pointer'
-            text={album()?.artist || '[unknown]'}
+            text={album() ? orUnknown(album()?.artist) : ''}
           />
           <Show when={infoText()}>
             <p class='archivo text-secondary-text mt-1.5 text-[12px]'>{infoText()}</p>

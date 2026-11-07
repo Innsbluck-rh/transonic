@@ -53,7 +53,8 @@ pub struct FolderStructureAlbumsRequest {
 #[serde(rename_all = "camelCase")]
 pub struct FolderStructureAlbumItem {
     pub id: String,
-    pub name: String,
+    /// `None` for the group of songs that have no album tag.
+    pub name: Option<String>,
     pub artist: Option<String>,
     pub cover_art_id: Option<String>,
     pub year: Option<u32>,

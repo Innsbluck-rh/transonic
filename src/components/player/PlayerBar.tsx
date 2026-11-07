@@ -8,6 +8,7 @@ import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice
 import { usePlayback } from '~/features/playback/usePlayback';
 import { usePlaybackStatus } from '~/features/playback/usePlaybackStatus';
 import { connectStore } from '~/stores/ConnectStore';
+import { orUnknown } from '~/utils/unknownValue';
 import { openPlaybackStreamInfoDialog } from '../common/dialog/service';
 import LoadCircle from '../common/LoadCircle';
 import PlaybackStatusText from '../player/common/PlaybackStatusText';
@@ -65,7 +66,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
 
   const isWindows = platform() === 'windows';
   const subtitleText = createMemo(() => {
-    const artist = currentEntry()?.artist || '[unknown]';
+    const artist = currentEntry() ? orUnknown(currentEntry()?.artist) : '';
     return isInterrupted() ? `${artist} ${playbackInterruptLabel()}` : artist;
   });
 
@@ -143,7 +144,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
             </div>
             <div class='flex min-w-0 flex-1 flex-col gap-1'>
               <MarqueeParagraph
-                text={currentEntry()?.title || '[unknown]'}
+                text={currentEntry() ? orUnknown(currentEntry()?.title) : ''}
                 class='archivo mt-1 w-fit pb-1 text-lg leading-none font-bold'
                 classList={{
                   'cursor-pointer': !!props.onClickTitle,

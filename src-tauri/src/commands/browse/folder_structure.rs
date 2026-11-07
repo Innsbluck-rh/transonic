@@ -22,8 +22,6 @@ use crate::{
     ActiveSessionState,
 };
 
-const UNKNOWN_ALBUM_NAME: &str = "Unknown Album";
-
 #[derive(Debug, Clone, Deserialize)]
 struct RawDirectory {
     name: String,
@@ -204,7 +202,7 @@ where
     Ok(FolderStructureAlbumsResponse {
         library_id: library_id.to_string(),
         node_id: node_id.to_string(),
-        node_name: node_name.unwrap_or_else(|| "[Unknown]".to_string()),
+        node_name: node_name.unwrap_or_default(),
         albums: aggregate_albums(songs),
     })
 }
@@ -213,7 +211,7 @@ fn aggregate_albums(songs: Vec<SongRow>) -> Vec<FolderStructureAlbumItem> {
     #[derive(Debug)]
     struct AlbumGroup {
         id: String,
-        name: String,
+        name: Option<String>,
         artist_counts: HashMap<String, usize>,
         artist_order: Vec<String>,
         cover_art_id: Option<String>,
@@ -221,7 +219,7 @@ fn aggregate_albums(songs: Vec<SongRow>) -> Vec<FolderStructureAlbumItem> {
     }
 
     impl AlbumGroup {
-        fn new(id: String, name: String) -> Self {
+        fn new(id: String, name: Option<String>) -> Self {
             Self {
                 id,
                 name,
@@ -268,8 +266,9 @@ fn aggregate_albums(songs: Vec<SongRow>) -> Vec<FolderStructureAlbumItem> {
     let mut groups: HashMap<String, AlbumGroup> = HashMap::new();
 
     for song in songs {
-        let album_name =
-            normalize_text(song.album.as_deref()).unwrap_or_else(|| UNKNOWN_ALBUM_NAME.to_string());
+        // A group of songs without an album tag has no name; the display layer
+        // shows the unknown placeholder (docs/unavailable-value-fallback.md).
+        let album_name = normalize_text(song.album.as_deref());
         let key = album_key(&song);
         let id = normalize_text(song.album_id.as_deref()).unwrap_or_else(|| key.clone());
 
@@ -295,9 +294,17 @@ fn aggregate_albums(songs: Vec<SongRow>) -> Vec<FolderStructureAlbumItem> {
         .collect();
 
     albums.sort_by(|left, right| {
+        // The unnamed group sorts after every named album.
         left.name
-            .to_ascii_lowercase()
-            .cmp(&right.name.to_ascii_lowercase())
+            .is_none()
+            .cmp(&right.name.is_none())
+            .then_with(|| {
+                left.name
+                    .as_deref()
+                    .unwrap_or("")
+                    .to_ascii_lowercase()
+                    .cmp(&right.name.as_deref().unwrap_or("").to_ascii_lowercase())
+            })
             .then_with(|| {
                 left.artist
                     .as_deref()
@@ -468,7 +475,7 @@ mod tests {
 
         assert_eq!(response.albums.len(), 1);
         assert_eq!(response.albums[0].id, "album-c");
-        assert_eq!(response.albums[0].name, "Album C");
+        assert_eq!(response.albums[0].name.as_deref(), Some("Album C"));
         assert_eq!(response.albums[0].artist.as_deref(), Some("Artist A"));
         assert_eq!(response.albums[0].cover_art_id.as_deref(), Some("cover-1"));
     }
@@ -507,7 +514,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn load_albums_uses_unknown_album_fallback() {
+    async fn load_albums_leaves_missing_album_name_empty() {
         let api = MockAlbumsApi::default().with_directory_response(
             "folder-root",
             MockResponse::Ok(json!({
@@ -522,7 +529,7 @@ mod tests {
         let response = load_albums(&api, "1", "folder-root").await.unwrap();
 
         assert_eq!(response.albums.len(), 1);
-        assert_eq!(response.albums[0].name, "Unknown Album");
+        assert_eq!(response.albums[0].name, None);
         assert_eq!(response.albums[0].artist.as_deref(), Some("Loose Artist"));
     }
 

@@ -4,6 +4,7 @@ import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { buildAlbumMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
+import { orUnknown } from '~/utils/unknownValue';
 
 export type AlbumItem = AlbumListItem | ArtistAlbum | FolderStructureAlbumItem;
 
@@ -42,12 +43,12 @@ const AlbumListItem: Component<AlbumListItemProps> = (props) => {
       </Show>
 
       <div class='flex min-w-0 flex-1 flex-col justify-center'>
-        <p class='truncate font-bold' title={props.album.name ?? '[unknown]'}>
-          {props.album.name}
+        <p class='truncate font-bold' title={orUnknown(props.album.name)}>
+          {orUnknown(props.album.name)}
         </p>
         <Show when={!props.noArtistName}>
           <p class='text-secondary-text truncate text-[10px]' title={props.album.artist ?? undefined}>
-            {props.album.artist ?? 'unknown artist'}
+            {orUnknown(props.album.artist)}
           </p>
         </Show>
       </div>

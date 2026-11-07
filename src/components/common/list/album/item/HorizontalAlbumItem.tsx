@@ -6,6 +6,7 @@ import { buildAlbumMenuItems } from '~/features/menu';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { resolveAlbumRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { orUnknown } from '~/utils/unknownValue';
 
 interface HorizontalAlbumItemProps {
   album: AlbumListItem;
@@ -38,8 +39,8 @@ const HorizontalAlbumItem: Component<HorizontalAlbumItemProps> = (props) => {
       </div>
 
       <div class='flex flex-1 flex-col justify-center overflow-hidden px-3'>
-        <p class='archivo truncate font-bold'>{props.album.name}</p>
-        <p class='archivo text-secondary-text truncate text-xs'>{props.album.artist}</p>
+        <p class='archivo truncate font-bold'>{orUnknown(props.album.name)}</p>
+        <p class='archivo text-secondary-text truncate text-xs'>{orUnknown(props.album.artist)}</p>
       </div>
     </div>
   );

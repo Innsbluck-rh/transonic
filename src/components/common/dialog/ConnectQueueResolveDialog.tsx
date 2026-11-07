@@ -6,6 +6,7 @@ import { setConnectSetting } from '~/features/settings/service';
 import { connectStore } from '~/stores/ConnectStore';
 import { playbackStore } from '~/stores/PlaybackStore';
 import { formatCompactDuration } from '~/utils/duration';
+import { orUnknown } from '~/utils/unknownValue';
 import Heading3 from '../text/Heading3';
 
 // Shown while the Rust side holds the local queue back because it conflicts with
@@ -126,9 +127,9 @@ const ResolvingQueueItem: Component<ResolvingQueueItemProps> = (props) => {
 
             <div class='flex min-w-0 flex-1 flex-col gap-0'>
               <div class='flex items-center gap-1'>
-                <p class='song-item-title archivo gap-1 truncate font-bold'>{song().title}</p>
+                <p class='song-item-title archivo gap-1 truncate font-bold'>{orUnknown(song().title)}</p>
               </div>
-              <p class='song-item-meta archivo truncate text-[11px]'>{song().artist}</p>
+              <p class='song-item-meta archivo truncate text-[11px]'>{orUnknown(song().artist)}</p>
             </div>
 
             <p class='song-item-meta archivo ml-2 text-xs'>{formatCompactDuration(song().duration ?? 0)}</p>
