@@ -6,6 +6,7 @@ import { useCoverArt } from '~/features/albums/useCoverArt';
 import { resolveExternalPlaybackDevice } from '~/features/connect/playbackDevice';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { connectStore } from '~/stores/ConnectStore';
+import { orUnknown } from '~/utils/unknownValue';
 import PlayerIcon from '../../player/PlayerIcon';
 
 // this may include fast_prev and fast_next later
@@ -38,7 +39,7 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
   } = usePlayback();
 
   const subtitleText = createMemo(() => {
-    const artist = currentEntry()?.artist || '[unknown]';
+    const artist = currentEntry() ? orUnknown(currentEntry()?.artist) : '';
     return isInterrupted() ? `${artist} ${playbackInterruptLabel()}` : artist;
   });
 
@@ -96,7 +97,7 @@ const SPPlayerBar: Component<PlayerBarProps> = (props) => {
             onClick={onClickRestArea}
           >
             <MarqueeParagraph
-              text={currentEntry()?.title || '[unknown]'}
+              text={currentEntry() ? orUnknown(currentEntry()?.title) : ''}
               class='archivo text-primary-text mb-1 w-full text-lg leading-tight font-black tracking-tighter'
               classList={{
                 'cursor-pointer': !!props.onClickTitle,

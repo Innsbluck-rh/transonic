@@ -110,7 +110,7 @@ impl RawChild {
             id: self.id.clone(),
             parent_id: self.parent,
             path: self.path,
-            title: normalize_text(self.title.as_deref()).unwrap_or(self.id),
+            title: normalize_text(self.title.as_deref()).unwrap_or_default(),
             album: self.album,
             album_id: self.album_id,
             artist: self.artist,
