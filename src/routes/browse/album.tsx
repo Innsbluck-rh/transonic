@@ -100,7 +100,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         {/* fit cover div in square space */}
         <div class='sp:w-52 sp:h-52 flex h-48 w-48 items-center justify-center'>
           <div
-            class='group border-secondary-border sp:w-52 pointer-events-auto relative z-10 w-48 border shadow-lg'
+            class='group border-secondary-border bg-primary-surface sp:w-52 pointer-events-auto relative z-10 w-48 border shadow-lg'
             onClick={() => {
               const coverArtId = album()?.coverArtId;
               if (coverArtId) openAlbumArtOverlayDialog(coverArtId);
@@ -108,14 +108,23 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
             {...contextMenuProps()}
           >
             <Show
-              when={coverArt()}
+              when={!coverArtLoading()}
               fallback={
                 <div class='sp:w-52 flex aspect-square w-48 items-center justify-center'>
                   <LoadCircle />
                 </div>
               }
             >
-              {(assetUrl) => <img class='sp:w-52 w-48 cursor-pointer hover:brightness-75' src={assetUrl()} loading='lazy' decoding='async' />}
+              <Show
+                when={coverArt()}
+                fallback={
+                  <div class='sp:w-52 flex aspect-square w-48 items-center justify-center hover:brightness-75'>
+                    <p class='text-secondary-text text-base font-bold'>no image</p>
+                  </div>
+                }
+              >
+                {(assetUrl) => <img class='sp:w-52 w-48 cursor-pointer hover:brightness-75' src={assetUrl()} loading='lazy' decoding='async' />}
+              </Show>
             </Show>
           </div>
         </div>

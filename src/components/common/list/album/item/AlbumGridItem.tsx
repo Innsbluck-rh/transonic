@@ -1,5 +1,6 @@
 import { Component, Show } from 'solid-js';
 import type { AlbumListItem, ArtistAlbum, FolderStructureAlbumItem } from '~/bindings';
+import LoadCircle from '~/components/common/LoadCircle';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArt } from '~/features/albums/useCoverArt';
 import { buildAlbumMenuItems } from '~/features/menu';
@@ -50,8 +51,32 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
         onClick={(e) => props.onClick?.(e)}
         onDblClick={(e) => props.onDblClick?.(e)}
       >
-        <Show when={src()} fallback={<div class='border-secondary-border size-full border' />}>
-          {(assetUrl) => <img title={props.album.name ?? ''} src={assetUrl()} class='size-full object-cover' loading='lazy' decoding='async' />}
+        <Show
+          when={!loading()}
+          fallback={
+            <div class='flex size-full items-center justify-center hover:brightness-75'>
+              <LoadCircle />
+            </div>
+          }
+        >
+          <Show
+            when={src()}
+            fallback={
+              <div class='flex size-full items-center justify-center hover:brightness-75'>
+                <p class='text-secondary-text text-sm font-bold'>no image</p>
+              </div>
+            }
+          >
+            {(assetUrl) => (
+              <img
+                title={props.album.name ?? ''}
+                src={assetUrl()}
+                class='size-full object-cover hover:brightness-75'
+                loading='lazy'
+                decoding='async'
+              />
+            )}
+          </Show>
         </Show>
         <Show when={props.inline}>
           <div class='absolute right-1 bottom-1 left-1 flex flex-col gap-0.5 overflow-hidden'>

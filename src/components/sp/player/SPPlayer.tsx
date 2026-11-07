@@ -41,7 +41,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
     currentIndex,
   } = usePlayback();
 
-  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.lg);
+  const { src: coverArt, loading: coverArtLoading } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.lg);
 
   const navigate = useSPNavigate();
   const { setScrollContainerRef, setItemRef } = useQueueAutoScroll({
@@ -81,14 +81,23 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
           <div class='-mt-1 flex size-full flex-col items-center px-8'>
             <div class='relative flex h-46 w-auto overflow-hidden shadow-xl'>
               <Show
-                when={coverArt()}
+                when={!coverArtLoading()}
                 fallback={
                   <div class='border-secondary-border absolute inset-0 flex aspect-square items-center justify-center border'>
                     <LoadCircle />
                   </div>
                 }
               >
-                {(assetUrl) => <img class='size-full object-contain object-center' src={assetUrl()} loading='lazy' decoding='async' />}
+                <Show
+                  when={coverArt()}
+                  fallback={
+                    <div class='border-secondary-border bg-primary-surface flex aspect-square h-full items-center justify-center border'>
+                      <p class='text-secondary-text text-base font-bold'>no image</p>
+                    </div>
+                  }
+                >
+                  {(assetUrl) => <img class='size-full object-contain object-center' src={assetUrl()} loading='lazy' decoding='async' />}
+                </Show>
               </Show>
             </div>
             <MarqueeParagraph
