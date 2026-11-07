@@ -34,7 +34,7 @@ export const lightTheme: ColorTheme = {
     '--theme-color-primary-hover': 'var(--color-gray-200)',
     '--theme-color-primary-border': 'rgb(0 0 0 / 0.25)',
     '--theme-color-secondary-border': 'rgb(0 0 0 / 0.1)',
-    '--theme-color-primary-text': 'var(--color-gray-700)',
+    '--theme-color-primary-text': 'var(--color-gray-600)',
     '--theme-color-secondary-text': 'var(--color-gray-500)',
     '--theme-color-sp-nav-space': 'var(--color-zinc-400)',
     '--theme-color-accent': 'var(--color-cyan-600)',
