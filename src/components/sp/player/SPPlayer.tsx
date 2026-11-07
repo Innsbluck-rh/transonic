@@ -54,7 +54,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
   return (
     <div class='z-50 flex h-full min-h-0 flex-1 flex-col'>
       <div {...props.topSectionProps} class={`relative flex h-auto w-full shrink-0 flex-col items-center ${props.topSectionProps?.class ?? ''}`}>
-        <div class='z-10 mt-0 flex size-full flex-col items-center'>
+        <div class='z-10 flex size-full flex-col items-center'>
           <div class='flex w-full items-center gap-1 p-1'>
             <div
               class='ripple mr-auto flex cursor-pointer p-2 text-2xl'
@@ -75,7 +75,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
             </div>
           </div>
 
-          <div class='flex size-full flex-col items-center px-8'>
+          <div class='-mt-1 flex size-full flex-col items-center px-8'>
             <div class='relative flex h-46 w-auto overflow-hidden shadow-xl'>
               <Show
                 when={coverArt()}
@@ -116,7 +116,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
             />
 
             <div
-              class='mt-1 mb-5 flex w-full flex-row items-center justify-evenly'
+              class='mt-1 mb-4 flex w-full flex-row items-center justify-evenly'
               onPointerDown={(event) => {
                 event.stopPropagation();
               }}
