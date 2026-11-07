@@ -30,8 +30,10 @@ interface QueueListGestureOptions {
   /** Rows to move when a drag starts from `index`; may select the row first. */
   beginMove: (index: number) => number[];
   move: (indices: number[], insertBefore: number) => void;
-  /** Rectangle selection; `rows` is null while the rectangle covers no row. */
-  selectRect: (rows: { from: number; to: number } | null, anchor: number) => void;
+  /** The current selection, kept as the base of an adding rectangle. */
+  selectedIndices: () => number[];
+  /** Rectangle selection; `rows` is null while the rectangle covers no row, `base` the rows it adds to. */
+  selectRect: (rows: { from: number; to: number } | null, anchor: number, base: readonly number[]) => void;
   /** SP: a long-press on a row that does not lift, or a lifted row let go without moving. */
   longPress: (index: number) => void;
 }
@@ -227,6 +229,16 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     const anchor = startIndex ?? options.queueLength() - 1;
     const rootBox = root.getBoundingClientRect();
     const start = { x: event.clientX - rootBox.left, y: event.clientY - rootBox.top };
+    // Ctrl (pressed or let go at any point) makes the rectangle add to the selection it started with.
+    const base = options.selectedIndices();
+    let adding = current.ctrlKey;
+    const onKey = (key: KeyboardEvent) => {
+      if (key.key === 'Control') {
+        adding = key.type === 'keydown';
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKey);
 
     const update = (clientX: number, clientY: number) => {
       // Root-relative content coordinates; the point is kept inside the visible list.
@@ -241,7 +253,7 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
       const covered = rowElements(root)
         .map((row, index) => ({ index, top: row.offsetTop, bottom: row.offsetTop + row.offsetHeight }))
         .filter((row) => row.bottom > top && row.top <= bottom);
-      options.selectRect(covered.length ? { from: covered[0].index, to: covered[covered.length - 1].index } : null, anchor);
+      options.selectRect(covered.length ? { from: covered[0].index, to: covered[covered.length - 1].index } : null, anchor, adding ? base : []);
     };
     // The rectangle stays inside the visible list, but the list scrolls under it
     // while the pointer is near or past its top or bottom edge, as for a drag.
@@ -255,6 +267,8 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     };
     const stop = () => {
       cancelAnimationFrame(frame);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKey);
       setRect(null);
     };
     update(clientX, clientY);
@@ -264,6 +278,7 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
       move: (next) => {
         clientX = next.clientX;
         clientY = next.clientY;
+        adding = next.ctrlKey;
         update(clientX, clientY);
       },
       up: stop,
@@ -277,7 +292,7 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
    * rectangle (with Shift) or a drag; one that does not stays a click.
    */
   const pressPC = (event: PointerEvent, index: number | null) => {
-    if (event.button !== 0 || (event.shiftKey && event.ctrlKey)) return;
+    if (event.button !== 0) return;
     if (!event.shiftKey && index === null) return;
     const startX = event.clientX;
     const startY = event.clientY;

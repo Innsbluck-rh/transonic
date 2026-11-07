@@ -43,6 +43,11 @@ describe('queueSelection', () => {
     expect(selectQueueSpan(null, 5)).toEqual(emptyQueueSelection);
   });
 
+  it('adds the rows a rectangle covers to a base selection', () => {
+    expect(selectQueueSpan({ from: 4, to: 5 }, 4, [0, 5, 8])).toEqual({ indices: [0, 4, 5, 8], anchor: 4 });
+    expect(selectQueueSpan(null, 4, [0, 8])).toEqual({ indices: [0, 8], anchor: 4 });
+  });
+
   it('selects every row with the first as anchor', () => {
     expect(selectAllQueue(3)).toEqual({ indices: [0, 1, 2], anchor: 0 });
     expect(selectAllQueue(0)).toEqual(emptyQueueSelection);

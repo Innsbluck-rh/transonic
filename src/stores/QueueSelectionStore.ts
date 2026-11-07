@@ -62,7 +62,8 @@ export const addToQueueSelection = (index: number) => setQueueSelection((current
 
 export const selectQueueRangeTo = (index: number) => setQueueSelection((current) => selectQueueRange(current, index));
 
-export const setQueueSelectionSpan = (rows: { from: number; to: number } | null, anchor: number) => setQueueSelection(selectQueueSpan(rows, anchor));
+export const setQueueSelectionSpan = (rows: { from: number; to: number } | null, anchor: number, base?: readonly number[]) =>
+  setQueueSelection(selectQueueSpan(rows, anchor, base));
 
 export const selectAllQueueRows = () => setQueueSelection(selectAllQueue(queueStatus.queueLength()));
 

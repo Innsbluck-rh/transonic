@@ -41,9 +41,12 @@ export function selectQueueRange(current: QueueSelection, index: number): QueueS
   return selection(span(current.anchor, index), current.anchor);
 }
 
-/** Rectangle selection: replaces the selection with the rows from..to (null: no row covered). */
-export function selectQueueSpan(rows: { from: number; to: number } | null, anchor: number): QueueSelection {
-  return rows ? selection(span(rows.from, rows.to), anchor) : emptyQueueSelection;
+/**
+ * Rectangle selection: the rows from..to (null: no row covered) added to `base`, the
+ * selection kept from before the rectangle (empty when the rectangle replaces it).
+ */
+export function selectQueueSpan(rows: { from: number; to: number } | null, anchor: number, base: readonly number[] = []): QueueSelection {
+  return selection([...base, ...(rows ? span(rows.from, rows.to) : [])], anchor);
 }
 
 export function selectAllQueue(length: number): QueueSelection {

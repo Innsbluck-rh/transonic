@@ -57,6 +57,7 @@ const QueueList: Component<QueueListProps> = (props) => {
     move: (indices, insertBefore) => {
       commands.playbackMoveQueueIndices({ indices, insertBefore }).then(hasPlaybackCommandError);
     },
+    selectedIndices: () => queueSelection().indices,
     selectRect: setQueueSelectionSpan,
     // SP: a long-press turns the row on; only rows already on lift for a drag.
     longPress: (index) => {
