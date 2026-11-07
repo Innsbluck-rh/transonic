@@ -70,7 +70,8 @@ export const selectAllQueueRows = () => setQueueSelection(selectAllQueue(queueSt
 export const clearQueueSelection = () => setQueueSelection(emptyQueueSelection);
 
 /** Remove from Queue: removing the rows ends the selection. */
-export const removeSelectedQueueRows = (indices = queueSelection().indices) => {
+export const removeSelectedQueueRows = () => {
+  const { indices } = queueSelection();
   clearQueueSelection();
   if (indices.length) {
     commands.playbackRemoveQueueIndices({ indices }).then(hasPlaybackCommandError);

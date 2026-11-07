@@ -220,7 +220,7 @@ const QueueList: Component<QueueListProps> = (props) => {
     }
     // PC: while rows are selected, a right-click anywhere in the list opens the selection menu instead of the row's own.
     if (isQueueSelecting()) {
-      showContextMenu(event, buildQueueSelectionMenuItems(queueSelection().indices));
+      showContextMenu(event, buildQueueSelectionMenuItems());
     }
   };
 
