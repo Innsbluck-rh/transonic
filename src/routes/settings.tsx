@@ -16,11 +16,11 @@ function SettingsRoute() {
       }}
     >
       <RouteHeader title='Settings' />
-      <div class='sp:p-4 flex flex-1 flex-col gap-4 p-5'>
-        <ServerSettings />
+      <div class='flex flex-1 flex-col gap-4 p-3'>
         <AppearanceSettings />
         <PlaybackSettings />
         <AlbumArtCacheSettings />
+        <ServerSettings />
         <ConnectSettings />
       </div>
     </div>

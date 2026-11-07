@@ -157,8 +157,8 @@ function ConnectSettings() {
       <Show when={connectEnabled()}>
         <fieldset class='flex min-w-0 flex-col gap-4'>
           <details class='flex min-w-0 flex-col gap-3'>
-            <summary class='text-secondary-text cursor-pointer text-sm leading-5 font-bold'>Advanced</summary>
-            <div class='mt-3 flex min-w-0 flex-col gap-4'>
+            <summary class='text-secondary-text cursor-pointer text-sm font-bold'>Advanced</summary>
+            <div class='mt-1 ml-3.5 flex min-w-0 flex-col gap-4'>
               <label class='flex min-w-0 items-center justify-between gap-4'>
                 <span class='min-w-0'>Use Subsonic Host URL</span>
                 <input
