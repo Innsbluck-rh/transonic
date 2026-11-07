@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Innsbluck-rh/transonic/server/internal/store"
+	"github.com/Innsbluck-rh/transonic/server/internal/version"
 )
 
 func TestRoomIsolationAndStaleBaseSeq(t *testing.T) {
@@ -40,7 +41,7 @@ func TestRoomIsolationAndStaleBaseSeq(t *testing.T) {
 	hub.Handle(ctx, clientA, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	gotA := <-clientA.Send
@@ -56,7 +57,7 @@ func TestRoomIsolationAndStaleBaseSeq(t *testing.T) {
 	hub.Handle(ctx, clientA, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":0,"op":"appendToQueue","items":[{"id":"song-b","title":"Song B"}]}`),
 	})
 	gotA = <-clientA.Send
@@ -91,7 +92,7 @@ func TestPlaybackCommandRoutesToActiveDevice(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(active)
@@ -100,7 +101,7 @@ func TestPlaybackCommandRoutesToActiveDevice(t *testing.T) {
 	hub.Handle(ctx, remote, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":1,"op":"play"}`),
 	})
 	forwarded := <-active.Send
@@ -318,7 +319,7 @@ func TestTransferPlaybackUpdatesActiveDevice(t *testing.T) {
 	hub.Handle(ctx, a, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(a)
@@ -327,7 +328,7 @@ func TestTransferPlaybackUpdatesActiveDevice(t *testing.T) {
 	hub.Handle(ctx, b, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":1,"op":"transferPlayback","targetDeviceId":"b"}`),
 	})
 	updated := <-b.Send
@@ -367,7 +368,7 @@ func TestTransferPlaybackRejectsUnavailableState(t *testing.T) {
 	hub.Handle(ctx, b, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"transferPlayback","targetDeviceId":"b"}`),
 	})
 	if message := commandErrorMessage(t, b); message != "playback queue is empty" {
@@ -377,7 +378,7 @@ func TestTransferPlaybackRejectsUnavailableState(t *testing.T) {
 	hub.Handle(ctx, a, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(a)
@@ -386,7 +387,7 @@ func TestTransferPlaybackRejectsUnavailableState(t *testing.T) {
 	hub.Handle(ctx, b, Envelope{
 		ID:              "cmd-3",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-3","baseSeq":1,"op":"transferPlayback","targetDeviceId":"a"}`),
 	})
 	if message := commandErrorMessage(t, b); message != "target device is already active" {
@@ -416,7 +417,7 @@ func TestClearQueueEmptiesSharedPlaybackAndKeepsActiveDevice(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(active)
@@ -425,7 +426,7 @@ func TestClearQueueEmptiesSharedPlaybackAndKeepsActiveDevice(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "report-1",
 		Type:            TypePlaybackReport,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"baseSeq":1,"state":{"playingState":"playing","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0,"currentPositionMs":42,"currentSongId":"song-a"}}`),
 	})
 	drain(active)
@@ -434,7 +435,7 @@ func TestClearQueueEmptiesSharedPlaybackAndKeepsActiveDevice(t *testing.T) {
 	hub.Handle(ctx, remote, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":1,"op":"clearQueue"}`),
 	})
 
@@ -481,7 +482,7 @@ func TestPlaybackReportSameBaseSeqDoesNotBecomeStale(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(active)
@@ -489,7 +490,7 @@ func TestPlaybackReportSameBaseSeqDoesNotBecomeStale(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "report-1",
 		Type:            TypePlaybackReport,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"baseSeq":1,"state":{"playingState":"interrupted","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0,"currentPositionMs":0,"currentSongId":"song-a"}}`),
 	})
 	got := <-active.Send
@@ -500,7 +501,7 @@ func TestPlaybackReportSameBaseSeqDoesNotBecomeStale(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "report-2",
 		Type:            TypePlaybackReport,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"baseSeq":1,"state":{"playingState":"playing","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0,"currentPositionMs":0,"currentSongId":"song-a"}}`),
 	})
 	got = <-active.Send
@@ -543,7 +544,7 @@ func TestStalePlaybackReportDoesNotRollbackQueue(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(active)
@@ -552,7 +553,7 @@ func TestStalePlaybackReportDoesNotRollbackQueue(t *testing.T) {
 	hub.Handle(ctx, remote, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":1,"op":"appendToQueue","items":[{"id":"song-b","title":"Song B"}]}`),
 	})
 	drain(active)
@@ -561,7 +562,7 @@ func TestStalePlaybackReportDoesNotRollbackQueue(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "report-1",
 		Type:            TypePlaybackReport,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"baseSeq":1,"state":{"playingState":"playing","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0,"currentPositionMs":10,"currentSongId":"song-a"}}`),
 	})
 	got := <-remote.Send
@@ -606,7 +607,7 @@ func TestActiveOfflineClearsActiveDeviceAndStopsPlayback(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(active)
@@ -614,7 +615,7 @@ func TestActiveOfflineClearsActiveDeviceAndStopsPlayback(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "report-1",
 		Type:            TypePlaybackReport,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"baseSeq":1,"state":{"playingState":"playing","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0,"currentPositionMs":10,"currentSongId":"song-a"}}`),
 	})
 	drain(active)
@@ -694,7 +695,7 @@ func TestPlaybackCommandClaimsActiveDeviceWhenMissing(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(active)
@@ -702,7 +703,7 @@ func TestPlaybackCommandClaimsActiveDeviceWhenMissing(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "report-1",
 		Type:            TypePlaybackReport,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"baseSeq":1,"state":{"playingState":"playing","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0,"currentPositionMs":10,"currentSongId":"song-a"}}`),
 	})
 	drain(active)
@@ -713,7 +714,7 @@ func TestPlaybackCommandClaimsActiveDeviceWhenMissing(t *testing.T) {
 	hub.Handle(ctx, remote, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":2,"op":"play"}`),
 	})
 	updated := <-remote.Send
@@ -757,7 +758,7 @@ func TestTransferPlaybackClaimsTargetWhenActiveDeviceIsMissing(t *testing.T) {
 	hub.Handle(ctx, active, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(active)
@@ -768,7 +769,7 @@ func TestTransferPlaybackClaimsTargetWhenActiveDeviceIsMissing(t *testing.T) {
 	hub.Handle(ctx, remote, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":2,"op":"transferPlayback","targetDeviceId":"remote"}`),
 	})
 	updated := <-remote.Send
@@ -806,7 +807,7 @@ func TestPushStateReplacesSharedStateAndClaimsActiveDevice(t *testing.T) {
 	hub.Handle(ctx, a, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"setQueue","queue":[{"id":"song-a","title":"Song A"}],"currentIndex":0}`),
 	})
 	drain(a)
@@ -815,7 +816,7 @@ func TestPushStateReplacesSharedStateAndClaimsActiveDevice(t *testing.T) {
 	hub.Handle(ctx, b, Envelope{
 		ID:              "cmd-2",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-2","baseSeq":1,"op":"pushState","state":{"playingState":"paused","queue":[{"id":"song-x"},{"id":"song-y"},{"id":"song-z"}],"currentIndex":1,"playNextQueueLen":5,"currentPositionMs":42000}}`),
 	})
 	updated := <-a.Send
@@ -868,7 +869,7 @@ func TestPushStateRequiresState(t *testing.T) {
 	hub.Handle(ctx, a, Envelope{
 		ID:              "cmd-1",
 		Type:            TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         json.RawMessage(`{"commandId":"cmd-1","baseSeq":0,"op":"pushState"}`),
 	})
 	if message := commandErrorMessage(t, a); message != "pushState requires state" {
@@ -917,12 +918,12 @@ func TestQueueCommandsKeepPositionElapsedSinceLastReport(t *testing.T) {
 			defer hub.Unregister(ctx, active)
 			drain(active)
 
-			hub.Handle(ctx, active, Envelope{ID: "cmd-1", Type: TypePlaybackCommandRequest, ProtocolVersion: 2, Payload: json.RawMessage(payload)})
+			hub.Handle(ctx, active, Envelope{ID: "cmd-1", Type: TypePlaybackCommandRequest, ProtocolVersion: version.ProtocolVersion, Payload: json.RawMessage(payload)})
 			if position := broadcastPositionMs(t, active); position < 31000 || position > 32000 {
 				t.Fatalf("expected the 30s since the last report kept (about 31000), got %d", position)
 			}
 
-			hub.Handle(ctx, active, Envelope{ID: "cmd-2", Type: TypePlaybackCommandRequest, ProtocolVersion: 2, Payload: json.RawMessage(`{"baseSeq":2,"op":"appendToQueue","items":[{"id":"song-y"}]}`)})
+			hub.Handle(ctx, active, Envelope{ID: "cmd-2", Type: TypePlaybackCommandRequest, ProtocolVersion: version.ProtocolVersion, Payload: json.RawMessage(`{"baseSeq":2,"op":"appendToQueue","items":[{"id":"song-y"}]}`)})
 			if position := broadcastPositionMs(t, active); position < 31000 || position > 32000 {
 				t.Fatalf("expected the next command not to add the elapsed time again (about 31000), got %d", position)
 			}

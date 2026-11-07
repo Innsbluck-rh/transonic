@@ -51,8 +51,8 @@ type Hub struct {
 	clients map[string]map[string]*Client
 }
 
-// The shared playback state (ConnectPlaybackState) and command payload
-// (ConnectPlaybackCommand) types are generated from the Rust wire types into
+// The message payload types (ConnectPlaybackCommand, ConnectSharedPlaybackState,
+// ConnectPlaybackApplyPayload, ...) are generated from the Rust wire types into
 // connect_types_gen.go. Do not hand-define them here; regenerate with
 // `pnpm go-types:export`. See docs/known-issues.md Tier 1.
 
@@ -824,29 +824,25 @@ func (h *Hub) saveAndBroadcast(ctx context.Context, userKey string, state *store
 	return nil
 }
 
-func (h *Hub) applyToActiveDevice(client *Client, replyTo, commandID, activeDeviceID, op string, args map[string]any) {
+func (h *Hub) applyToActiveDevice(client *Client, replyTo, commandID, activeDeviceID, op string, args *ConnectPlaybackApplyArgs) {
 	if activeDeviceID == "" {
 		h.sendCommandError(client, replyTo, commandID, "active device is unavailable")
 		return
 	}
-	if !h.sendToDevice(client.Session.UserKey, activeDeviceID, TypePlaybackApply, replyTo, mustJSON(map[string]any{
-		"commandId": commandID,
-		"op":        op,
-		"args":      args,
+	if !h.sendToDevice(client.Session.UserKey, activeDeviceID, TypePlaybackApply, replyTo, mustJSON(ConnectPlaybackApplyPayload{
+		CommandID: optionalString(commandID),
+		Op:        op,
+		Args:      args,
 	})) {
 		h.sendCommandError(client, replyTo, commandID, "active device is offline")
 	}
 }
 
-func playbackApplyArgs(command ConnectPlaybackCommand) map[string]any {
-	args := map[string]any{}
-	if command.PositionMs != nil {
-		args["positionMs"] = *command.PositionMs
+func playbackApplyArgs(command ConnectPlaybackCommand) *ConnectPlaybackApplyArgs {
+	if command.PositionMs == nil {
+		return nil
 	}
-	if command.Index != nil {
-		args["index"] = *command.Index
-	}
-	return args
+	return &ConnectPlaybackApplyArgs{PositionMs: command.PositionMs}
 }
 
 func (h *Hub) freezeActiveDeviceIfOffline(ctx context.Context, session store.Session) {
@@ -1108,35 +1104,23 @@ func cloneRawMessages(items []json.RawMessage) []json.RawMessage {
 	return clone
 }
 
+// sharedPayload builds the playback.shared.* payload. A stored state that does
+// not decode yields no payload, which clients reject like any undecodable one.
 func sharedPayload(shared *store.SharedPlaybackState, reason string) json.RawMessage {
 	if shared == nil {
-		return mustJSON(map[string]any{
-			"seq":            0,
-			"activeDeviceId": nil,
-			"state":          emptyPlaybackState(),
-			"updateReason":   reason,
-		})
+		shared = &store.SharedPlaybackState{UpdatedAt: time.Now().UTC()}
 	}
 	state, err := decodePlaybackState(shared.State)
-	var stateValue any = json.RawMessage(shared.State)
-	if err == nil {
-		stateValue = state
+	if err != nil {
+		return nil
 	}
-	var activeDeviceID any
-	if shared.ActiveDeviceID != "" {
-		activeDeviceID = shared.ActiveDeviceID
-	}
-	var updatedByDeviceID any
-	if shared.UpdatedByDeviceID != "" {
-		updatedByDeviceID = shared.UpdatedByDeviceID
-	}
-	return mustJSON(map[string]any{
-		"seq":               shared.Seq,
-		"activeDeviceId":    activeDeviceID,
-		"state":             stateValue,
-		"updatedAt":         shared.UpdatedAt,
-		"updatedByDeviceId": updatedByDeviceID,
-		"updateReason":      reason,
+	return mustJSON(ConnectSharedPlaybackState{
+		Seq:               shared.Seq,
+		ActiveDeviceID:    optionalString(shared.ActiveDeviceID),
+		State:             state,
+		UpdatedAt:         shared.UpdatedAt.Format(time.RFC3339Nano),
+		UpdatedByDeviceID: optionalString(shared.UpdatedByDeviceID),
+		UpdateReason:      optionalString(reason),
 	})
 }
 
@@ -1153,10 +1137,18 @@ func (h *Hub) broadcastPresence(ctx context.Context, userKey string) {
 	for _, deviceID := range online {
 		onlineSet[deviceID] = true
 	}
-	for i := range devices {
-		devices[i].Online = onlineSet[devices[i].DeviceID]
+	presence := make([]ConnectDevicePresence, len(devices))
+	for i, device := range devices {
+		presence[i] = ConnectDevicePresence{
+			DeviceID:    device.DeviceID,
+			DisplayName: device.DisplayName,
+			Platform:    device.Platform,
+			AppVersion:  device.AppVersion,
+			LastSeenAt:  device.LastSeenAt.Format(time.RFC3339Nano),
+			Online:      onlineSet[device.DeviceID],
+		}
 	}
-	h.broadcast(userKey, TypePresenceUpdated, "", mustJSON(map[string]any{"devices": devices}))
+	h.broadcast(userKey, TypePresenceUpdated, "", mustJSON(ConnectPresenceUpdatedPayload{Devices: presence}))
 }
 
 func (h *Hub) onlineDeviceIDs(userKey string) []string {
@@ -1214,10 +1206,18 @@ func (h *Hub) send(client *Client, typ, replyTo string, payload json.RawMessage)
 }
 
 func (h *Hub) sendCommandError(client *Client, replyTo, commandID, message string) {
-	h.send(client, TypePlaybackCommandError, replyTo, mustJSON(map[string]any{
-		"commandId": commandID,
-		"message":   message,
+	h.send(client, TypePlaybackCommandError, replyTo, mustJSON(ConnectPlaybackCommandErrorPayload{
+		CommandID: optionalString(commandID),
+		Message:   message,
 	}))
+}
+
+// optionalString maps an empty string to an absent optional wire field.
+func optionalString(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 func mustJSON(value any) json.RawMessage {

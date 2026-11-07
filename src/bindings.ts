@@ -442,6 +442,9 @@ export type ArtistsResponse = { ignoredArticles: string | null; indexes: ArtistG
 export type AuthInput = { kind: "password"; username: string; password: string } | { kind: "api_key"; apiKey: string }
 export type AuthKind = "password" | "api_key"
 export type CapabilityMatrix = { openSubsonic: boolean; rawExtensions: OpenSubsonicExtension[]; apiKeyAuth: boolean; indexBasedQueue: boolean; playbackReport: boolean; transcoding: boolean; transcodeOffset: boolean; songLyrics: boolean }
+/**
+ * One device of the `presence.updated` payload.
+ */
 export type ConnectDevicePresence = { deviceId: string; displayName: string; platform: string; appVersion: string; lastSeenAt: string; online: boolean }
 export type ConnectPlaybackState = { playingState: PlayingState; queue: SongResponse[]; currentIndex?: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId?: string | null; 
 /**
@@ -461,6 +464,9 @@ queueResolution: ConnectQueueResolution | null }
 export type ConnectServerProfileRequest = { profileId: string | null; displayName: string | null; serverUrl: string; auth: AuthInput }
 export type ConnectServerProfileResult = { status: "connected"; activeSession: ActiveSession; profiles: SavedProfileSummary[] } | { status: "auth_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "network_error"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "server_error"; message: string; code: number | null; helpUrl: string | null; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] } | { status: "unsupported_auth"; message: string; activeSession: ActiveSession | null; profiles: SavedProfileSummary[] }
 export type ConnectSettings = { enabled?: boolean; useSubsonicServerHost?: boolean; connectServerHost?: string | null; connectServerPort?: number; deviceId?: string; deviceName?: string | null; allowInsecureConnectServer?: boolean }
+/**
+ * `playback.shared.snapshot` / `playback.shared.updated` payload.
+ */
 export type ConnectSharedPlaybackState = { seq: number; activeDeviceId: string | null; state: ConnectPlaybackState; updatedAt: string; updatedByDeviceId: string | null; updateReason: string | null }
 export type ConnectStateSnapshot = { runtime: ConnectRuntimeStatus; devices: ConnectDevicePresence[]; sharedPlayback: ConnectSharedPlaybackState | null }
 export type ConnectStateUpdated = { runtime: ConnectRuntimeStatus; devices: ConnectDevicePresence[]; sharedPlayback: ConnectSharedPlaybackState | null }

@@ -21,7 +21,8 @@ use tokio_tungstenite::{
 use crate::{
     commands::{common::service, playback::active_runtime_parts},
     models::{
-        AuthInput, ConnectDevicePresence, ConnectPlaybackCommand, ConnectPlaybackState,
+        AuthInput, ConnectDevicePresence, ConnectPlaybackApplyPayload, ConnectPlaybackCommand,
+        ConnectPlaybackCommandErrorPayload, ConnectPlaybackState, ConnectPresenceUpdatedPayload,
         ConnectQueueResolution, ConnectQueueResolutionChoice, ConnectRuntimeStatus,
         ConnectSettings, ConnectSharedPlaybackState, ConnectStateSnapshot, ConnectStateUpdated,
         PlaybackStatus, PlayingState, SongResponse,
@@ -30,7 +31,7 @@ use crate::{
     ActiveSessionState, AppSettingsState, CoverArtCacheState, PlaybackControllerState,
 };
 
-const CONNECT_PROTOCOL_VERSION: u32 = 2;
+const CONNECT_PROTOCOL_VERSION: u32 = 3;
 const TYPE_PLAYBACK_SHARED_SNAPSHOT: &str = "playback.shared.snapshot";
 const TYPE_PLAYBACK_SHARED_UPDATED: &str = "playback.shared.updated";
 const UPDATE_REASON_SNAPSHOT: &str = "snapshot";
@@ -1037,7 +1038,7 @@ async fn handle_incoming_message(
 
     match envelope.message_type.as_str() {
         "presence.updated" => {
-            let payload: PresenceUpdatedPayload = serde_json::from_value(payload)
+            let payload: ConnectPresenceUpdatedPayload = serde_json::from_value(payload)
                 .map_err(|error| format!("connect: presence update decode failed: {error}"))?;
             if let Some((_devices, snapshot)) = runtime.set_devices(generation, payload.devices) {
                 emit_state_updated(app, snapshot);
@@ -1092,7 +1093,7 @@ async fn handle_incoming_message(
             }
         }
         "playback.apply" => {
-            let payload: PlaybackApplyPayload = serde_json::from_value(payload)
+            let payload: ConnectPlaybackApplyPayload = serde_json::from_value(payload)
                 .map_err(|error| format!("connect: playback apply decode failed: {error}"))?;
             if runtime.is_queue_gate_closed() {
                 log::info!(
@@ -1106,7 +1107,7 @@ async fn handle_incoming_message(
             }
         }
         "playback.command.error" => {
-            let payload: PlaybackCommandErrorPayload = serde_json::from_value(payload)
+            let payload: ConnectPlaybackCommandErrorPayload = serde_json::from_value(payload)
                 .map_err(|error| format!("connect: command error decode failed: {error}"))?;
             log::warn!(
                 "connect: command failed command_id={} message={}",
@@ -1350,7 +1351,7 @@ fn should_sync_after_android_resume(app: &tauri::AppHandle) -> Result<bool, Stri
 
 async fn execute_playback_apply(
     app: tauri::AppHandle,
-    payload: PlaybackApplyPayload,
+    payload: ConnectPlaybackApplyPayload,
 ) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         let sessions = app.state::<ActiveSessionState>();
@@ -1459,33 +1460,6 @@ struct IncomingEnvelope {
     #[serde(rename = "type")]
     message_type: String,
     payload: Option<serde_json::Value>,
-}
-
-#[derive(Debug, Deserialize)]
-struct PresenceUpdatedPayload {
-    devices: Vec<ConnectDevicePresence>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PlaybackApplyPayload {
-    #[allow(dead_code)]
-    command_id: Option<String>,
-    op: String,
-    args: Option<PlaybackApplyArgs>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PlaybackApplyArgs {
-    position_ms: Option<u32>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct PlaybackCommandErrorPayload {
-    command_id: Option<String>,
-    message: String,
 }
 
 async fn login_connect_server(
