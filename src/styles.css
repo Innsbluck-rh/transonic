@@ -206,8 +206,15 @@
     --song-item-meta-color: var(--color-secondary-text);
   }
 
-  .song-item[data-selected='true'] {
-    @apply bg-primary-selected;
+  /* A selected row keeps its own background (hover, playing) under an accent tint,
+     with a bar in the title color at the left edge drawn above the tint. */
+  .song-item[data-selected='true']::after {
+    @apply bg-accent/30 pointer-events-none absolute inset-0 content-[''];
+  }
+
+  .song-item[data-selected='true']::before {
+    @apply pointer-events-none absolute inset-y-0 left-0 z-2 w-[3px] content-[''];
+    background: var(--song-item-title-color);
   }
 
   .song-item[data-current='true'] {
@@ -220,10 +227,6 @@
   @media (hover: hover) and (pointer: fine) {
     .song-item:hover {
       @apply bg-primary-hover;
-    }
-
-    .song-item[data-selected='true']:hover {
-      @apply bg-primary-selected;
     }
 
     .song-item[data-current='true']:hover {
@@ -241,10 +244,6 @@
 
   .song-item-meta {
     color: var(--song-item-meta-color);
-  }
-
-  .song-item[data-current='true'] .song-item-title {
-    @apply font-bold;
   }
 
   .home-surface-root {

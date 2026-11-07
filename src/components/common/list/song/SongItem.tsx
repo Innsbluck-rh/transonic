@@ -1,55 +1,61 @@
-import { Component, JSX, Match, Show, Switch } from 'solid-js';
+import { Component, Match, Show, Switch } from 'solid-js';
 import type { SongResponse } from '~/bindings';
-import { type SongItemConditions, songItemConditionAttrs } from '~/features/items/SongItemConditions';
 import type { MenuItem } from '~/features/menu/types';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { formatCompactDuration } from '~/utils/duration';
 
 export interface SongItemProps {
   song: SongResponse;
-  conditions?: SongItemConditions;
-  /** Whether to hide leading contents (index/playing/checkbox) */
-  noIndexContent?: boolean;
+  /**
+   * What the leading column shows: nothing (`hidden`, no column), `index` or ▶ while `playing`
+   * (`indexOrPlaying`, the default), or a checkbox reflecting `selected` (`selection`).
+   */
+  indexContentMode?: 'hidden' | 'indexOrPlaying' | 'selection';
   index?: number;
+  /** The playing look (background, text color, ▶ in place of the index). */
   playing?: boolean;
-  /** Shows a checkbox instead of index or playing icon; no checkbox while undefined. */
-  checked?: boolean;
-  withMenuButton?: boolean;
-  onMenuClick?: (event: MouseEvent) => void;
+  /** The selected look (tint, bar at the left edge). */
+  selected?: boolean;
   coverArt?: boolean;
   coverArtUrl?: string | null;
-  emphasizeTitle?: boolean;
+  /** When the title is bold; `playingOnly` by default. */
+  boldTitle?: 'always' | 'playingOnly' | 'never';
   playNext?: boolean;
-  menuItems?: MenuItem[];
+  withMenuButton?: boolean;
+  onMenuButtonClick?: (event: MouseEvent) => void;
+  contextMenuItems?: MenuItem[];
   onClick?: () => void;
-  ref?: (element: HTMLDivElement) => void;
-  children?: JSX.Element;
 }
 
 /**
  * @description Album/Queue/Search で共有する曲一行コンポーネント
  */
 const SongItem: Component<SongItemProps> = (props) => {
-  const menuHandlers = props.menuItems ? useContextMenu(props.menuItems) : {};
-
-  const conditions = (): SongItemConditions => props.conditions ?? { current: false, selected: false };
+  const menuHandlers = props.contextMenuItems ? useContextMenu(props.contextMenuItems) : {};
+  const boldTitle = () => {
+    const mode = props.boldTitle ?? 'playingOnly';
+    return mode === 'always' || (mode === 'playingOnly' && !!props.playing);
+  };
 
   return (
     <div
-      ref={props.ref}
       class={`song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2`}
       onClick={() => props.onClick?.()}
-      {...songItemConditionAttrs(conditions())}
+      // styles.css draws the playing and selected looks from these.
+      data-current={props.playing ? 'true' : undefined}
+      data-selected={props.selected ? 'true' : undefined}
       {...menuHandlers}
     >
-      {props.children}
-
-      <Show when={!props.noIndexContent} fallback={<div class='ml-4' />}>
+      <Show when={props.indexContentMode !== 'hidden'} fallback={<div class='ml-4' />}>
         <div class='flex w-13 flex-row items-center justify-center'>
           <Switch>
-            <Match when={props.checked !== undefined}>
-              <Show when={props.checked} fallback={<i class={'icon-[material-symbols--check-box-outline-blank] song-item-leading text-xl'} />}>
-                <i class={'icon-[material-symbols--check-box] song-item-leading text-xl'} />
+            <Match when={props.indexContentMode === 'selection'}>
+              {/* relative z-1: drawn in front of the selection tint (.song-item[data-selected]::after). */}
+              <Show
+                when={props.selected}
+                fallback={<i class={'icon-[material-symbols--check-box-outline-blank] song-item-leading relative z-1 text-xl'} />}
+              >
+                <i class={'icon-[material-symbols--check-box] song-item-leading relative z-1 text-xl'} />
               </Show>
             </Match>
             <Match when={props.playing}>
@@ -73,7 +79,7 @@ const SongItem: Component<SongItemProps> = (props) => {
           <Show when={props.playNext}>
             <i class='icon-[material-symbols--next-plan] text-secondary-text text-xs' />
           </Show>
-          <p class='song-item-title min-w-0 flex-1 truncate' classList={{ 'font-bold': props.emphasizeTitle }} title={props.song.title}>
+          <p class='song-item-title min-w-0 flex-1 truncate' classList={{ 'font-bold': boldTitle() }} title={props.song.title}>
             {props.song.title}
           </p>
         </div>
@@ -95,7 +101,7 @@ const SongItem: Component<SongItemProps> = (props) => {
           onPointerDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            props.onMenuClick?.(event);
+            props.onMenuButtonClick?.(event);
           }}
         >
           <i class='icon-[material-symbols--more-vert] text-lg' />

@@ -1,8 +1,8 @@
 import { Component, For } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
 import SongItem from '~/components/common/list/song/SongItem';
-import { resolveSongItemConditions } from '~/features/items/SongItemConditions';
 import { buildSongMenuItems } from '~/features/menu';
+import { isCurrentSong } from '~/features/playback/currentSong';
 import { usePlayback } from '~/features/playback/usePlayback';
 
 interface AlbumTrackListProps {
@@ -34,19 +34,12 @@ const AlbumTrackList: Component<AlbumTrackListProps> = (props) => {
               autoPlay: true,
             });
           };
-          const conditions = () =>
-            resolveSongItemConditions({
-              playbackStatus: playbackStatus(),
-              songId: song.id,
-            });
-
           return (
             <SongItem
               song={song}
-              conditions={conditions()}
-              playing={conditions().current}
+              playing={isCurrentSong({ playbackStatus: playbackStatus(), songId: song.id })}
               index={song.track ?? undefined}
-              menuItems={buildSongMenuItems(song)}
+              contextMenuItems={buildSongMenuItems(song)}
               onClick={onClickEntry}
             />
           );

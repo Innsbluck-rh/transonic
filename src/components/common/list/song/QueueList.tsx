@@ -3,9 +3,9 @@ import { commands, type SongResponse } from '~/bindings';
 import SongItem from '~/components/common/list/song/SongItem';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArtMap } from '~/features/albums/useCoverArtMap';
-import { resolveSongItemConditions } from '~/features/items/SongItemConditions';
 import { buildQueueItemMenuItems, buildQueueSelectionMenuItems, showContextMenu } from '~/features/menu';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
+import { isCurrentSong } from '~/features/playback/currentSong';
 import { hasPlaybackCommandError } from '~/features/playback/service';
 import { usePlayback } from '~/features/playback/usePlayback';
 import {
@@ -235,45 +235,38 @@ const QueueList: Component<QueueListProps> = (props) => {
             observer.observe(element);
           };
 
-          const conditions = () =>
-            resolveSongItemConditions({
-              playbackStatus: playbackStatus(),
-              songId: entry.id,
-              queueIndex: i(),
-            });
+          const playing = () => isCurrentSong({ playbackStatus: playbackStatus(), songId: entry.id, queueIndex: i() });
 
           const menuItems = buildQueueItemMenuItems(entry, i, navigate);
 
           return (
-            <div class='border-secondary-border border-b' data-queue-index={i()}>
+            <div ref={setItemElement} class='border-secondary-border relative border-b' data-queue-index={i()}>
               <SongItem
-                ref={setItemElement}
                 song={entry}
-                playing={conditions().current}
+                playing={playing()}
                 index={i() + 1}
-                checked={isQueueSelecting() ? isQueueIndexSelected(i()) : undefined}
+                indexContentMode={isQueueSelecting() ? 'selection' : 'indexOrPlaying'}
+                selected={isQueueIndexSelected(i())}
                 coverArt
                 coverArtUrl={coverArtMap.src(coverArtId())}
-                emphasizeTitle
+                boldTitle='always'
                 playNext={isPlayNextQueueIndex(i())}
-                conditions={conditions()}
                 // SP opens the row menu from the ⋮ button; a long-press on the row lifts it instead.
-                menuItems={isSP() ? undefined : menuItems}
+                contextMenuItems={isSP() ? undefined : menuItems}
                 withMenuButton={isSP()}
-                onMenuClick={(event) => showContextMenu(event, menuItems)}
-              >
-                <Show when={dropIndicatorEdge()}>
-                  {(edge) => (
-                    <div
-                      class='bg-accent pointer-events-none absolute right-0 left-0 z-20 h-0.5'
-                      classList={{
-                        'top-0': edge() === 'top',
-                        'bottom-0': edge() === 'bottom',
-                      }}
-                    />
-                  )}
-                </Show>
-              </SongItem>
+                onMenuButtonClick={(event) => showContextMenu(event, menuItems)}
+              />
+              <Show when={dropIndicatorEdge()}>
+                {(edge) => (
+                  <div
+                    class='bg-accent pointer-events-none absolute right-0 left-0 z-20 h-0.5'
+                    classList={{
+                      'top-0': edge() === 'top',
+                      'bottom-0': edge() === 'bottom',
+                    }}
+                  />
+                )}
+              </Show>
             </div>
           );
         }}
