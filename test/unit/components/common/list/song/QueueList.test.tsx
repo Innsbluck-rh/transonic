@@ -1,6 +1,7 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import QueueList from '~/components/common/list/song/QueueList';
+import { LONG_PRESS_MS } from '~/components/common/list/song/queueListGestures';
 import { setPlaybackStore } from '~/stores/PlaybackStore';
 import { clearQueueSelection, queueSelection, toggleQueueSelection } from '~/stores/QueueSelectionStore';
 import { resetConnectStore, setSharedPlayback, sharedPlayback } from '~test/fixtures/connect';
@@ -143,6 +144,30 @@ describe('QueueList', () => {
     click(menuButton(3));
     expect(menuMocks.showContextMenu).toHaveBeenCalledTimes(1);
     expect(queueSelection().indices).toEqual([0, 1]);
+  });
+
+  it('on SP a long-press only turns the row on, and the click that follows it does nothing', () => {
+    vi.useFakeTimers();
+    try {
+      platform.current = 'android';
+      renderQueue();
+      const longPress = (index: number) => {
+        const event = new MouseEvent('pointerdown', { bubbles: true, clientX: 10, clientY: 10 });
+        Object.defineProperties(event, { pointerId: { value: index + 1 }, pointerType: { value: 'touch' } });
+        row(index).dispatchEvent(event);
+        vi.advanceTimersByTime(LONG_PRESS_MS);
+        click(row(index));
+      };
+
+      longPress(1);
+      expect(queueSelection().indices).toEqual([1]);
+
+      longPress(3);
+      expect(queueSelection().indices).toEqual([1, 3]);
+      expect(bindingMocks.playbackPlayQueueIndex).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('on PC has no ⋮ button', () => {
