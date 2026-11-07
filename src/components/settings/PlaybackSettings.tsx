@@ -3,8 +3,8 @@ import { createEffect, createMemo, createResource, For, Show } from 'solid-js';
 import { commands, type PlaybackOutputDevice, type PlaybackTranscodingCodec } from '~/bindings';
 import { setPlaybackSetting, setPlaybackSettings, settingsStore } from '~/features/settings/service';
 import { sessionStore } from '~/stores/SessionStore';
-import Heading3 from '../common/text/Heading3';
 import SettingSection from './SettingSection';
+import SettingSubSection from './SettingSubSection';
 
 const TRANSCODING_CODEC_LABELS: Record<PlaybackTranscodingCodec, string> = {
   auto: 'Auto',
@@ -98,8 +98,7 @@ function PlaybackSettings() {
   return (
     <SettingSection title='Playback' sectionId='playback'>
       <Show when={isWindows && sessionStore.playbackCapabilities.outputDeviceSelection}>
-        <form class='flex flex-col gap-3'>
-          <Heading3 class='mb-3'>Output Device</Heading3>
+        <SettingSubSection title='Output Device'>
           <label class='flex items-center justify-between gap-4'>
             <span>Use Custom Output</span>
             <input
@@ -137,10 +136,9 @@ function PlaybackSettings() {
               </select>
             </label>
           </Show>
-        </form>
+        </SettingSubSection>
       </Show>
-      <form class='flex flex-col gap-1'>
-        <Heading3 class='mb-3'>Gapless Playback</Heading3>
+      <SettingSubSection title='Gapless Playback'>
         <Show when={sessionStore.playbackCapabilities.gaplessPlayback}>
           <label class='flex items-center justify-between gap-4'>
             <span>Gapless Playback</span>
@@ -151,43 +149,44 @@ function PlaybackSettings() {
             />
           </label>
         </Show>
-      </form>
-      <form class='mt-2 flex flex-col gap-1'>
-        <Heading3 class='mb-3'>Stream Mode</Heading3>
-        <label for='raw_stream' class='hover:bg-primary-hover has-checked:bg-primary-hover flex items-center gap-3 rounded-md p-2'>
-          <input
-            name='stream_mode'
-            type='radio'
-            id='raw_stream'
-            checked={settingsStore.playback.streamMode === 'raw'}
-            onChange={() => setPlaybackSetting('streamMode', 'raw')}
-          />
-          <i class='icon-[material-symbols--audio-file-rounded] text-2xl' />
-          <div class='flex flex-col'>
-            <p class='font-bold'>Raw Stream</p>
-            <p class='text-secondary-text'>Stream raw audio files.</p>
-          </div>
-        </label>
-        <label for='transcoding_stream' class='hover:bg-primary-hover has-checked:bg-primary-hover flex items-center gap-3 rounded-md p-2'>
-          <input
-            name='stream_mode'
-            type='radio'
-            id='transcoding_stream'
-            checked={settingsStore.playback.streamMode === 'transcoding'}
-            onChange={() => setPlaybackSetting('streamMode', 'transcoding')}
-          />
-          <i class='icon-[material-symbols--replace-audio-rounded] text-2xl' />
-          <div class='flex flex-col'>
-            <p class='font-bold'>Transcoding Stream</p>
-            <p class='text-secondary-text'>Stream audio files via transcoding.</p>
-          </div>
-        </label>
-      </form>
+      </SettingSubSection>
+      <SettingSubSection title='Stream Mode'>
+        <div class='flex flex-col gap-1'>
+          <label for='raw_stream' class='hover:bg-primary-hover has-checked:bg-primary-hover flex items-center gap-3 rounded-md p-2'>
+            <input
+              name='stream_mode'
+              type='radio'
+              id='raw_stream'
+              checked={settingsStore.playback.streamMode === 'raw'}
+              onChange={() => setPlaybackSetting('streamMode', 'raw')}
+            />
+            <i class='icon-[material-symbols--audio-file-rounded] text-2xl' />
+            <div class='flex flex-col'>
+              <p class='font-bold'>Raw Stream</p>
+              <p class='text-secondary-text'>Stream raw audio files.</p>
+            </div>
+          </label>
+          <label for='transcoding_stream' class='hover:bg-primary-hover has-checked:bg-primary-hover flex items-center gap-3 rounded-md p-2'>
+            <input
+              name='stream_mode'
+              type='radio'
+              id='transcoding_stream'
+              checked={settingsStore.playback.streamMode === 'transcoding'}
+              onChange={() => setPlaybackSetting('streamMode', 'transcoding')}
+            />
+            <i class='icon-[material-symbols--replace-audio-rounded] text-2xl' />
+            <div class='flex flex-col'>
+              <p class='font-bold'>Transcoding Stream</p>
+              <p class='text-secondary-text'>Stream audio files via transcoding.</p>
+            </div>
+          </label>
+        </div>
+      </SettingSubSection>
 
-      <Heading3 class='mt-1'>Raw Stream</Heading3>
-      <form class='flex flex-col gap-3'>
-        <Show when={isAndroid} fallback={<p class='text-secondary-text italic'>[ nothing to show. ]</p>}>
-          <label class='flex items-center justify-between gap-4 py-1'>
+      {/* currently meteredNetworkTranscodingEnabled is only available in Android so then */}
+      <Show when={isAndroid}>
+        <SettingSubSection title='Raw Stream'>
+          <label class='flex items-center justify-between gap-4'>
             <span>Use Transcoding Stream on metered networks</span>
             <input
               type='checkbox'
@@ -195,11 +194,10 @@ function PlaybackSettings() {
               onChange={(event) => setPlaybackSetting('meteredNetworkTranscodingEnabled', event.currentTarget.checked)}
             />
           </label>
-        </Show>
-      </form>
+        </SettingSubSection>
+      </Show>
 
-      <Heading3 class='mt-1'>Transcoding Stream</Heading3>
-      <form class='flex flex-col gap-3'>
+      <SettingSubSection title='Transcoding Stream'>
         <label class='flex items-center justify-between gap-4'>
           <span>Stream Bitrate Limit</span>
           <select
@@ -232,7 +230,7 @@ function PlaybackSettings() {
             <For each={transcodingCodecOptions()}>{(codec) => <option value={codec}>{TRANSCODING_CODEC_LABELS[codec]}</option>}</For>
           </select>
         </label>
-      </form>
+      </SettingSubSection>
     </SettingSection>
   );
 }

@@ -32,9 +32,18 @@ const HorizontalAlbumItem: Component<HorizontalAlbumItemProps> = (props) => {
       }}
       {...contextMenuProps}
     >
-      <div class='size-14 overflow-hidden'>
-        <Show when={src()} fallback={<div class='size-full' />}>
-          {(assetUrl) => <img src={assetUrl()} class='size-full object-cover' />}
+      <div class='bg-primary-surface border-secondary-border size-14 overflow-hidden border-r'>
+        <Show when={!loading()} fallback={<div class='size-full' />}>
+          <Show
+            when={src()}
+            fallback={
+              <div class='flex size-full items-center justify-center'>
+                <p class='text-secondary-text text-center text-[10px] font-bold'>no img</p>
+              </div>
+            }
+          >
+            {(assetUrl) => <img src={assetUrl()} class='size-full object-cover' />}
+          </Show>
         </Show>
       </div>
 

@@ -27,17 +27,17 @@ export const lightTheme: ColorTheme = {
   colorScheme: 'light',
   variables: {
     '--theme-color-primary-bg': 'var(--color-zinc-200)',
-    '--theme-color-primary-plane': 'var(--color-zinc-50)',
+    '--theme-color-primary-plane': 'var(--color-zinc-100)',
     '--theme-color-primary-surface': 'var(--color-gray-100)',
     '--theme-color-primary-selected': 'var(--color-zinc-200)',
     '--theme-color-primary-on-playing': 'var(--color-zinc-800)',
     '--theme-color-primary-hover': 'var(--color-gray-200)',
     '--theme-color-primary-border': 'rgb(0 0 0 / 0.25)',
     '--theme-color-secondary-border': 'rgb(0 0 0 / 0.1)',
-    '--theme-color-primary-text': 'var(--color-gray-700)',
+    '--theme-color-primary-text': 'var(--color-gray-600)',
     '--theme-color-secondary-text': 'var(--color-gray-500)',
     '--theme-color-sp-nav-space': 'var(--color-zinc-400)',
-    '--theme-color-accent': 'var(--color-sky-600)',
+    '--theme-color-accent': 'var(--color-cyan-600)',
   },
 };
 

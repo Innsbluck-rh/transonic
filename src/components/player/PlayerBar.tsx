@@ -70,7 +70,7 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
     return isInterrupted() ? `${artist} ${playbackInterruptLabel()}` : artist;
   });
 
-  const { src: coverArt } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.lg, {
+  const { src: coverArt, loading: coverArtLoading } = useCoverArt(() => currentEntry()?.coverArtId, CoverArtSizes.lg, {
     cachedFallbackSizes: [CoverArtSizes.lg],
   });
   const restAreaClass = createMemo(() => props.restAreaProps?.class);
@@ -125,21 +125,30 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
           >
             <div class='relative mr-4.5 aspect-square h-12 w-auto'>
               <Show
-                when={coverArt()}
+                when={!coverArtLoading()}
                 fallback={
                   <div class='border-secondary-border absolute inset-0 flex size-full items-center justify-center overflow-hidden rounded-sm border object-center'>
                     <LoadCircle />
                   </div>
                 }
               >
-                {(assetUrl) => (
-                  <img
-                    class='absolute inset-0 size-full overflow-hidden rounded-sm object-cover object-center'
-                    src={assetUrl()}
-                    loading='lazy'
-                    decoding='async'
-                  />
-                )}
+                <Show
+                  when={coverArt()}
+                  fallback={
+                    <div class='border-secondary-border bg-primary-surface absolute inset-0 flex size-full items-center justify-center overflow-hidden rounded-sm border'>
+                      <p class='text-secondary-text text-center text-[10px] font-bold'>no img</p>
+                    </div>
+                  }
+                >
+                  {(assetUrl) => (
+                    <img
+                      class='absolute inset-0 size-full overflow-hidden rounded-sm object-cover object-center'
+                      src={assetUrl()}
+                      loading='lazy'
+                      decoding='async'
+                    />
+                  )}
+                </Show>
               </Show>
             </div>
             <div class='flex min-w-0 flex-1 flex-col gap-1'>

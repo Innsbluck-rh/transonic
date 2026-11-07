@@ -167,6 +167,11 @@
   optgroup {
     @apply bg-primary-plane text-primary-text;
   }
+
+  input {
+    accent-color: var(--color-accent);
+  }
+
   input:not([type]),
   input[type='email'],
   input[type='number'],
@@ -176,14 +181,12 @@
   input[type='text'],
   input[type='url'] {
     @apply border-primary-border bg-primary-surface text-primary-text min-w-0 rounded border px-3 py-2 text-sm;
-    accent-color: var(--color-accent);
     caret-color: var(--color-accent);
     color-scheme: inherit;
   }
 
   input[type='checkbox'] {
     @apply accent-accent h-4 w-4 border border-current;
-    accent-color: var(--color-accent);
   }
 
   button {

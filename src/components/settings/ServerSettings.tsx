@@ -3,8 +3,8 @@ import { createSignal, Show } from 'solid-js';
 import { commands } from '~/bindings';
 import { loadBootstrapToStore } from '~/features/session/service';
 import { sessionStore } from '~/stores/SessionStore';
-import Heading3 from '../common/text/Heading3';
 import SettingSection from './SettingSection';
+import SettingSubSection from './SettingSubSection';
 
 function ServerSettings() {
   const navigate = useNavigate();
@@ -80,44 +80,46 @@ function ServerSettings() {
 
   return (
     <SettingSection title='Server'>
-      <Heading3>Server</Heading3>
-      <Show when={activeSession()}>
-        {(session) => (
-          <div class='flex flex-col gap-3'>
-            <div class='flex gap-3'>
-              <i class='icon-[material-symbols--dns] text-xl' />
-              <div class='flex flex-col'>
-                <p class='text-sm font-bold'>{session().normalizedServerUrl}</p>
-                <p class='text-secondary-text text-xs'>
-                  API {session().apiVersion}
-                  <Show when={session().serverType}>{(serverType) => <> · {serverType()}</>}</Show>
-                  <Show when={session().serverVersion}>{(serverVersion) => <> {serverVersion()}</>}</Show>
-                </p>
+      <SettingSubSection title='Server'>
+        <Show when={activeSession()}>
+          {(session) => (
+            <>
+              <div class='flex gap-3'>
+                <i class='icon-[material-symbols--dns] text-xl' />
+                <div class='flex flex-col'>
+                  <p class='text-sm font-bold'>{session().normalizedServerUrl}</p>
+                  <p class='text-secondary-text text-xs'>
+                    API {session().apiVersion}
+                    <Show when={session().serverType}>{(serverType) => <> · {serverType()}</>}</Show>
+                    <Show when={session().serverVersion}>{(serverVersion) => <> {serverVersion()}</>}</Show>
+                  </p>
+                </div>
               </div>
-            </div>
-            <div class='flex items-center gap-3'>
-              <i class='icon-[material-symbols--account-circle] text-xl' />
-              <p>{session().username}</p>
-            </div>
-            <button type='button' class='flex w-fit items-center gap-1 text-red-500' onClick={() => setLogoutConfirm(true)}>
-              <i class='icon-[material-symbols--logout]' />
-              <span>Logout</span>
-            </button>
-          </div>
-        )}
-      </Show>
+              <div class='flex items-center gap-3'>
+                <i class='icon-[material-symbols--account-circle] text-xl' />
+                <p>{session().username}</p>
+              </div>
+              <button type='button' class='mt-2 flex w-fit items-center gap-1 text-red-500' onClick={() => setLogoutConfirm(true)}>
+                <i class='icon-[material-symbols--logout]' />
+                <span>Logout</span>
+              </button>
+            </>
+          )}
+        </Show>
+      </SettingSubSection>
 
-      <Heading3 class='mt-3'>Backup</Heading3>
-      <div class='flex flex-wrap gap-2'>
-        <button type='button' disabled={backupBusy()} onClick={exportBackup}>
-          Export Backup
-        </button>
-        <button type='button' disabled={backupBusy()} onClick={importBackup}>
-          Import Backup
-        </button>
-      </div>
-      <p class='text-secondary-text text-xs leading-5'>Backup includes server credentials. Keep the exported JSON private.</p>
-      <Show when={backupMessage()}>{(message) => <p class='text-secondary-text text-xs leading-5'>{message()}</p>}</Show>
+      <SettingSubSection title='Backup'>
+        <div class='flex flex-wrap gap-2'>
+          <button type='button' disabled={backupBusy()} onClick={exportBackup}>
+            Export Backup
+          </button>
+          <button type='button' disabled={backupBusy()} onClick={importBackup}>
+            Import Backup
+          </button>
+        </div>
+        <p class='text-secondary-text text-xs leading-5'>Backup includes server credentials. Keep the exported JSON private.</p>
+        <Show when={backupMessage()}>{(message) => <p class='text-secondary-text text-xs leading-5'>{message()}</p>}</Show>
+      </SettingSubSection>
 
       <Show when={logoutConfirm()}>
         <div class='fixed inset-0 z-100 flex items-center justify-center bg-black/45 p-4' role='presentation'>

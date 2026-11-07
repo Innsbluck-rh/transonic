@@ -24,6 +24,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
   const { playAlbum, insertAfterCurrent, appendToQueue } = usePlayback();
 
   const [album, setAlbum] = createSignal<AlbumSongsResponse | null>(null);
+  const [coverArtPortrait, setCoverArtPortrait] = createSignal(false);
   const contextMenuProps = createMemo(() => {
     const albumId = album()?.id;
     if (!albumId) return {};
@@ -100,7 +101,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
         {/* fit cover div in square space */}
         <div class='sp:w-52 sp:h-52 flex h-48 w-48 items-center justify-center'>
           <div
-            class='group border-secondary-border sp:w-52 pointer-events-auto relative z-10 w-48 border shadow-lg'
+            class='group border-secondary-border bg-primary-surface ripple pointer-events-auto relative z-10 border shadow-lg'
             onClick={() => {
               const coverArtId = album()?.coverArtId;
               if (coverArtId) openAlbumArtOverlayDialog(coverArtId);
@@ -108,29 +109,50 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
             {...contextMenuProps()}
           >
             <Show
-              when={coverArt()}
+              when={!coverArtLoading()}
               fallback={
                 <div class='sp:w-52 flex aspect-square w-48 items-center justify-center'>
                   <LoadCircle />
                 </div>
               }
             >
-              {(assetUrl) => <img class='sp:w-52 w-48 cursor-pointer hover:brightness-75' src={assetUrl()} loading='lazy' decoding='async' />}
+              <Show
+                when={coverArt()}
+                fallback={
+                  <div class='sp:w-52 flex aspect-square w-48 items-center justify-center hover:brightness-75'>
+                    <p class='text-secondary-text text-base font-bold'>no image</p>
+                  </div>
+                }
+              >
+                {(assetUrl) => (
+                  <img
+                    class={`${coverArtPortrait() ? 'sp:h-52 h-48' : 'sp:w-52 w-48'} block cursor-pointer hover:brightness-75`}
+                    onLoad={(e) => setCoverArtPortrait(e.currentTarget.naturalHeight > e.currentTarget.naturalWidth)}
+                    src={assetUrl()}
+                    loading='lazy'
+                    decoding='async'
+                  />
+                )}
+              </Show>
             </Show>
           </div>
         </div>
 
         <div class='sp:mt-6 sp:h-auto sp:min-w-auto sp:flex-initial sp:px-0 flex h-full w-full min-w-0 flex-1 flex-col items-start px-5'>
           <MarqueeParagraph
+            onClick={() => {
+              const albumId = album()?.id;
+              if (albumId) playAlbum(albumId);
+            }}
+            class='sp:mb-0 sp:text-2xl hover:text-accent ripple mb-1 w-full cursor-pointer text-3xl font-black tracking-tighter'
             text={album() ? orUnknown(album()?.name) : ''}
-            class='archivo sp:mb-0 sp:text-2xl mb-1 w-full text-3xl font-black tracking-tighter'
           />
           <MarqueeParagraph
             onClick={() => {
               const artistId = album()?.artistId;
               if (artistId) navigate(resolveArtistRoute(artistId));
             }}
-            class='archivo text-secondary-text hover:text-accent mt-0.5 cursor-pointer'
+            class='text-secondary-text hover:text-accent ripple mt-0.5 cursor-pointer'
             text={album() ? orUnknown(album()?.artist) : ''}
           />
           <Show when={infoText()}>
@@ -140,7 +162,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           <Show when={!isSP()} fallback={<div class='mt-2' />}>
             <div class='mt-auto mb-1 flex flex-row flex-wrap gap-3'>
               <button
-                class='button-borderless text-accent bg-accent/10 hover:bg-accent/20 flex items-center gap-1.5'
+                class='button text-accent hover:bg-accent/25 bg-accent/10 border-secondary-border flex items-center gap-1.5 border shadow-sm'
                 onClick={() => {
                   const albumId = album()?.id;
                   if (albumId) playAlbum(albumId);
@@ -149,7 +171,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
                 <i class='icon-[material-symbols--play-arrow] text-accent text-lg' />
                 play
               </button>
-              <div class='mt-auto flex flex-row gap-1'>
+              <div class='flex flex-row gap-1'>
                 <button
                   class='button-borderless text-secondary-text flex items-center gap-1.5'
                   onClick={() => {
