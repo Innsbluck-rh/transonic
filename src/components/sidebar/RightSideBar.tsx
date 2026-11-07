@@ -59,16 +59,19 @@ const RightSideBar = () => {
             <p class='text-secondary-text group-hover:text-accent px-1 text-center text-xs font-bold tracking-tight'>Clear</p>
           </div>
         </div>
-        <div
-          ref={(element) => {
-            setScrollContainerRef(element);
-            setScrollContainer(element);
-          }}
-          class='flex flex-1 flex-col overflow-y-auto pb-2'
-        >
-          <QueueList queue={queue()} scrollContainer={scrollContainer()} itemRef={setItemRef} />
+        <div class='relative flex min-h-0 flex-1 flex-col'>
+          <div
+            ref={(element) => {
+              setScrollContainerRef(element);
+              setScrollContainer(element);
+            }}
+            class='flex flex-1 flex-col overflow-y-auto pb-2'
+          >
+            <QueueList queue={queue()} scrollContainer={scrollContainer()} itemRef={setItemRef} />
+            <QueueSelectionToolbar placeholder />
+          </div>
+          <QueueSelectionToolbar />
         </div>
-        <QueueSelectionToolbar />
       </div>
       {/*<div class='bg-primary-border h-px w-full' />
       <ConnectSidebarSection />*/}

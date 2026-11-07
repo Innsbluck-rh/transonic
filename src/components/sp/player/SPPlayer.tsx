@@ -157,16 +157,19 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
       <div class='border-primary-border bg-primary-bg flex flex-row items-center border-b px-3 pt-2 pb-1.5'>
         <Heading3 class='text-secondary-text'>queue</Heading3>
       </div>
-      <div
-        ref={(element) => {
-          setScrollContainerRef(element);
-          setScrollContainer(element);
-        }}
-        class='bg-primary-bg flex flex-1 flex-col overflow-y-auto pb-3'
-      >
-        <QueueList queue={queue()} scrollContainer={scrollContainer()} itemRef={setItemRef} />
+      <div class='relative flex min-h-0 flex-1 flex-col'>
+        <div
+          ref={(element) => {
+            setScrollContainerRef(element);
+            setScrollContainer(element);
+          }}
+          class='bg-primary-bg flex flex-1 flex-col overflow-y-auto pb-2'
+        >
+          <QueueList queue={queue()} scrollContainer={scrollContainer()} itemRef={setItemRef} />
+          <QueueSelectionToolbar placeholder />
+        </div>
+        <QueueSelectionToolbar />
       </div>
-      <QueueSelectionToolbar />
     </div>
   );
 };
