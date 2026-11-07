@@ -37,7 +37,7 @@ export const lightTheme: ColorTheme = {
     '--theme-color-primary-text': 'var(--color-gray-700)',
     '--theme-color-secondary-text': 'var(--color-gray-500)',
     '--theme-color-sp-nav-space': 'var(--color-zinc-400)',
-    '--theme-color-accent': 'var(--color-sky-600)',
+    '--theme-color-accent': 'var(--color-cyan-600)',
   },
 };
 
