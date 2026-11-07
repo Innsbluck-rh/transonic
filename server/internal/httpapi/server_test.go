@@ -17,6 +17,7 @@ import (
 	"github.com/Innsbluck-rh/transonic/server/internal/opensubsonic"
 	"github.com/Innsbluck-rh/transonic/server/internal/realtime"
 	"github.com/Innsbluck-rh/transonic/server/internal/store"
+	"github.com/Innsbluck-rh/transonic/server/internal/version"
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 )
@@ -110,7 +111,7 @@ func TestWebsocketAcceptsLargePlaybackQueueCommand(t *testing.T) {
 	command := realtime.Envelope{
 		ID:              "cmd-large",
 		Type:            realtime.TypePlaybackCommandRequest,
-		ProtocolVersion: 2,
+		ProtocolVersion: version.ProtocolVersion,
 		Payload:         payload,
 	}
 	rawCommand, err := json.Marshal(command)

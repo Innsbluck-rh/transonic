@@ -54,6 +54,8 @@ pub struct ConnectStateUpdated {
     pub shared_playback: Option<ConnectSharedPlaybackState>,
 }
 
+/// One device of the `presence.updated` payload.
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectDevicePresence {
@@ -105,6 +107,8 @@ impl From<PlaybackStatus> for ConnectPlaybackState {
     }
 }
 
+/// `playback.shared.snapshot` / `playback.shared.updated` payload.
+#[typeshare]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct ConnectSharedPlaybackState {
@@ -114,6 +118,40 @@ pub struct ConnectSharedPlaybackState {
     pub updated_at: String,
     pub updated_by_device_id: Option<String>,
     pub update_reason: Option<String>,
+}
+
+/// `presence.updated` payload.
+#[typeshare]
+#[derive(Debug, Deserialize)]
+pub struct ConnectPresenceUpdatedPayload {
+    pub devices: Vec<ConnectDevicePresence>,
+}
+
+/// `playback.apply` payload: a playback op for the active device to run.
+#[typeshare]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectPlaybackApplyPayload {
+    #[allow(dead_code)]
+    pub command_id: Option<String>,
+    pub op: String,
+    pub args: Option<ConnectPlaybackApplyArgs>,
+}
+
+#[typeshare]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectPlaybackApplyArgs {
+    pub position_ms: Option<u32>,
+}
+
+/// `playback.command.error` payload.
+#[typeshare]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectPlaybackCommandErrorPayload {
+    pub command_id: Option<String>,
+    pub message: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, specta::Type)]

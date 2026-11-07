@@ -87,7 +87,7 @@ export function setConnectAvailable(devices: ConnectDevicePresence[], state: Con
     status: 'available',
     message: null,
     version: '0.1.0',
-    protocolVersion: 2,
+    protocolVersion: 3,
     capabilities: {
       presence: true,
       sharedQueue: true,

@@ -3,6 +3,25 @@ package realtime
 
 import "encoding/json"
 
+// One device of the `presence.updated` payload.
+type ConnectDevicePresence struct {
+	DeviceID    string `json:"deviceId"`
+	DisplayName string `json:"displayName"`
+	Platform    string `json:"platform"`
+	AppVersion  string `json:"appVersion"`
+	LastSeenAt  string `json:"lastSeenAt"`
+	Online      bool   `json:"online"`
+}
+type ConnectPlaybackApplyArgs struct {
+	PositionMs *int64 `json:"positionMs,omitempty"`
+}
+
+// `playback.apply` payload: a playback op for the active device to run.
+type ConnectPlaybackApplyPayload struct {
+	CommandID *string                   `json:"commandId,omitempty"`
+	Op        string                    `json:"op"`
+	Args      *ConnectPlaybackApplyArgs `json:"args,omitempty"`
+}
 type PlayingState string
 
 const (
@@ -48,4 +67,25 @@ type ConnectPlaybackCommand struct {
 	PositionMs     *int64                `json:"positionMs,omitempty"`
 	TargetDeviceID *string               `json:"targetDeviceId,omitempty"`
 	State          *ConnectPlaybackState `json:"state,omitempty"`
+}
+
+// `playback.command.error` payload.
+type ConnectPlaybackCommandErrorPayload struct {
+	CommandID *string `json:"commandId,omitempty"`
+	Message   string  `json:"message"`
+}
+
+// `presence.updated` payload.
+type ConnectPresenceUpdatedPayload struct {
+	Devices []ConnectDevicePresence `json:"devices"`
+}
+
+// `playback.shared.snapshot` / `playback.shared.updated` payload.
+type ConnectSharedPlaybackState struct {
+	Seq               int64                `json:"seq"`
+	ActiveDeviceID    *string              `json:"activeDeviceId,omitempty"`
+	State             ConnectPlaybackState `json:"state"`
+	UpdatedAt         string               `json:"updatedAt"`
+	UpdatedByDeviceID *string              `json:"updatedByDeviceId,omitempty"`
+	UpdateReason      *string              `json:"updateReason,omitempty"`
 }
