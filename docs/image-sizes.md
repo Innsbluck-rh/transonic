@@ -43,7 +43,7 @@ a width breakpoint).
 | `ConnectQueueResolveDialog` (server and local rows) | current entry `coverArtId` of each queue | `sm` 48 | `lg`, `md` | 32 × 32 |
 | `AlbumGridItem` in `AlbumGrid` | album `coverArtId` | `md` 224 | `lg` | grid cell, min 112 wide (SP) / 140 wide (PC), grows to fill the row |
 | `HorizontalAlbumItem` (home, recently played) | album `coverArtId` | `md` 224 | `lg` | 56 × 56 (`size-14`), `md:` 48 × 48, `lg:` 56 × 56 |
-| Album page (`routes/browse/album.tsx`) | album `coverArtId` | `lg` 512 | — | 208 wide (`w-52`), `lg:` 168 (`w-42`) |
+| Album page (`routes/browse/album.tsx`) | album `coverArtId` | `lg` 512 | — | fits inside 192 × 192, `sp:` 208 × 208, aspect ratio kept: longer side fixed to 192 (`w-48` or `h-48`, chosen on load), `sp:` 208 |
 | `AlbumArtOverlayDialog` (opened from the album page artwork) | album `coverArtId` | `full` (original) | — | box 50% × 50% of the content area, `sp:` 90% × 90%; the art fits inside it (never enlarged). ≈ 0.9 × screen width on a portrait phone (≈ 350 on a 390-wide screen) |
 | Artist page header (`routes/browse/artist.tsx`) | external artist image URL if any (`getArtistInfo2` large → medium → small, then `artistImageUrl`); otherwise artist `coverArtId` | external: as served (no size control); cover art: `lg` 512 | — | full width × 168 (`h-42`), `object-cover` |
 | `PlayerBar` (desktop) | current entry `coverArtId` | `lg` 512 | `lg` (no effect) | one image used twice: background full width × 92, thumbnail 48 × 48 |
