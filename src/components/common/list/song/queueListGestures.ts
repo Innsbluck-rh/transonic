@@ -243,13 +243,32 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
         .filter((row) => row.bottom > top && row.top <= bottom);
       options.selectRect(covered.length ? { from: covered[0].index, to: covered[covered.length - 1].index } : null, anchor);
     };
-    update(current.clientX, current.clientY);
+    // The rectangle stays inside the visible list, but the list scrolls under it
+    // while the pointer is near or past its top or bottom edge, as for a drag.
+    let clientX = current.clientX;
+    let clientY = current.clientY;
+    let frame = 0;
+    const tick = () => {
+      autoScroll(clientY);
+      update(clientX, clientY);
+      frame = requestAnimationFrame(tick);
+    };
+    const stop = () => {
+      cancelAnimationFrame(frame);
+      setRect(null);
+    };
+    update(clientX, clientY);
+    frame = requestAnimationFrame(tick);
 
     track(event, true, {
-      move: (next) => update(next.clientX, next.clientY),
-      up: () => setRect(null),
+      move: (next) => {
+        clientX = next.clientX;
+        clientY = next.clientY;
+        update(clientX, clientY);
+      },
+      up: stop,
       // Leaving the window ends the rectangle; what it selected stays selected.
-      cancel: () => setRect(null),
+      cancel: stop,
     });
   };
 
