@@ -387,6 +387,7 @@ impl PlaybackController {
         clamp_play_next_queue_len(&mut self.status);
         self.status.current_position_ms = current_position_ms;
         self.status.current_song_id = next_song_id;
+        self.record_queue_change(&[]);
         self.status.playing_state = if self.status.queue.is_empty() {
             PlayingState::Idle
         } else {
@@ -505,6 +506,7 @@ impl PlaybackController {
         self.status.play_next_queue_len = 0;
         self.status.current_position_ms = 0;
         self.status.current_song_id = next_song_id;
+        self.record_queue_change(&[]);
         self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
@@ -566,6 +568,7 @@ impl PlaybackController {
         self.status.play_next_queue_len = 0;
         self.status.current_position_ms = 0;
         self.status.current_song_id = None;
+        self.record_queue_change(&[]);
         self.status.playing_state = PlayingState::Idle;
         self.status.playback_error = None;
         self.status.interrupt_reason = None;
@@ -642,6 +645,8 @@ impl PlaybackController {
             clamp_play_next_queue_len(&mut self.status);
             self.status.current_song_id =
                 current_song_id(&self.status.queue, self.status.current_index);
+            self.status.queue_revision = state.queue_revision;
+            self.status.queue_index_map = state.queue_index_map;
             self.status.playing_state = desired_playing_state;
             self.status.playback_error = None;
             self.status.interrupt_reason = None;
@@ -670,6 +675,8 @@ impl PlaybackController {
         self.status.current_position_ms = state.current_position_ms;
         self.status.current_song_id =
             current_song_id(&self.status.queue, self.status.current_index);
+        self.status.queue_revision = state.queue_revision;
+        self.status.queue_index_map = state.queue_index_map;
         self.status.playback_error = None;
         self.status.interrupt_reason = None;
         self.status.pending_seek_position_ms = None;
@@ -745,6 +752,7 @@ impl PlaybackController {
             clamp_play_next_queue_len(&mut self.status);
             self.status.current_song_id = next_song_id;
             self.status.playing_state = PlayingState::Stopped;
+            self.record_queue_change(&[]);
             log::info!(
                 "controller.insert_after_current: initialized empty queue with {} songs",
                 self.status.queue.len()
@@ -753,9 +761,19 @@ impl PlaybackController {
             clamp_play_next_queue_len(&mut self.status);
             let insert_pos = play_next_end_index(&self.status);
             let count = songs.len();
+            let index_map: Vec<_> = (0..self.status.queue.len())
+                .map(|index| {
+                    Some(if index < insert_pos {
+                        index
+                    } else {
+                        index + count
+                    })
+                })
+                .collect();
             for (i, song) in songs.into_iter().enumerate() {
                 self.status.queue.insert(insert_pos + i, song);
             }
+            self.record_queue_change(&index_map);
             self.status.play_next_queue_len = self
                 .status
                 .play_next_queue_len
@@ -788,13 +806,16 @@ impl PlaybackController {
             self.status.play_next_queue_len = 0;
             self.status.current_song_id = next_song_id;
             self.status.playing_state = PlayingState::Stopped;
+            self.record_queue_change(&[]);
             log::info!(
                 "controller.append_to_queue: initialized empty queue with {} songs",
                 self.status.queue.len()
             );
         } else {
             let count = songs.len();
+            let index_map: Vec<_> = (0..self.status.queue.len()).map(Some).collect();
             self.status.queue.extend(songs);
+            self.record_queue_change(&index_map);
             log::info!(
                 "controller.append_to_queue: appended {count} songs, queue_len={}",
                 self.status.queue.len()
@@ -806,59 +827,39 @@ impl PlaybackController {
         Ok(self.state())
     }
 
-    pub fn move_queue_index(
+    /// Moves the entries at `indices` (kept in queue order) into the gap before
+    /// `insert_before`, an index into the current queue (`len` = the end).
+    pub fn move_queue_indices(
         &mut self,
-        from_index: u32,
-        to_index: u32,
+        indices: Vec<u32>,
+        insert_before: u32,
     ) -> Result<PlaybackStatus, String> {
-        let from_index = usize::try_from(from_index)
-            .map_err(|_| "Playback queue index is out of range.".to_string())?;
-        let to_index = usize::try_from(to_index)
-            .map_err(|_| "Playback queue index is out of range.".to_string())?;
-        if from_index >= self.status.queue.len() || to_index >= self.status.queue.len() {
-            return Err("Playback queue index is out of range.".to_string());
-        }
-        if from_index == to_index {
+        let queue_len = self.status.queue.len();
+        let moving = sorted_queue_indices(&indices, queue_len)?;
+        let insert_before = usize::try_from(insert_before)
+            .ok()
+            .filter(|value| *value <= queue_len)
+            .ok_or_else(|| "Playback queue index is out of range.".to_string())?;
+
+        let index_map = moved_queue_index_map(queue_len, &moving, insert_before);
+        if index_map
+            .iter()
+            .enumerate()
+            .all(|(old_index, new_index)| *new_index == Some(old_index))
+        {
             return Ok(self.state());
         }
 
         self.restore_state_deferred = false;
-        let current_index = self
-            .status
-            .current_index
-            .and_then(|value| usize::try_from(value).ok())
-            .filter(|value| *value < self.status.queue.len());
         let previous_current_index = self.status.current_index;
         let previous_play_next_queue_len = self.status.play_next_queue_len;
 
         self.clear_gapless_preparation();
-        self.sync_current_position_for_queue_mutation("move_queue_index");
+        self.sync_current_position_for_queue_mutation("move_queue_indices");
 
-        let entry = self.status.queue.remove(from_index);
-        self.status.queue.insert(to_index, entry);
-
-        let next_current_index = match current_index {
-            None => None,
-            Some(current_index) if current_index == from_index => Some(to_index),
-            Some(current_index) => {
-                let after_remove = if from_index < current_index {
-                    current_index - 1
-                } else {
-                    current_index
-                };
-                Some(if to_index <= after_remove {
-                    after_remove + 1
-                } else {
-                    after_remove
-                })
-            }
-        }
-        .map(|value| {
-            u32::try_from(value).map_err(|_| "Playback queue index is out of range.".to_string())
-        })
-        .transpose()?;
-
-        self.status.current_index = next_current_index;
+        self.status.queue =
+            apply_queue_index_map(std::mem::take(&mut self.status.queue), &index_map);
+        self.status.current_index = mapped_queue_index(previous_current_index, &index_map);
         self.status.play_next_queue_len = if self.status.current_index == previous_current_index {
             clamped_play_next_queue_len(
                 self.status.queue.len(),
@@ -875,6 +876,7 @@ impl PlaybackController {
         };
         self.status.current_song_id =
             current_song_id(&self.status.queue, self.status.current_index);
+        self.record_queue_change(&index_map);
 
         self.sync_queue_state();
         self.persist_state();
@@ -938,6 +940,7 @@ impl PlaybackController {
             self.clear_server_reporting();
         }
 
+        let index_map = removed_queue_index_map(self.status.queue.len(), &[remove_index]);
         self.status.queue.remove(remove_index);
         let next_play_next_queue_len = if removing_current && previous_play_next_queue_len > 0 {
             previous_play_next_queue_len.saturating_sub(1)
@@ -966,6 +969,7 @@ impl PlaybackController {
         );
         self.status.current_song_id =
             current_song_id(&self.status.queue, self.status.current_index);
+        self.record_queue_change(&index_map);
 
         if removing_current {
             self.status.current_position_ms = 0;
@@ -989,6 +993,129 @@ impl PlaybackController {
                         return Ok(self.state());
                     }
                 }
+            }
+        }
+
+        self.sync_queue_state();
+        self.persist_state();
+        self.report_status();
+        Ok(self.state())
+    }
+
+    /// Removes the entries at `indices`. Unlike `remove_queue_index`, removing
+    /// the current entry does not keep playing: the first surviving entry after
+    /// it becomes current, paused at its start, or, when none survives after
+    /// it, the last surviving entry becomes current and playback stops.
+    pub fn remove_queue_indices(
+        &mut self,
+        context: Option<&PlaybackRuntimeContext<'_>>,
+        indices: Vec<u32>,
+    ) -> Result<PlaybackStatus, String> {
+        let queue_len = self.status.queue.len();
+        let removing = sorted_queue_indices(&indices, queue_len)?;
+
+        self.restore_state_deferred = false;
+        let current_index = self
+            .status
+            .current_index
+            .and_then(|value| usize::try_from(value).ok())
+            .filter(|value| *value < queue_len);
+        let removed_current_index =
+            current_index.filter(|index| removing.binary_search(index).is_ok());
+        let previous_current_index = self.status.current_index;
+        let previous_play_next_queue_len = self.status.play_next_queue_len;
+        let was_loaded = matches!(
+            self.status.playing_state,
+            PlayingState::Playing | PlayingState::Paused | PlayingState::Interrupted
+        );
+
+        if removed_current_index.is_some() {
+            self.sync_current_position_from_backend()?;
+        } else {
+            self.sync_current_position_for_queue_mutation("remove_queue_indices");
+        }
+        let removed_position_ms = self.status.current_position_ms;
+
+        self.clear_gapless_preparation();
+
+        if let Some(removed_index) = removed_current_index.filter(|_| was_loaded) {
+            let removed_entry = self.status.queue[removed_index].clone();
+            self.backend.stop()?;
+            self.clear_native_events();
+            if let Some(context) = context {
+                self.report_server_playback_state(
+                    context,
+                    &removed_entry,
+                    removed_position_ms,
+                    ServerPlaybackState::Stopped,
+                );
+            }
+            self.clear_server_reporting();
+        }
+
+        let index_map = removed_queue_index_map(queue_len, &removing);
+        let replacement_index = removed_current_index.and_then(|removed_index| {
+            (removed_index + 1..queue_len).find(|index| index_map[*index].is_some())
+        });
+        // Surviving play-next entries stay contiguous right after the current
+        // entry; the one that becomes the new current entry is consumed.
+        let surviving_play_next_len = (0..queue_len)
+            .filter(|index| {
+                index_map[*index].is_some()
+                    && Some(*index) != replacement_index
+                    && is_play_next_queue_index(
+                        queue_len,
+                        previous_current_index,
+                        previous_play_next_queue_len,
+                        *index,
+                    )
+            })
+            .count();
+
+        self.status.queue =
+            apply_queue_index_map(std::mem::take(&mut self.status.queue), &index_map);
+        let next_current_index = match (current_index, removed_current_index) {
+            (None, _) => None,
+            (Some(_), _) if self.status.queue.is_empty() => None,
+            (Some(index), None) => index_map[index],
+            (Some(_), Some(_)) => replacement_index
+                .and_then(|index| index_map[index])
+                .or(Some(self.status.queue.len() - 1)),
+        };
+        self.status.current_index = next_current_index.and_then(|value| u32::try_from(value).ok());
+        self.status.play_next_queue_len = clamped_play_next_queue_len(
+            self.status.queue.len(),
+            self.status.current_index,
+            u32::try_from(surviving_play_next_len).unwrap_or(u32::MAX),
+        );
+        self.status.current_song_id =
+            current_song_id(&self.status.queue, self.status.current_index);
+        self.record_queue_change(&index_map);
+
+        if self.status.queue.is_empty() {
+            self.status.current_position_ms = 0;
+            self.status.playing_state = PlayingState::Idle;
+        } else if removed_current_index.is_some() {
+            self.status.current_position_ms = 0;
+            self.status.playing_state = PlayingState::Stopped;
+        }
+        if removed_current_index.is_some() {
+            self.status.playback_error = None;
+            self.status.interrupt_reason = None;
+            self.status.pending_seek_position_ms = None;
+            self.interrupted_resume_state = None;
+
+            if let (true, Some(context), Some(next_index)) = (
+                was_loaded && replacement_index.is_some(),
+                context,
+                self.status.current_index,
+            ) {
+                self.sync_queue_state();
+                self.load_track_at_index(context, next_index, 0, false)?;
+                self.persist_state();
+                self.process_native_events_inner(Some(context), false)?;
+                self.report_status();
+                return Ok(self.state());
             }
         }
 
@@ -1354,7 +1481,10 @@ impl PlaybackController {
         }
 
         self.clear_native_events();
+        let queue_revision = self.status.queue_revision;
         self.status = PlaybackStatus::empty();
+        self.status.queue_revision = queue_revision;
+        self.record_queue_change(&[]);
         self.interrupted_resume_state = None;
         self.active_profile_id = None;
         self.restore_state_deferred = false;
@@ -2808,6 +2938,22 @@ impl PlaybackController {
         let _ = self.queue_sync.sync_queue(&self.status);
     }
 
+    /// Every queue mutation records itself here so the frontend can carry the
+    /// queue selection across it (see docs/playback-queue-semantics.md). Pass
+    /// the new index of each previous entry, or an empty map when the queue was
+    /// replaced wholesale.
+    fn record_queue_change(&mut self, index_map: &[Option<usize>]) {
+        self.status.queue_revision = self.status.queue_revision.wrapping_add(1);
+        self.status.queue_index_map = index_map
+            .iter()
+            .map(|new_index| {
+                new_index
+                    .and_then(|value| i32::try_from(value).ok())
+                    .unwrap_or(-1)
+            })
+            .collect();
+    }
+
     fn clear_server_reporting(&mut self) {
         self.server_reporter.clear();
     }
@@ -3067,6 +3213,94 @@ fn adjusted_play_next_queue_len_for_current_change(
     }
 
     u32::try_from(previous_end.saturating_sub(next_index).saturating_sub(1)).unwrap_or(u32::MAX)
+}
+
+/// Validated, sorted and deduplicated indices for a batch queue operation.
+fn sorted_queue_indices(indices: &[u32], queue_len: usize) -> Result<Vec<usize>, String> {
+    let mut sorted = indices
+        .iter()
+        .map(|index| {
+            usize::try_from(*index)
+                .ok()
+                .filter(|index| *index < queue_len)
+        })
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(|| "Playback queue index is out of range.".to_string())?;
+    if sorted.is_empty() {
+        return Err("Playback queue indices must not be empty.".to_string());
+    }
+    sorted.sort_unstable();
+    sorted.dedup();
+    Ok(sorted)
+}
+
+/// New index of each entry when the `moving` entries (sorted) are taken out and
+/// put back, in queue order, into the gap before `insert_before`.
+fn moved_queue_index_map(
+    queue_len: usize,
+    moving: &[usize],
+    insert_before: usize,
+) -> Vec<Option<usize>> {
+    let insert_at = insert_before
+        - moving
+            .iter()
+            .filter(|index| **index < insert_before)
+            .count();
+    let mut next_staying = 0;
+    let mut next_moving = insert_at;
+    (0..queue_len)
+        .map(|index| {
+            if moving.binary_search(&index).is_ok() {
+                next_moving += 1;
+                Some(next_moving - 1)
+            } else {
+                next_staying += 1;
+                let staying = next_staying - 1;
+                Some(if staying < insert_at {
+                    staying
+                } else {
+                    staying + moving.len()
+                })
+            }
+        })
+        .collect()
+}
+
+/// New index of each entry after removing the `removing` entries (sorted).
+fn removed_queue_index_map(queue_len: usize, removing: &[usize]) -> Vec<Option<usize>> {
+    let mut next_index = 0;
+    (0..queue_len)
+        .map(|index| {
+            if removing.binary_search(&index).is_ok() {
+                None
+            } else {
+                next_index += 1;
+                Some(next_index - 1)
+            }
+        })
+        .collect()
+}
+
+fn apply_queue_index_map(
+    queue: Vec<SongResponse>,
+    index_map: &[Option<usize>],
+) -> Vec<SongResponse> {
+    let mut slots: Vec<Option<SongResponse>> = vec![None; index_map.iter().flatten().count()];
+    for (entry, new_index) in queue.into_iter().zip(index_map) {
+        if let Some(new_index) = new_index {
+            slots[*new_index] = Some(entry);
+        }
+    }
+    slots.into_iter().flatten().collect()
+}
+
+fn mapped_queue_index(index: Option<u32>, index_map: &[Option<usize>]) -> Option<u32> {
+    let index = usize::try_from(index?).ok()?;
+    index_map
+        .get(index)
+        .copied()
+        .flatten()
+        .and_then(|value| u32::try_from(value).ok())
 }
 
 fn display_cover_art_id(entry: &SongResponse) -> Option<&str> {
@@ -6147,6 +6381,8 @@ mod tests {
                     play_next_queue_len: 0,
                     current_position_ms: 0,
                     current_song_id: Some("song-a".to_string()),
+                    queue_revision: 0,
+                    queue_index_map: Vec::new(),
                 },
                 true,
                 true,
@@ -6190,6 +6426,8 @@ mod tests {
                     play_next_queue_len: 1,
                     current_position_ms: 0,
                     current_song_id: Some("song-a".to_string()),
+                    queue_revision: 0,
+                    queue_index_map: Vec::new(),
                 },
                 true,
                 true,
@@ -6230,6 +6468,8 @@ mod tests {
                     play_next_queue_len: 0,
                     current_position_ms: 4_321,
                     current_song_id: Some("song-a".to_string()),
+                    queue_revision: 0,
+                    queue_index_map: Vec::new(),
                 },
                 false,
                 false,
@@ -6247,6 +6487,8 @@ mod tests {
                     play_next_queue_len: 0,
                     current_position_ms: 5_678,
                     current_song_id: Some("song-a".to_string()),
+                    queue_revision: 0,
+                    queue_index_map: Vec::new(),
                 },
                 true,
                 false,
@@ -6287,6 +6529,8 @@ mod tests {
                     play_next_queue_len: 0,
                     current_position_ms: 0,
                     current_song_id: None,
+                    queue_revision: 0,
+                    queue_index_map: Vec::new(),
                 },
                 true,
                 true,
@@ -6314,7 +6558,7 @@ mod tests {
     }
 
     #[test]
-    fn move_queue_index_moves_item_and_keeps_current_entry() {
+    fn move_queue_indices_moves_item_and_keeps_current_entry() {
         let (mut controller, _, _) = controller_with_mock_backend(false);
         controller
             .set_queue(
@@ -6324,7 +6568,7 @@ mod tests {
             .unwrap();
         controller.set_position(12_345).unwrap();
 
-        let status = controller.move_queue_index(0, 2).unwrap();
+        let status = controller.move_queue_indices(vec![0], 3).unwrap();
         let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
 
         assert_eq!(ids, vec!["song-b", "song-c", "song-a", "song-d"]);
@@ -6334,7 +6578,7 @@ mod tests {
     }
 
     #[test]
-    fn move_queue_index_before_current_shifts_current_entry_right() {
+    fn move_queue_indices_before_current_shifts_current_entry_right() {
         let (mut controller, _, _) = controller_with_mock_backend(false);
         controller
             .set_queue(
@@ -6343,7 +6587,7 @@ mod tests {
             )
             .unwrap();
 
-        let status = controller.move_queue_index(3, 0).unwrap();
+        let status = controller.move_queue_indices(vec![3], 0).unwrap();
         let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
 
         assert_eq!(ids, vec!["song-d", "song-a", "song-b", "song-c"]);
@@ -6352,7 +6596,7 @@ mod tests {
     }
 
     #[test]
-    fn move_current_queue_index_updates_current_index_without_reloading() {
+    fn move_current_queue_indices_updates_current_index_without_reloading() {
         let (mut controller, backend_state, _) = controller_with_mock_backend(false);
         controller
             .set_queue(queue_entries(&["song-a", "song-b", "song-c"]), Some(1))
@@ -6360,7 +6604,7 @@ mod tests {
         controller.set_position(12_345).unwrap();
         let stop_calls_before = backend_state.lock().unwrap().stop_calls;
 
-        let status = controller.move_queue_index(1, 2).unwrap();
+        let status = controller.move_queue_indices(vec![1], 3).unwrap();
         let ids: Vec<_> = status.queue.iter().map(|entry| entry.id.as_str()).collect();
 
         assert_eq!(ids, vec!["song-a", "song-c", "song-b"]);
@@ -6371,15 +6615,109 @@ mod tests {
     }
 
     #[test]
-    fn move_queue_index_rejects_out_of_range_index() {
+    fn move_queue_indices_rejects_out_of_range_index() {
         let (mut controller, _, _) = controller_with_mock_backend(false);
         controller
             .set_queue(queue_entries(&["song-a"]), Some(0))
             .unwrap();
 
-        let result = controller.move_queue_index(0, 1);
+        let result = controller.move_queue_indices(vec![0], 2);
 
         assert!(result.is_err());
+    }
+
+    fn queue_ids(status: &PlaybackStatus) -> Vec<&str> {
+        status.queue.iter().map(|entry| entry.id.as_str()).collect()
+    }
+
+    #[test]
+    fn move_queue_indices_keeps_queue_order_and_records_index_map() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "b", "c", "d", "e"]), Some(4))
+            .unwrap();
+        let revision = controller.state().queue_revision;
+
+        let status = controller.move_queue_indices(vec![4, 2], 1).unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["a", "c", "e", "b", "d"]);
+        assert_eq!(status.current_index, Some(2));
+        assert_eq!(status.current_song_id, Some("e".to_string()));
+        assert_eq!(status.queue_revision, revision + 1);
+        assert_eq!(status.queue_index_map, vec![0, 3, 1, 4, 2]);
+    }
+
+    #[test]
+    fn move_queue_indices_into_gap_beside_a_moved_entry() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "b", "c", "d", "e"]), Some(0))
+            .unwrap();
+
+        let status = controller.move_queue_indices(vec![2, 4], 2).unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["a", "b", "c", "e", "d"]);
+    }
+
+    #[test]
+    fn move_queue_indices_without_effect_keeps_revision() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "b", "c", "d"]), Some(0))
+            .unwrap();
+        let revision = controller.state().queue_revision;
+
+        let status = controller.move_queue_indices(vec![1, 2], 3).unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["a", "b", "c", "d"]);
+        assert_eq!(status.queue_revision, revision);
+    }
+
+    #[test]
+    fn move_queue_indices_with_current_entry_keeps_playing_it() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "b", "c", "d"]), Some(1))
+            .unwrap();
+        controller.set_position(12_345).unwrap();
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        let status = controller.move_queue_indices(vec![1, 2], 4).unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["a", "d", "b", "c"]);
+        assert_eq!(status.current_index, Some(2));
+        assert_eq!(status.current_position_ms, 12_345);
+        assert_eq!(backend_state.lock().unwrap().stop_calls, stop_calls_before);
+    }
+
+    #[test]
+    fn queue_additions_record_index_maps() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "b"]), Some(0))
+            .unwrap();
+        let revision = controller.state().queue_revision;
+
+        let status = controller
+            .insert_after_current(queue_entries(&["x", "y"]))
+            .unwrap();
+        assert_eq!(queue_ids(&status), vec!["a", "x", "y", "b"]);
+        assert_eq!(status.queue_revision, revision + 1);
+        assert_eq!(status.queue_index_map, vec![0, 3]);
+
+        let status = controller.append_to_queue(queue_entries(&["z"])).unwrap();
+        assert_eq!(status.queue_revision, revision + 2);
+        assert_eq!(status.queue_index_map, vec![0, 1, 2, 3]);
+
+        let status = controller.remove_queue_index(None, 1).unwrap();
+        assert_eq!(status.queue_revision, revision + 3);
+        assert_eq!(status.queue_index_map, vec![0, -1, 1, 2, 3]);
+
+        let status = controller
+            .set_queue(queue_entries(&["a"]), Some(0))
+            .unwrap();
+        assert_eq!(status.queue_revision, revision + 4);
+        assert!(status.queue_index_map.is_empty());
     }
 
     #[test]
@@ -6510,6 +6848,113 @@ mod tests {
         let result = controller.remove_queue_index(None, 1);
 
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn remove_queue_indices_keeps_current_entry_and_records_index_map() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "b", "c", "d", "e"]), Some(3))
+            .unwrap();
+        controller.set_position(12_345).unwrap();
+        let revision = controller.state().queue_revision;
+
+        let status = controller.remove_queue_indices(None, vec![4, 0]).unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["b", "c", "d"]);
+        assert_eq!(status.current_index, Some(2));
+        assert_eq!(status.current_position_ms, 12_345);
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+        assert_eq!(status.queue_revision, revision + 1);
+        assert_eq!(status.queue_index_map, vec![-1, 0, 1, 2, -1]);
+    }
+
+    #[test]
+    fn remove_queue_indices_with_current_entry_pauses_next_survivor() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["s1", "s2", "s3", "s4", "s5"]), Some(2))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+        let stop_calls_before = backend_state.lock().unwrap().stop_calls;
+
+        let status = controller
+            .remove_queue_indices(Some(&runtime_context), vec![1, 2, 3])
+            .unwrap();
+        let backend_state = backend_state.lock().unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["s1", "s5"]);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("s5".to_string()));
+        assert_eq!(status.current_position_ms, 0);
+        assert_eq!(status.playing_state, PlayingState::Paused);
+        assert_eq!(backend_state.stop_calls, stop_calls_before + 1);
+        assert_eq!(backend_state.load_calls.len(), 2);
+        assert!(backend_state.load_calls[1].contains("s5"));
+    }
+
+    #[test]
+    fn remove_queue_indices_through_queue_end_stops_on_last_survivor() {
+        let (mut controller, backend_state, _) = controller_with_mock_backend(false);
+        let (client, capability_matrix) = runtime_context(true);
+        let runtime_context = PlaybackRuntimeContext {
+            client: &client,
+            capability_matrix: &capability_matrix,
+            cover_art_cache: None,
+            profile_id: None,
+        };
+        controller
+            .set_queue(queue_entries(&["s1", "s2", "s3", "s4", "s5"]), Some(2))
+            .unwrap();
+        controller.play(&runtime_context).unwrap();
+
+        let status = controller
+            .remove_queue_indices(Some(&runtime_context), vec![2, 3, 4])
+            .unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["s1", "s2"]);
+        assert_eq!(status.current_index, Some(1));
+        assert_eq!(status.current_song_id, Some("s2".to_string()));
+        assert_eq!(status.playing_state, PlayingState::Stopped);
+        assert_eq!(backend_state.lock().unwrap().load_calls.len(), 1);
+    }
+
+    #[test]
+    fn remove_all_queue_indices_resets_to_idle() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "b"]), Some(1))
+            .unwrap();
+
+        let status = controller.remove_queue_indices(None, vec![0, 1]).unwrap();
+
+        assert!(status.queue.is_empty());
+        assert_eq!(status.current_index, None);
+        assert_eq!(status.playing_state, PlayingState::Idle);
+    }
+
+    #[test]
+    fn remove_queue_indices_consumes_play_next_entry_that_becomes_current() {
+        let (mut controller, _, _) = controller_with_mock_backend(false);
+        controller
+            .set_queue(queue_entries(&["a", "e"]), Some(0))
+            .unwrap();
+        controller
+            .insert_after_current(queue_entries(&["b", "c", "d"]))
+            .unwrap();
+
+        let status = controller.remove_queue_indices(None, vec![0, 1]).unwrap();
+
+        assert_eq!(queue_ids(&status), vec!["c", "d", "e"]);
+        assert_eq!(status.current_index, Some(0));
+        assert_eq!(status.play_next_queue_len, 1);
     }
 
     #[test]
@@ -6958,6 +7403,8 @@ mod tests {
                     play_next_queue_len: 0,
                     current_position_ms: 42,
                     current_song_id: Some("song-a".to_string()),
+                    queue_revision: 0,
+                    queue_index_map: Vec::new(),
                 },
                 true,
                 false,

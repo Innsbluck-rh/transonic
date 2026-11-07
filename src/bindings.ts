@@ -294,9 +294,17 @@ async playbackRemoveQueueIndex(payload: PlaybackRemoveQueueIndexRequest) : Promi
     else return { status: "error", error: e  as any };
 }
 },
-async playbackMoveQueueIndex(payload: PlaybackMoveQueueIndexRequest) : Promise<Result<null, string>> {
+async playbackRemoveQueueIndices(payload: PlaybackRemoveQueueIndicesRequest) : Promise<Result<null, string>> {
     try {
-    return { status: "ok", data: await TAURI_INVOKE("playback_move_queue_index", { payload }) };
+    return { status: "ok", data: await TAURI_INVOKE("playback_remove_queue_indices", { payload }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async playbackMoveQueueIndices(payload: PlaybackMoveQueueIndicesRequest) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("playback_move_queue_indices", { payload }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -435,7 +443,12 @@ export type AuthInput = { kind: "password"; username: string; password: string }
 export type AuthKind = "password" | "api_key"
 export type CapabilityMatrix = { openSubsonic: boolean; rawExtensions: OpenSubsonicExtension[]; apiKeyAuth: boolean; indexBasedQueue: boolean; playbackReport: boolean; transcoding: boolean; transcodeOffset: boolean; songLyrics: boolean }
 export type ConnectDevicePresence = { deviceId: string; displayName: string; platform: string; appVersion: string; lastSeenAt: string; online: boolean }
-export type ConnectPlaybackState = { playingState: PlayingState; queue: SongResponse[]; currentIndex?: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId?: string | null }
+export type ConnectPlaybackState = { playingState: PlayingState; queue: SongResponse[]; currentIndex?: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId?: string | null; 
+/**
+ * Same meaning as `PlaybackStatus::queue_revision` / `queue_index_map`,
+ * maintained by the Go reducer while Connect is on.
+ */
+queueRevision?: number; queueIndexMap?: number[] }
 export type ConnectQueueResolution = { pushing: boolean; error: string | null }
 export type ConnectQueueResolutionChoice = "pushLocal" | "pullServer"
 export type ConnectResolveQueueRequest = { choice: ConnectQueueResolutionChoice }
@@ -490,7 +503,12 @@ export type PlaybackCapabilities = { gaplessPlayback: boolean; transcodingCodecs
 asioOutput: boolean }
 export type PlaybackError = { message: string; handled: boolean }
 export type PlaybackInsertAfterCurrentRequest = { items: QueueSource[] }
-export type PlaybackMoveQueueIndexRequest = { fromIndex: number; toIndex: number }
+export type PlaybackMoveQueueIndicesRequest = { indices: number[]; 
+/**
+ * Gap in the current queue to move the entries to: they end up right
+ * before the entry now at this index (`queue.len()` = the end).
+ */
+insertBefore: number }
 export type PlaybackOutputDevice = { id: string; name: string; deviceName: string; host: PlaybackOutputHost }
 /**
  * Audio API an output device is reached through.
@@ -502,6 +520,7 @@ export type PlaybackOutputDevice = { id: string; name: string; deviceName: strin
 export type PlaybackOutputHost = "wasapi" | "asio"
 export type PlaybackPlayQueueIndexRequest = { index: number }
 export type PlaybackRemoveQueueIndexRequest = { index: number }
+export type PlaybackRemoveQueueIndicesRequest = { indices: number[] }
 export type PlaybackSeekRequest = { positionMs: number }
 export type PlaybackSetPositionRequest = { positionMs: number }
 export type PlaybackSetQueueRequest = { items: QueueSource[]; currentIndex: number | null; autoPlay: boolean }
@@ -514,6 +533,17 @@ export type PlaybackSettings = { gaplessPlaybackEnabled: boolean; volume: number
  */
 useAsioOutput: boolean; outputDeviceId: string | null; streamMode: PlaybackStreamMode; meteredNetworkTranscodingEnabled: boolean; transcodingBitrateLimit: number; useCustomTranscodingCodec: boolean; transcodingCodec: PlaybackTranscodingCodec }
 export type PlaybackStatus = { playingState: PlayingState; interruptReason: InterruptReason | null; pendingSeekPositionMs: number | null; gaplessStatus: GaplessStatus; queue: SongResponse[]; currentIndex: number | null; playNextQueueLen: number; currentPositionMs: number; currentSongId: string | null; 
+/**
+ * Advanced by every queue mutation; see `queue_index_map`.
+ */
+queueRevision: number; 
+/**
+ * For the mutation that produced `queue_revision`: the new index of each
+ * entry of the previous queue, `-1` for a removed one. Empty when the
+ * queue was replaced wholesale. Lets the frontend carry the queue
+ * selection across a change; see docs/playback-queue-semantics.md.
+ */
+queueIndexMap: number[]; 
 /**
  * Audio API the currently applied output device is reached through.
  * 

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -178,7 +179,7 @@ func (h *Hub) handlePlaybackCommandRequest(ctx context.Context, client *Client, 
 	}
 
 	switch command.Op {
-	case "setQueue", "insertAfterCurrent", "appendToQueue", "moveQueueIndex", "removeQueueIndex", "clearQueue":
+	case "setQueue", "insertAfterCurrent", "appendToQueue", "moveQueueIndices", "removeQueueIndex", "removeQueueIndices", "clearQueue":
 		next, err := reduceQueueCommand(current, command, client.Session.DeviceID)
 		if err != nil {
 			h.sendCommandError(client, inbound.ID, commandID, err.Error())
@@ -387,6 +388,13 @@ func reducePushStateCommand(current *store.SharedPlaybackState, command ConnectP
 	state := *command.State
 	state.Queue = cloneRawMessages(state.Queue)
 	state.CurrentIndex = cloneInt64Ptr(state.CurrentIndex)
+	// The sender's revision counts its local queue changes, not the shared ones.
+	currentState, err := decodePlaybackState(current.State)
+	if err != nil {
+		return nil, err
+	}
+	state.QueueRevision = currentState.QueueRevision
+	recordQueueChange(&state, nil)
 	raw, err := encodePlaybackState(state)
 	if err != nil {
 		return nil, err
@@ -409,6 +417,7 @@ func reduceQueueCommand(current *store.SharedPlaybackState, command ConnectPlayb
 	switch command.Op {
 	case "setQueue":
 		state.Queue = cloneRawMessages(command.Queue)
+		recordQueueChange(&state, nil)
 		state.PlayNextQueueLen = 0
 		if len(state.Queue) == 0 {
 			state.CurrentIndex = nil
@@ -425,11 +434,19 @@ func reduceQueueCommand(current *store.SharedPlaybackState, command ConnectPlayb
 			return current, nil
 		}
 		insertAt := playNextEndIndex(state)
+		indexMap := make([]int, len(state.Queue))
+		for index := range indexMap {
+			indexMap[index] = index
+			if index >= insertAt {
+				indexMap[index] += len(command.Items)
+			}
+		}
 		nextQueue := make([]json.RawMessage, 0, len(state.Queue)+len(command.Items))
 		nextQueue = append(nextQueue, state.Queue[:insertAt]...)
 		nextQueue = append(nextQueue, cloneRawMessages(command.Items)...)
 		nextQueue = append(nextQueue, state.Queue[insertAt:]...)
 		state.Queue = nextQueue
+		recordQueueChange(&state, indexMap)
 		state.PlayNextQueueLen += int64(len(command.Items))
 		if state.CurrentIndex == nil {
 			zero := int64(0)
@@ -442,7 +459,12 @@ func reduceQueueCommand(current *store.SharedPlaybackState, command ConnectPlayb
 		if len(command.Items) == 0 {
 			return current, nil
 		}
+		indexMap := make([]int, len(state.Queue))
+		for index := range indexMap {
+			indexMap[index] = index
+		}
 		state.Queue = append(state.Queue, cloneRawMessages(command.Items)...)
+		recordQueueChange(&state, indexMap)
 		if state.CurrentIndex == nil {
 			zero := int64(0)
 			state.CurrentIndex = &zero
@@ -450,11 +472,11 @@ func reduceQueueCommand(current *store.SharedPlaybackState, command ConnectPlayb
 			state.CurrentPositionMs = 0
 			state.PlayingState = stoppedOrIdle(state.Queue)
 		}
-	case "moveQueueIndex":
-		if command.FromIndex == nil || command.ToIndex == nil {
-			return nil, errors.New("moveQueueIndex requires fromIndex and toIndex")
+	case "moveQueueIndices":
+		if len(command.Indices) == 0 || command.InsertBefore == nil {
+			return nil, errors.New("moveQueueIndices requires indices and insertBefore")
 		}
-		if err := moveQueueIndex(&state, *command.FromIndex, *command.ToIndex); err != nil {
+		if err := moveQueueIndices(&state, command.Indices, *command.InsertBefore); err != nil {
 			return nil, err
 		}
 	case "removeQueueIndex":
@@ -464,8 +486,18 @@ func reduceQueueCommand(current *store.SharedPlaybackState, command ConnectPlayb
 		if err := removeQueueIndex(&state, *command.Index); err != nil {
 			return nil, err
 		}
+	case "removeQueueIndices":
+		if len(command.Indices) == 0 {
+			return nil, errors.New("removeQueueIndices requires indices")
+		}
+		if err := removeQueueIndices(&state, command.Indices); err != nil {
+			return nil, err
+		}
 	case "clearQueue":
+		revision := state.QueueRevision
 		state = emptyPlaybackState()
+		state.QueueRevision = revision
+		recordQueueChange(&state, nil)
 	}
 	if err := normalizePlaybackState(&state); err != nil {
 		return nil, err
@@ -532,29 +564,33 @@ func reducePlayQueueIndexCommand(current *store.SharedPlaybackState, command Con
 	}, nil
 }
 
-func moveQueueIndex(state *ConnectPlaybackState, fromIndex, toIndex int64) error {
-	if fromIndex < 0 || toIndex < 0 || fromIndex >= int64(len(state.Queue)) || toIndex >= int64(len(state.Queue)) {
+// moveQueueIndices moves the entries at indices, kept in queue order, into the
+// gap before insertBefore (an index into the current queue; len = the end).
+func moveQueueIndices(state *ConnectPlaybackState, indices []int64, insertBefore int64) error {
+	moving, err := sortedQueueIndices(indices, len(state.Queue))
+	if err != nil {
+		return err
+	}
+	if insertBefore < 0 || insertBefore > int64(len(state.Queue)) {
 		return errors.New("playback queue index is out of range")
 	}
-	if fromIndex == toIndex {
+	indexMap := movedQueueIndexMap(len(state.Queue), moving, int(insertBefore))
+	unchanged := true
+	for oldIndex, newIndex := range indexMap {
+		if newIndex != oldIndex {
+			unchanged = false
+			break
+		}
+	}
+	if unchanged {
 		return nil
 	}
 	previousCurrentIndex := cloneInt64Ptr(state.CurrentIndex)
 	previousPlayNextQueueLen := state.PlayNextQueueLen
-	entry := state.Queue[fromIndex]
-	state.Queue = append(state.Queue[:fromIndex], state.Queue[fromIndex+1:]...)
-	state.Queue = append(state.Queue[:toIndex], append([]json.RawMessage{entry}, state.Queue[toIndex:]...)...)
-
+	state.Queue = applyQueueIndexMap(state.Queue, indexMap)
+	recordQueueChange(state, indexMap)
 	if state.CurrentIndex != nil {
-		current := *state.CurrentIndex
-		switch {
-		case current == fromIndex:
-			current = toIndex
-		case fromIndex < current && toIndex >= current:
-			current--
-		case fromIndex > current && toIndex <= current:
-			current++
-		}
+		current := int64(indexMap[*state.CurrentIndex])
 		state.CurrentIndex = &current
 	}
 	if int64PtrEqual(previousCurrentIndex, state.CurrentIndex) {
@@ -578,7 +614,9 @@ func removeQueueIndex(state *ConnectPlaybackState, index int64) error {
 	previousPlayNextQueueLen := state.PlayNextQueueLen
 	removingCurrent := state.CurrentIndex != nil && *state.CurrentIndex == index
 	wasInPlayNextQueue := isPlayNextQueueIndex(len(state.Queue), previousCurrentIndex, previousPlayNextQueueLen, index)
+	indexMap := removedQueueIndexMap(len(state.Queue), []int{int(index)})
 	state.Queue = append(state.Queue[:index], state.Queue[index+1:]...)
+	recordQueueChange(state, indexMap)
 	if len(state.Queue) == 0 {
 		state.CurrentIndex = nil
 		state.PlayNextQueueLen = 0
@@ -607,6 +645,166 @@ func removeQueueIndex(state *ConnectPlaybackState, index int64) error {
 	}
 	state.PlayNextQueueLen = clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, nextPlayNextQueueLen)
 	return nil
+}
+
+// removeQueueIndices removes the entries at indices. Unlike removeQueueIndex,
+// removing the current entry does not keep playing: the first surviving entry
+// after it becomes current, paused at its start, or, when none survives after
+// it, the last surviving entry becomes current and playback stops.
+func removeQueueIndices(state *ConnectPlaybackState, indices []int64) error {
+	queueLen := len(state.Queue)
+	removing, err := sortedQueueIndices(indices, queueLen)
+	if err != nil {
+		return err
+	}
+	indexMap := removedQueueIndexMap(queueLen, removing)
+	previousCurrentIndex := cloneInt64Ptr(state.CurrentIndex)
+	previousPlayNextQueueLen := state.PlayNextQueueLen
+	removingCurrent := previousCurrentIndex != nil && indexMap[*previousCurrentIndex] < 0
+	replacementIndex := -1
+	if removingCurrent {
+		for index := int(*previousCurrentIndex) + 1; index < queueLen; index++ {
+			if indexMap[index] >= 0 {
+				replacementIndex = index
+				break
+			}
+		}
+	}
+	// Surviving play-next entries stay contiguous right after the current
+	// entry; the one that becomes the new current entry is consumed.
+	survivingPlayNextLen := int64(0)
+	for index := 0; index < queueLen; index++ {
+		if indexMap[index] >= 0 && index != replacementIndex &&
+			isPlayNextQueueIndex(queueLen, previousCurrentIndex, previousPlayNextQueueLen, int64(index)) {
+			survivingPlayNextLen++
+		}
+	}
+
+	state.Queue = applyQueueIndexMap(state.Queue, indexMap)
+	recordQueueChange(state, indexMap)
+	if len(state.Queue) == 0 {
+		state.CurrentIndex = nil
+		state.PlayNextQueueLen = 0
+		state.CurrentPositionMs = 0
+		state.PlayingState = "idle"
+		return nil
+	}
+	if previousCurrentIndex != nil {
+		var current int64
+		switch {
+		case !removingCurrent:
+			current = int64(indexMap[*previousCurrentIndex])
+		case replacementIndex >= 0:
+			current = int64(indexMap[replacementIndex])
+		default:
+			current = int64(len(state.Queue) - 1)
+		}
+		state.CurrentIndex = &current
+	}
+	if removingCurrent {
+		state.CurrentPositionMs = 0
+		wasLoaded := state.PlayingState == "playing" || state.PlayingState == "paused" || state.PlayingState == "interrupted"
+		if replacementIndex >= 0 && wasLoaded {
+			state.PlayingState = "paused"
+		} else {
+			state.PlayingState = "stopped"
+		}
+	}
+	state.PlayNextQueueLen = clampedPlayNextQueueLen(len(state.Queue), state.CurrentIndex, survivingPlayNextLen)
+	return nil
+}
+
+// recordQueueChange advances the queue revision on every queue mutation and
+// stores the new index of each previous entry (-1: removed; nil: the queue was
+// replaced wholesale), so clients can carry the queue selection across it. The
+// Rust reducer does the same; see docs/playback-queue-semantics.md.
+func recordQueueChange(state *ConnectPlaybackState, indexMap []int) {
+	revision := int64(1)
+	if state.QueueRevision != nil {
+		revision = *state.QueueRevision + 1
+	}
+	state.QueueRevision = &revision
+	if indexMap == nil {
+		indexMap = []int{}
+	}
+	state.QueueIndexMap = &indexMap
+}
+
+// sortedQueueIndices validates, sorts and deduplicates the indices of a batch
+// queue operation.
+func sortedQueueIndices(indices []int64, queueLen int) ([]int, error) {
+	if len(indices) == 0 {
+		return nil, errors.New("playback queue indices must not be empty")
+	}
+	sorted := make([]int, 0, len(indices))
+	for _, index := range indices {
+		if index < 0 || index >= int64(queueLen) {
+			return nil, errors.New("playback queue index is out of range")
+		}
+		sorted = append(sorted, int(index))
+	}
+	slices.Sort(sorted)
+	return slices.Compact(sorted), nil
+}
+
+// movedQueueIndexMap is the new index of each entry when the moving entries
+// (sorted) are taken out and put back, in queue order, into the gap before
+// insertBefore.
+func movedQueueIndexMap(queueLen int, moving []int, insertBefore int) []int {
+	insertAt := insertBefore
+	for _, index := range moving {
+		if index < insertBefore {
+			insertAt--
+		}
+	}
+	indexMap := make([]int, queueLen)
+	nextStaying := 0
+	nextMoving := insertAt
+	for index := range indexMap {
+		if _, found := slices.BinarySearch(moving, index); found {
+			indexMap[index] = nextMoving
+			nextMoving++
+			continue
+		}
+		indexMap[index] = nextStaying
+		if nextStaying >= insertAt {
+			indexMap[index] += len(moving)
+		}
+		nextStaying++
+	}
+	return indexMap
+}
+
+// removedQueueIndexMap is the new index of each entry, -1 for a removed one,
+// after removing the removing entries (sorted).
+func removedQueueIndexMap(queueLen int, removing []int) []int {
+	indexMap := make([]int, queueLen)
+	nextIndex := 0
+	for index := range indexMap {
+		if _, found := slices.BinarySearch(removing, index); found {
+			indexMap[index] = -1
+			continue
+		}
+		indexMap[index] = nextIndex
+		nextIndex++
+	}
+	return indexMap
+}
+
+func applyQueueIndexMap(queue []json.RawMessage, indexMap []int) []json.RawMessage {
+	length := 0
+	for _, newIndex := range indexMap {
+		if newIndex >= 0 {
+			length++
+		}
+	}
+	next := make([]json.RawMessage, length)
+	for index, newIndex := range indexMap {
+		if newIndex >= 0 {
+			next[newIndex] = queue[index]
+		}
+	}
+	return next
 }
 
 func (h *Hub) saveAndBroadcast(ctx context.Context, userKey string, state *store.SharedPlaybackState, updatedByDeviceID, reason string) error {

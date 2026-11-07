@@ -33,3 +33,28 @@ consistent. The read-side math lives in three places that must agree:
 - Rust: `play_next_start_index` / `is_play_next_queue_index` (controller.rs)
 - Go: `playNextStartIndex` / `isPlayNextQueueIndex` (hub.go)
 - TS (display only): `isPlayNextQueueIndex` (usePlayback.ts)
+
+For the batch operations: `moveQueueIndices` treats the region by position, as
+the single move did (unchanged current index → clamp; moved current index →
+recompute). `removeQueueIndices` keeps the play-next entries that survive (they
+stay contiguous right after the current entry), minus the one that becomes the
+new current entry when the current entry was removed.
+
+## Queue revision and index map
+
+A second rule both reducers follow, consumed by the frontend queue selection
+(`src/stores/QueueSelectionStore.ts`):
+
+> **Every queue mutation advances `queueRevision` by one and sets
+> `queueIndexMap` to the new index of each entry of the previous queue
+> (`-1` for a removed entry), or to an empty map when the queue was replaced
+> wholesale (set, clear, restore, `pushState`).** Operations that do not change
+> the queue leave both untouched.
+
+The frontend applies a map only when the revision it sees is exactly one past
+the last one it applied; any other revision change clears the selection. Rust
+copies the shared revision and map when it applies the Connect state, so the
+displayed revision does not jump when Connect turns off.
+
+- Rust: `record_queue_change` (controller.rs)
+- Go: `recordQueueChange` (hub.go)

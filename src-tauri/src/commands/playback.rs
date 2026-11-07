@@ -9,9 +9,9 @@ use crate::{
     connect::ConnectState,
     models::{
         CapabilityMatrix, ConnectPlaybackCommand, PlaybackAppendToQueueRequest,
-        PlaybackInsertAfterCurrentRequest,
-        PlaybackMoveQueueIndexRequest, PlaybackOutputDevice, PlaybackPlayQueueIndexRequest,
-        PlaybackRemoveQueueIndexRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
+        PlaybackInsertAfterCurrentRequest, PlaybackMoveQueueIndicesRequest, PlaybackOutputDevice,
+        PlaybackPlayQueueIndexRequest, PlaybackRemoveQueueIndexRequest,
+        PlaybackRemoveQueueIndicesRequest, PlaybackSeekRequest, PlaybackSetPositionRequest,
         PlaybackSetQueueRequest, PlaybackSetVolumeRequest, PlaybackStatus, QueueSource,
         SongResponse,
     },
@@ -514,16 +514,84 @@ pub fn playback_remove_queue_index(
 
 #[tauri::command]
 #[specta::specta]
-pub fn playback_move_queue_index(
+pub fn playback_remove_queue_indices(
     app: AppHandle,
-    payload: PlaybackMoveQueueIndexRequest,
+    payload: PlaybackRemoveQueueIndicesRequest,
 ) -> Result<(), String> {
     if send_connect_playback_command(
         &app,
         ConnectPlaybackCommand {
-            op: "moveQueueIndex".to_string(),
-            from_index: Some(payload.from_index),
-            to_index: Some(payload.to_index),
+            op: "removeQueueIndices".to_string(),
+            indices: Some(payload.indices.clone()),
+            ..Default::default()
+        },
+    )? {
+        return Ok(());
+    }
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let result = (|| -> Result<(), String> {
+            let sessions = app.state::<ActiveSessionState>();
+            let cover_art_cache = app.state::<CoverArtCacheState>();
+            let playback = app.state::<PlaybackControllerState>();
+
+            let runtime_context = active_runtime_parts(&app, &sessions).ok().map(
+                |(active_client, active_capability_matrix, active_profile_id)| {
+                    (
+                        active_client,
+                        active_capability_matrix,
+                        active_profile_id,
+                        cover_art_cache.0.clone(),
+                    )
+                },
+            );
+
+            {
+                let mut controller = playback
+                    .0
+                    .lock()
+                    .map_err(|_| "The playback controller state is unavailable.".to_string())?;
+                if let Some((
+                    active_client,
+                    active_capability_matrix,
+                    active_profile_id,
+                    cover_art_cache,
+                )) = runtime_context.as_ref()
+                {
+                    let runtime_context = PlaybackRuntimeContext {
+                        client: active_client,
+                        capability_matrix: active_capability_matrix,
+                        cover_art_cache: Some(cover_art_cache),
+                        profile_id: Some(active_profile_id),
+                    };
+                    controller.remove_queue_indices(Some(&runtime_context), payload.indices)?;
+                } else {
+                    controller.remove_queue_indices(None, payload.indices)?;
+                }
+            }
+            spawn_current_artwork_update(&app);
+            Ok(())
+        })();
+
+        if let Err(error) = result {
+            log::error!("playback_remove_queue_indices: failed: {error}");
+        }
+    });
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn playback_move_queue_indices(
+    app: AppHandle,
+    payload: PlaybackMoveQueueIndicesRequest,
+) -> Result<(), String> {
+    if send_connect_playback_command(
+        &app,
+        ConnectPlaybackCommand {
+            op: "moveQueueIndices".to_string(),
+            indices: Some(payload.indices.clone()),
+            insert_before: Some(payload.insert_before),
             ..Default::default()
         },
     )? {
@@ -537,13 +605,13 @@ pub fn playback_move_queue_index(
                 .0
                 .lock()
                 .map_err(|_| "The playback controller state is unavailable.".to_string())?;
-            controller.move_queue_index(payload.from_index, payload.to_index)?;
+            controller.move_queue_indices(payload.indices, payload.insert_before)?;
             spawn_current_artwork_update(&app);
             Ok(())
         })();
 
         if let Err(error) = result {
-            log::error!("playback_move_queue_index: failed: {error}");
+            log::error!("playback_move_queue_indices: failed: {error}");
         }
     });
     Ok(())

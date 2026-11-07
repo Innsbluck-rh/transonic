@@ -46,6 +46,8 @@ export function playbackStatus(overrides: Partial<PlaybackStatus> = {}): Playbac
     playNextQueueLen: 0,
     currentPositionMs: 0,
     currentSongId: currentIndex === null ? null : (queue[currentIndex]?.id ?? null),
+    queueRevision: 0,
+    queueIndexMap: [],
     outputHost: null,
     playbackError: null,
     activeStreamInfo: null,
