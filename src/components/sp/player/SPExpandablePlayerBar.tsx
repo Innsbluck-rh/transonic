@@ -5,6 +5,7 @@ import SPPlayerBar from '~/components/sp/player/SPPlayerBar';
 import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/routes';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
+import { clearQueueSelection, isQueueSelecting } from '~/stores/QueueSelectionStore';
 import { setSPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
 import SPPlayer from './SPPlayer';
 import { spPlayerBarRequest } from './service';
@@ -250,7 +251,12 @@ const SPExpandablePlayerBar: Component<SPExpandablePlayerBarProps> = (props) => 
     let disposed = false;
     let unregister: (() => Promise<void>) | undefined;
 
+    // While queue rows are selected, Back only ends the selection; the sheet stays open.
     void onBackButtonPress(() => {
+      if (isQueueSelecting()) {
+        clearQueueSelection();
+        return;
+      }
       closeSheet();
     }).then((listener) => {
       if (disposed) {
