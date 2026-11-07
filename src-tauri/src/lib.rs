@@ -14,6 +14,8 @@ mod playback_state;
 mod profiles;
 mod secrets;
 mod session;
+#[cfg(any(target_os = "windows", target_os = "android"))]
+mod unknown_value;
 #[cfg(not(test))]
 use std::sync::Arc;
 use std::sync::Mutex;

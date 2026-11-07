@@ -10,6 +10,7 @@ import { resolveAlbumRoute, resolveArtistRoute } from '~/features/navigation/rou
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { usePlayback } from '~/features/playback/usePlayback';
 import { buildQueueAutoScrollKey, useQueueAutoScroll } from '~/features/playback/useQueueAutoScroll';
+import { orUnknown } from '~/utils/unknownValue';
 import QueueList from '../../common/list/song/QueueList';
 import LoadCircle from '../../common/LoadCircle';
 import Heading3 from '../../common/text/Heading3';
@@ -89,7 +90,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               </Show>
             </div>
             <MarqueeParagraph
-              text={currentEntry()?.title || ''}
+              text={currentEntry() ? orUnknown(currentEntry()?.title) : ''}
               class='archivo mt-4 w-full text-center text-2xl font-black tracking-tighter'
               onPointerDown={(event) => {
                 event.stopPropagation();
@@ -102,7 +103,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
               }}
             />
             <MarqueeParagraph
-              text={currentEntry()?.artist || ''}
+              text={currentEntry() ? orUnknown(currentEntry()?.artist) : ''}
               class='archivo text-secondary-text mt-1'
               onPointerDown={(event) => {
                 event.stopPropagation();

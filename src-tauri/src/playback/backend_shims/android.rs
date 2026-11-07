@@ -9,6 +9,7 @@ use crate::playback::android_mobile_plugin::{
 use crate::playback::backend_shims::backend::{
     PlaybackBackend, PlaybackBackendLoadRequest, PlaybackLoadStrategy, PlaybackSeekAction,
 };
+use crate::unknown_value::or_unknown;
 
 trait AndroidPlaybackControl: Send {
     fn play(&self) -> Result<(), String>;
@@ -136,9 +137,11 @@ impl AndroidPlaybackBackend {
             absolute_start_position_ms: request.absolute_start_position_ms,
             local_start_position_ms: request.local_start_position_ms,
             autoplay: request.autoplay,
-            title: request.title,
-            artist: request.artist,
-            album: request.album,
+            // These feed the media session (notification, lock screen), so a
+            // missing tag shows the unknown placeholder like the app UI does.
+            title: or_unknown(Some(request.title.as_str())),
+            artist: Some(or_unknown(request.artist.as_deref())),
+            album: Some(or_unknown(request.album.as_deref())),
             source_content_type: request.source_content_type,
             source_suffix: request.source_suffix,
             artwork_path: request.artwork_path,

@@ -455,7 +455,11 @@ export type ConnectTransferPlaybackRequest = { targetDeviceId: string }
 export type CoverArtCacheStatus = { profileId: string | null; cacheDir: string; entryCount: number; fileCount: number; totalBytes: number; ttlSeconds: number }
 export type CoverArtRequest = { profileId: string; coverArtId: string; size: number | null; cachedFallbackSizes?: number[] }
 export type CoverArtResponse = { localPath: string }
-export type FolderStructureAlbumItem = { id: string; name: string; artist: string | null; coverArtId: string | null; year: number | null }
+export type FolderStructureAlbumItem = { id: string; 
+/**
+ * `None` for the group of songs that have no album tag.
+ */
+name: string | null; artist: string | null; coverArtId: string | null; year: number | null }
 export type FolderStructureAlbumSongsRequest = { libraryId: string; nodeId: string; albumId: string }
 export type FolderStructureAlbumSongsResponse = { libraryId: string; nodeId: string; albumId: string; songs: SongResponse[] }
 export type FolderStructureAlbumsRequest = { libraryId: string; nodeId: string }

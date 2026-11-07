@@ -53,6 +53,7 @@ use tauri::{AppHandle, Manager};
 
 use super::reporting::PlaybackReporter;
 use crate::models::{PlaybackSeekRequest, PlaybackStatus, PlayingState, SongResponse};
+use crate::unknown_value::or_unknown;
 use crate::{ActiveSessionState, CoverArtCacheState};
 
 /// Cover art size (px) to request for the SMTC thumbnail. Matches the player
@@ -78,13 +79,14 @@ struct SmtcShared {
 }
 
 /// Owned copy of the metadata needed to (re-)push a track to SMTC from another
-/// thread.
+/// thread. Title, artist and album already carry the unknown placeholder when
+/// the tag is missing.
 #[derive(Clone)]
 struct RenderMeta {
     song_id: String,
     title: String,
-    artist: Option<String>,
-    album: Option<String>,
+    artist: String,
+    album: String,
     duration_secs: Option<u32>,
 }
 
@@ -185,9 +187,9 @@ impl PlaybackReporter for SmtcReporter {
 
         let meta = song.map(|song| RenderMeta {
             song_id: song.id.clone(),
-            title: song.title.clone(),
-            artist: song.artist.clone(),
-            album: song.album.clone(),
+            title: or_unknown(Some(song.title.as_str())),
+            artist: or_unknown(song.artist.as_deref()),
+            album: or_unknown(song.album.as_deref()),
             duration_secs: song.duration,
         });
         let playback = map_playback(&playing_state, status.current_position_ms);
@@ -275,8 +277,8 @@ fn render(meta: Option<&RenderMeta>, playback: MediaPlayback, update_metadata: b
                 if update_metadata {
                     let _ = controls.set_metadata(MediaMetadata {
                         title: Some(meta.title.as_str()),
-                        album: meta.album.as_deref(),
-                        artist: meta.artist.as_deref(),
+                        album: Some(meta.album.as_str()),
+                        artist: Some(meta.artist.as_str()),
                         cover_url: None,
                         duration: meta
                             .duration_secs
@@ -320,8 +322,8 @@ fn spawn_cover_art_update(
                 if let Some(controls) = slot.borrow_mut().as_mut() {
                     let _ = controls.set_metadata(MediaMetadata {
                         title: Some(meta.title.as_str()),
-                        album: meta.album.as_deref(),
-                        artist: meta.artist.as_deref(),
+                        album: Some(meta.album.as_str()),
+                        artist: Some(meta.artist.as_str()),
                         cover_url: Some(cover_url.as_str()),
                         duration: meta
                             .duration_secs

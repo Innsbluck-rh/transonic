@@ -4,6 +4,7 @@ import { type SongItemConditions, songItemConditionAttrs } from '~/features/item
 import type { MenuItem } from '~/features/menu/types';
 import useContextMenu from '~/features/menu/useContextMenu';
 import { formatCompactDuration } from '~/utils/duration';
+import { orUnknown } from '~/utils/unknownValue';
 
 export interface SongItemProps {
   song: SongResponse;
@@ -56,14 +57,12 @@ const SongItem: Component<SongItemProps> = (props) => {
             <i class='icon-[material-symbols--next-plan] text-secondary-text text-xs' />
           </Show>
           <p class='song-item-title archivo min-w-0 flex-1 truncate' classList={{ 'font-bold': props.emphasizeTitle }} title={props.song.title}>
-            {props.song.title}
+            {orUnknown(props.song.title)}
           </p>
         </div>
-        <Show when={props.song.artist}>
-          <p class='song-item-meta archivo truncate text-[11px]' title={props.song.artist ?? undefined}>
-            {props.song.artist}
-          </p>
-        </Show>
+        <p class='song-item-meta archivo truncate text-[11px]' title={props.song.artist ?? undefined}>
+          {orUnknown(props.song.artist)}
+        </p>
       </div>
 
       <p class='song-item-meta archivo ml-2 text-xs'>{formatCompactDuration(props.song.duration ?? 0)}</p>

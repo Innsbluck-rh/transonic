@@ -13,6 +13,7 @@ import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { setAppearanceSetting, settingsStore } from '~/features/settings/service';
 import { sessionStore } from '~/stores/SessionStore';
 import { SPScrollPaddingStore } from '~/stores/SPScrollPaddingStore';
+import { orUnknown } from '~/utils/unknownValue';
 
 const SIMILAR_ARTIST_COUNT = 8;
 
@@ -172,7 +173,9 @@ function BrowseArtist(props: Partial<RouteSectionProps<unknown>>) {
               <i class='icon-[material-symbols--arrow-back]' />
             </div>
           </div>
-          <p class='archivo text-primary-text absolute bottom-0 left-0 m-3 w-full text-2xl font-black tracking-tighter'>{artist()?.name ?? ''}</p>
+          <p class='archivo text-primary-text absolute bottom-0 left-0 m-3 w-full text-2xl font-black tracking-tighter'>
+            {artist() ? orUnknown(artist()?.name) : ''}
+          </p>
         </div>
 
         <div class='flex flex-col'>
