@@ -1,9 +1,11 @@
-import { Component, createEffect, createMemo, createSignal, For, onCleanup, Show } from 'solid-js';
+import { Component, createEffect, createMemo, createSignal, For, on, onCleanup, Show } from 'solid-js';
 import { commands, type SongResponse } from '~/bindings';
+import QueueMoveGroupItem from '~/components/common/list/song/QueueMoveGroupItem';
 import SongItem from '~/components/common/list/song/SongItem';
 import { CoverArtSizes } from '~/features/albums/CoverArtSizes';
 import { useCoverArtMap } from '~/features/albums/useCoverArtMap';
 import { buildQueueItemMenuItems, buildQueueSelectionMenuItems, showContextMenu } from '~/features/menu';
+import type { MenuItem } from '~/features/menu/types';
 import { useSPNavigate } from '~/features/navigation/useSPNavigate';
 import { isCurrentSong } from '~/features/playback/currentSong';
 import { hasPlaybackCommandError } from '~/features/playback/service';
@@ -60,6 +62,9 @@ const QueueList: Component<QueueListProps> = (props) => {
     selectedIndices: () => queueSelection().indices,
     selectRect: setQueueSelectionSpan,
   });
+  // A preview kept after letting go of a drag lasts until the moved queue arrives.
+  createEffect(on(() => props.queue, gestures.clearDragPreview, { defer: true }));
+  const movingIndexSet = createMemo(() => new Set(gestures.dragPreview()?.indices));
 
   const requestCoverArtId = (coverArtId: string | null | undefined) => {
     const normalizedId = coverArtId?.trim();
@@ -125,6 +130,47 @@ const QueueList: Component<QueueListProps> = (props) => {
     cachedFallbackSizes: [CoverArtSizes.lg, CoverArtSizes.md],
   });
 
+  /** A row's song as the list draws it; the drag preview draws a single moved row with it too. */
+  const renderSongItem = (entry: SongResponse, index: () => number, menuItems?: MenuItem[]) => (
+    <SongItem
+      song={entry}
+      playing={isCurrentSong({ playbackStatus: playbackStatus(), songId: entry.id, queueIndex: index() })}
+      index={index() + 1}
+      indexContentMode={isQueueSelecting() ? 'selection' : 'indexOrPlaying'}
+      selected={isQueueIndexSelected(index())}
+      coverArt
+      coverArtUrl={coverArtMap.src(queueCoverArtId(entry))}
+      boldTitle='always'
+      playNext={isPlayNextQueueIndex(index())}
+      // SP opens the row menu from the ⋮ button; a long-press on the row lifts it instead.
+      contextMenuItems={isSP() ? undefined : menuItems}
+      withMenuButton={isSP()}
+      onMenuButtonClick={(event) => menuItems && showContextMenu(event, menuItems)}
+    />
+  );
+
+  /**
+   * While rows are dragged and would land before `insertBefore`, draws them inserted
+   * there: one row as itself, several as one group row. It is not a
+   * `data-queue-index` row, so gestures and clicks see only the real rows.
+   */
+  const MovePreview = (previewProps: { insertBefore: number }) => {
+    const moving = () => {
+      const preview = gestures.dragPreview();
+      return preview?.insertBefore === previewProps.insertBefore ? preview.indices : [];
+    };
+    const songs = () => moving().flatMap((index) => props.queue[index] ?? []);
+    return (
+      <Show when={songs().length > 0}>
+        <div class='border-secondary-border bg-primary-plane pointer-events-none relative border-b' data-queue-move-preview>
+          <Show when={songs().length === 1} fallback={<QueueMoveGroupItem count={songs().length} />}>
+            {renderSongItem(songs()[0], () => moving()[0])}
+          </Show>
+        </div>
+      </Show>
+    );
+  };
+
   const onPointerDown = (event: PointerEvent) => {
     gestures.resetClick();
     const index = queueRowIndexAt(event.target);
@@ -184,7 +230,7 @@ const QueueList: Component<QueueListProps> = (props) => {
         rootElement = element;
         element.addEventListener('contextmenu', onContextMenuCapture, true);
       }}
-      // isolate: the list's own layers (selection bar, drop line, rectangle) stay under whatever overlays the list, such as the selection toolbar.
+      // isolate: the list's own layers (selection bar, rectangle) stay under whatever overlays the list, such as the selection toolbar.
       class='relative isolate flex w-full flex-1 flex-col select-none'
       onPointerDown={onPointerDown}
       onClick={onClick}
@@ -201,10 +247,6 @@ const QueueList: Component<QueueListProps> = (props) => {
       >
         {(entry, i) => {
           const coverArtId = createMemo(() => queueCoverArtId(entry));
-          const dropIndicatorEdge = () => {
-            const current = gestures.dropIndicator();
-            return current?.index === i() ? current.edge : null;
-          };
           let itemElement: HTMLDivElement | undefined;
           onCleanup(() => {
             if (itemElement) {
@@ -231,42 +273,25 @@ const QueueList: Component<QueueListProps> = (props) => {
             observer.observe(element);
           };
 
-          const playing = () => isCurrentSong({ playbackStatus: playbackStatus(), songId: entry.id, queueIndex: i() });
-
           const menuItems = buildQueueItemMenuItems(entry, i, navigate);
 
           return (
-            <div ref={setItemElement} class='border-secondary-border relative border-b' data-queue-index={i()}>
-              <SongItem
-                song={entry}
-                playing={playing()}
-                index={i() + 1}
-                indexContentMode={isQueueSelecting() ? 'selection' : 'indexOrPlaying'}
-                selected={isQueueIndexSelected(i())}
-                coverArt
-                coverArtUrl={coverArtMap.src(coverArtId())}
-                boldTitle='always'
-                playNext={isPlayNextQueueIndex(i())}
-                // SP opens the row menu from the ⋮ button; a long-press on the row lifts it instead.
-                contextMenuItems={isSP() ? undefined : menuItems}
-                withMenuButton={isSP()}
-                onMenuButtonClick={(event) => showContextMenu(event, menuItems)}
-              />
-              <Show when={dropIndicatorEdge()}>
-                {(edge) => (
-                  <div
-                    class='bg-accent pointer-events-none absolute right-0 left-0 z-20 h-0.5'
-                    classList={{
-                      'top-0': edge() === 'top',
-                      'bottom-0': edge() === 'bottom',
-                    }}
-                  />
-                )}
-              </Show>
-            </div>
+            <>
+              <MovePreview insertBefore={i()} />
+              <div
+                ref={setItemElement}
+                class='border-secondary-border relative border-b'
+                // A row being dragged stays in place, faded; the preview draws it where it would land.
+                classList={{ 'opacity-25': movingIndexSet().has(i()) }}
+                data-queue-index={i()}
+              >
+                {renderSongItem(entry, i, menuItems)}
+              </div>
+            </>
           );
         }}
       </For>
+      <MovePreview insertBefore={props.queue.length} />
       <Show when={gestures.rect()}>
         {(rect) => (
           <div

@@ -8,13 +8,19 @@ const DRAG_THRESHOLD_PX = 5;
 export const LONG_PRESS_MS = 450;
 const AUTO_SCROLL_EDGE_PX = 48;
 const AUTO_SCROLL_MAX_STEP_PX = 16;
+/** How long a preview kept after letting go waits for the moved queue. */
+const MOVE_SETTLE_TIMEOUT_MS = 1500;
 
-export type QueueDropEdge = 'top' | 'bottom';
-
-export interface QueueDropIndicator {
-  index: number;
-  edge: QueueDropEdge;
+/** What the list draws while rows are dragged. */
+export interface QueueDragPreview {
+  /** The rows being moved; they stay where they are, faded. */
+  indices: readonly number[];
+  /** Where the moved rows are drawn inserted, or null while letting go would not move them. */
+  insertBefore: number | null;
 }
+
+const isSamePreview = (a: QueueDragPreview | null, b: QueueDragPreview | null) =>
+  a === b || (!!a && !!b && a.indices === b.indices && a.insertBefore === b.insertBefore);
 
 export interface QueueRect {
   left: number;
@@ -52,10 +58,17 @@ export function queueRowIndexAt(target: EventTarget | null): number | null {
  * click handler; `consumeClick` tells it when a gesture used them up.
  */
 export function createQueueListGestures(options: QueueListGestureOptions) {
-  const [dropIndicator, setDropIndicator] = createSignal<QueueDropIndicator | null>(null);
+  const [dragPreview, setDragPreview] = createSignal<QueueDragPreview | null>(null, { equals: isSamePreview });
   const [rect, setRect] = createSignal<QueueRect | null>(null);
   let suppressClick = false;
   let endGesture: (() => void) | undefined;
+  let settleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /** Drops the preview, including one kept after letting go (see `startDrag`). */
+  const clearDragPreview = () => {
+    clearTimeout(settleTimer);
+    setDragPreview(null);
+  };
 
   const insertBeforeAt = (clientY: number) => {
     const root = options.root();
@@ -128,39 +141,28 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
   };
 
   /**
-   * Shows the grabbed row under the pointer and moves rows where it is let go.
+   * Drags rows: while the pointer moves, the list fades the moved rows and draws
+   * them inserted where they would land (`dragPreview`); letting go moves them there.
    * `event` is the press, `current` where the pointer is now. A `lifted` row
    * (SP long-press) only becomes a drag once it moves; let go before that, nothing happens.
    */
   const startDrag = (sourceIndex: number, event: PointerEvent, current: PointerEvent, lifted: boolean) => {
     const root = options.root();
-    const sourceRow = root ? rowElements(root)[sourceIndex] : undefined;
-    if (!root || !sourceRow) return;
+    if (!root || !rowElements(root)[sourceIndex]) return;
     cancelRipple();
     suppressClick = true;
+    clearDragPreview();
     let indices = lifted ? null : options.beginMove(sourceIndex);
-
-    // The ghost is a copy of the grabbed row that follows the pointer.
-    const box = sourceRow.getBoundingClientRect();
-    const offsetX = event.clientX - box.left;
-    const offsetY = event.clientY - box.top;
-    const ghost = sourceRow.cloneNode(true) as HTMLElement;
-    ghost.removeAttribute('data-queue-index');
-    Object.assign(ghost.style, {
-      position: 'fixed',
-      left: '0',
-      top: '0',
-      width: `${box.width}px`,
-      opacity: '0.8',
-      pointerEvents: 'none',
-      zIndex: '100',
-    });
-    ghost.classList.add('bg-primary-plane', 'shadow-lg');
-    document.body.appendChild(ghost);
 
     // Once a row is lifted the finger drags it instead of scrolling the list.
     const preventScroll = (touch: TouchEvent) => touch.cancelable && touch.preventDefault();
     window.addEventListener('touchmove', preventScroll, { passive: false });
+    // The inserted preview pushes the rows below it down; the browser must not scroll to keep them in place.
+    const container = options.scrollContainer();
+    const overflowAnchor = container?.style.overflowAnchor ?? '';
+    if (container) {
+      container.style.overflowAnchor = 'none';
+    }
 
     const liftX = current.clientX;
     const liftY = current.clientY;
@@ -169,17 +171,15 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     let insertBefore: number | null = null;
     let frame = 0;
     const update = () => {
-      ghost.style.transform = `translate(${clientX - offsetX}px, ${clientY - offsetY}px)`;
       if (!indices && Math.hypot(clientX - liftX, clientY - liftY) >= DRAG_THRESHOLD_PX) {
         indices = options.beginMove(sourceIndex);
       }
-      insertBefore = indices ? insertBeforeAt(clientY) : null;
-      if (!indices || insertBefore === null || isQueueMoveNoop(indices, insertBefore)) {
-        setDropIndicator(null);
-      } else {
-        const length = options.queueLength();
-        setDropIndicator(insertBefore < length ? { index: insertBefore, edge: 'top' } : { index: length - 1, edge: 'bottom' });
-      }
+      // Measured with the preview in place: it pushes the rows below it down by one row, so the
+      // insertion point changes only once the pointer has crossed a whole row, without flickering.
+      const landing = indices ? insertBeforeAt(clientY) : null;
+      insertBefore = indices && landing !== null && !isQueueMoveNoop(indices, landing) ? landing : null;
+      // A lifted row is a selected row that has not moved yet: the selection is what it would move.
+      setDragPreview({ indices: indices ?? options.selectedIndices(), insertBefore });
     };
     const tick = () => {
       if (indices) {
@@ -191,8 +191,9 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     const stop = () => {
       cancelAnimationFrame(frame);
       window.removeEventListener('touchmove', preventScroll);
-      ghost.remove();
-      setDropIndicator(null);
+      if (container) {
+        container.style.overflowAnchor = overflowAnchor;
+      }
     };
     update();
     frame = requestAnimationFrame(tick);
@@ -208,11 +209,18 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
         clientY = next.clientY;
         update();
         stop();
-        if (indices && insertBefore !== null && !isQueueMoveNoop(indices, insertBefore)) {
-          options.move(indices, insertBefore);
+        if (!indices || insertBefore === null) {
+          clearDragPreview();
+          return;
         }
+        // The moved queue arrives later; until then the preview stays, so the old order does not flash back.
+        settleTimer = setTimeout(clearDragPreview, MOVE_SETTLE_TIMEOUT_MS);
+        options.move(indices, insertBefore);
       },
-      cancel: stop,
+      cancel: () => {
+        stop();
+        clearDragPreview();
+      },
     });
   };
 
@@ -357,7 +365,19 @@ export function createQueueListGestures(options: QueueListGestureOptions) {
     return suppressed;
   };
 
-  onCleanup(() => endGesture?.());
+  onCleanup(() => {
+    endGesture?.();
+    clearTimeout(settleTimer);
+  });
 
-  return { dropIndicator, rect, pressPC, pressSP, consumeClick, resetClick: () => (suppressClick = false) };
+  return {
+    dragPreview,
+    /** Call when the queue changes: a preview kept after letting go has then done its job. */
+    clearDragPreview,
+    rect,
+    pressPC,
+    pressSP,
+    consumeClick,
+    resetClick: () => (suppressClick = false),
+  };
 }

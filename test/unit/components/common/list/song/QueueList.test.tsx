@@ -1,3 +1,4 @@
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import QueueList from '~/components/common/list/song/QueueList';
@@ -174,5 +175,92 @@ describe('QueueList', () => {
     renderQueue();
 
     expect(container.querySelector('[aria-label="More"]')).toBeNull();
+  });
+
+  describe('dragging rows', () => {
+    const ROW_PX = 50;
+    const rowWrapper = (index: number) => container.querySelector<HTMLElement>(`[data-queue-index="${index}"]`)!;
+    const preview = () => container.querySelector<HTMLElement>('[data-queue-move-preview]');
+    const pointer = (type: string, target: EventTarget, clientY: number) => {
+      const event = new MouseEvent(type, { bubbles: true, button: 0, clientX: 10, clientY });
+      Object.defineProperty(event, 'pointerId', { value: 1 });
+      target.dispatchEvent(event);
+    };
+    /** Drags row `from` to `clientY`, rows being ROW_PX tall from the top. */
+    const dragTo = (from: number, clientY: number) => {
+      pointer('pointerdown', row(from), from * ROW_PX + 10);
+      pointer('pointermove', window, clientY);
+    };
+
+    let boxSpy: { mockRestore: () => void } | undefined;
+
+    beforeEach(() => {
+      // jsdom has no layout: each row reports its box from its queue index.
+      boxSpy = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+        const index = Number(this.dataset.queueIndex ?? 0);
+        return {
+          top: index * ROW_PX,
+          height: ROW_PX,
+          bottom: (index + 1) * ROW_PX,
+          left: 0,
+          right: 300,
+          width: 300,
+          x: 0,
+          y: index * ROW_PX,
+        } as DOMRect;
+      });
+    });
+
+    afterEach(() => {
+      boxSpy?.mockRestore();
+    });
+
+    it('fades the dragged row and draws it inserted where it would land, keeping it there until the moved queue arrives', async () => {
+      const { commands } = await import('~/bindings');
+      setPlaybackStore('status', playbackStatus({ queue, currentIndex: 0 }));
+      const [items, setItems] = createSignal(queue);
+      dispose = render(() => <QueueList queue={items()} />, container);
+
+      dragTo(0, 2.6 * ROW_PX);
+
+      expect(rowWrapper(0).classList.contains('opacity-25')).toBe(true);
+      expect(rowWrapper(1).classList.contains('opacity-25')).toBe(false);
+      expect(preview()?.nextElementSibling).toBe(rowWrapper(3));
+      expect(preview()?.querySelector('.song-item-title')?.textContent).toBe('a');
+
+      pointer('pointerup', window, 2.6 * ROW_PX);
+      expect(commands.playbackMoveQueueIndices).toHaveBeenCalledWith({ indices: [0], insertBefore: 3 });
+      expect(preview()).not.toBeNull();
+
+      setItems([queue[1], queue[2], queue[0], queue[3]]);
+      expect(preview()).toBeNull();
+      expect(rowWrapper(0).classList.contains('opacity-25')).toBe(false);
+    });
+
+    it('draws several selected rows as one group row, after the last row when dragged past it', () => {
+      renderQueue();
+      toggleQueueSelection(0);
+      toggleQueueSelection(2);
+
+      dragTo(0, 10 * ROW_PX);
+
+      expect(rowWrapper(0).classList.contains('opacity-25')).toBe(true);
+      expect(rowWrapper(2).classList.contains('opacity-25')).toBe(true);
+      expect(preview()?.previousElementSibling).toBe(rowWrapper(3));
+      expect(preview()?.textContent).toContain('[2 items]');
+    });
+
+    it('draws nothing inserted, and moves nothing, where letting go would not move the rows', async () => {
+      const { commands } = await import('~/bindings');
+      renderQueue();
+
+      dragTo(1, 1.4 * ROW_PX);
+      expect(rowWrapper(1).classList.contains('opacity-25')).toBe(true);
+      expect(preview()).toBeNull();
+
+      pointer('pointerup', window, 1.4 * ROW_PX);
+      expect(commands.playbackMoveQueueIndices).not.toHaveBeenCalled();
+      expect(rowWrapper(1).classList.contains('opacity-25')).toBe(false);
+    });
   });
 });

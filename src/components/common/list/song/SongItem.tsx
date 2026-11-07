@@ -84,11 +84,9 @@ const SongItem: Component<SongItemProps> = (props) => {
             {orUnknown(props.song.title)}
           </p>
         </div>
-        <Show when={props.song.artist}>
-          <p class='song-item-meta truncate text-[11px]' title={props.song.artist ?? undefined}>
-            {orUnknown(props.song.artist)}
-          </p>
-        </Show>
+        <p class='song-item-meta truncate text-[11px]' title={props.song.artist ?? undefined}>
+          {orUnknown(props.song.artist)}
+        </p>
       </div>
 
       <p class={`song-item-meta ml-3 text-xs`}>{formatCompactDuration(props.song.duration ?? 0)}</p>
