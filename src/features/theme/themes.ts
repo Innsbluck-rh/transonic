@@ -27,7 +27,7 @@ export const lightTheme: ColorTheme = {
   colorScheme: 'light',
   variables: {
     '--theme-color-primary-bg': 'var(--color-zinc-200)',
-    '--theme-color-primary-plane': 'var(--color-zinc-50)',
+    '--theme-color-primary-plane': 'var(--color-zinc-100)',
     '--theme-color-primary-surface': 'var(--color-gray-100)',
     '--theme-color-primary-selected': 'var(--color-zinc-200)',
     '--theme-color-primary-on-playing': 'var(--color-zinc-800)',
