@@ -1,5 +1,7 @@
 import { Component } from 'solid-js';
 
+import './SongItem.css';
+
 interface QueueMoveGroupItemProps {
   /** How many queue rows are being moved together. */
   count: number;

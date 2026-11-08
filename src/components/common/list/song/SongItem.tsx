@@ -5,6 +5,8 @@ import useContextMenu from '~/features/menu/useContextMenu';
 import { formatCompactDuration } from '~/utils/duration';
 import { orUnknown } from '~/utils/unknownValue';
 
+import './SongItem.css';
+
 export interface SongItemProps {
   song: SongResponse;
   /**
@@ -40,9 +42,9 @@ const SongItem: Component<SongItemProps> = (props) => {
 
   return (
     <div
-      class={`song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2`}
+      class='song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2'
       onClick={() => props.onClick?.()}
-      // styles.css draws the playing and selected looks from these.
+      // SongItem.css draws the playing and selected looks from these.
       data-current={props.playing ? 'true' : undefined}
       data-selected={props.selected ? 'true' : undefined}
       {...menuHandlers}
