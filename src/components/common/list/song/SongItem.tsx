@@ -72,7 +72,10 @@ const SongItem: Component<SongItemProps> = (props) => {
       </Show>
 
       <Show when={props.coverArt}>
-        <Show when={props.coverArtUrl} fallback={<div class='border-secondary-border mr-3 aspect-square max-h-8 w-8 rounded-md border' />}>
+        <Show
+          when={props.coverArtUrl}
+          fallback={<div class='border-secondary-border mr-3 aspect-square max-h-8 w-8 rounded-md border bg-black/10' />}
+        >
           {(url) => <img src={url()} class='mr-3 aspect-square max-h-8 w-8 rounded-md' loading='lazy' decoding='async' />}
         </Show>
       </Show>

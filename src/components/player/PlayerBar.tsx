@@ -135,8 +135,8 @@ const PlayerBar: Component<PlayerBarProps> = (props) => {
                 <Show
                   when={coverArt()}
                   fallback={
-                    <div class='border-secondary-border bg-primary-surface absolute inset-0 flex size-full items-center justify-center overflow-hidden rounded-sm border'>
-                      <p class='text-secondary-text text-center text-[10px] font-bold'>no img</p>
+                    <div class='border-secondary-border absolute inset-0 flex size-full items-center justify-center overflow-hidden rounded-sm border bg-black/10'>
+                      {/*<p class='text-secondary-text text-center text-[10px] font-bold'>no img</p>*/}
                     </div>
                   }
                 >

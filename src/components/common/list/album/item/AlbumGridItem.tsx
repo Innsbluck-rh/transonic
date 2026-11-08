@@ -62,7 +62,7 @@ const AlbumGridItem: Component<AlbumGridItemProps> = (props) => {
           <Show
             when={src()}
             fallback={
-              <div class='flex size-full items-center justify-center hover:brightness-75'>
+              <div class='flex size-full items-center justify-center bg-black/5 hover:brightness-75'>
                 <p class='text-secondary-text text-sm font-bold'>no image</p>
               </div>
             }
