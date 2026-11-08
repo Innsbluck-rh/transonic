@@ -8,7 +8,7 @@ interface RouteHeaderProps {
 const RouteHeader: Component<RouteHeaderProps> = (props) => {
   return (
     <div class='border-primary-text/45 bg-primary-bg/50 sticky top-0 z-10 flex h-12 min-h-12 w-full items-end overflow-hidden border-b backdrop-blur-[1px]'>
-      <p class={`archivo-black z-50 -mb-2 -ml-1 w-fit origin-top-left scale-x-200 text-3xl tracking-tighter opacity-45`}>{props.title}</p>
+      <p class='archivo-black z-50 -mb-2 -ml-1 w-fit origin-top-left scale-x-200 text-3xl tracking-tighter opacity-45'>{props.title}</p>
       {props.children}
     </div>
   );

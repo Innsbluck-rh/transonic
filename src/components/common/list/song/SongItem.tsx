@@ -56,9 +56,9 @@ const SongItem: Component<SongItemProps> = (props) => {
               {/* relative z-1: drawn in front of the selection tint (.song-item[data-selected]::after). */}
               <Show
                 when={props.selected}
-                fallback={<i class={'icon-[material-symbols--check-box-outline-blank] song-item-leading relative z-1 text-xl'} />}
+                fallback={<i class='icon-[material-symbols--check-box-outline-blank] song-item-leading relative z-1 text-xl' />}
               >
-                <i class={'icon-[material-symbols--check-box] song-item-leading relative z-1 text-xl'} />
+                <i class='icon-[material-symbols--check-box] song-item-leading relative z-1 text-xl' />
               </Show>
             </Match>
             <Match when={props.playing}>
@@ -91,7 +91,7 @@ const SongItem: Component<SongItemProps> = (props) => {
         </p>
       </div>
 
-      <p class={`song-item-meta ml-3 text-xs`}>{formatCompactDuration(props.song.duration ?? 0)}</p>
+      <p class='song-item-meta ml-3 text-xs'>{formatCompactDuration(props.song.duration ?? 0)}</p>
 
       <Show when={props.withMenuButton} fallback={<div class='mr-4' />}>
         {/* Its presses stay with the button: they neither click the row nor start a press on it. */}

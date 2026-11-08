@@ -34,7 +34,7 @@ export function buildQueueAutoScrollKey(queue: SongResponse[]) {
 
 export function useQueueAutoScroll(options: QueueAutoScrollOptions) {
   let scrollContainerRef: HTMLDivElement | undefined;
-  const itemRefs: Array<HTMLDivElement | undefined> = [];
+  const itemRefs: (HTMLDivElement | undefined)[] = [];
   let hasScrolled = false;
   let previousQueueKey: string | undefined;
 
