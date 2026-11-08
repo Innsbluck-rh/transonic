@@ -20,7 +20,7 @@ export const AlbumArtOverlayDialog: Component = () => {
     <Show when={albumArtOverlayDialogOpen()}>
       <div class='absolute inset-0 z-100 flex items-center justify-center bg-black/75' role='presentation'>
         <div class='absolute top-5 right-5 z-10 cursor-pointer p-2 drop-shadow-[0_1px_8px_rgb(0_0_0)]' onClick={close}>
-          <i class='icon-[material-symbols--close] text-3xl' />
+          <i class='icon-[material-symbols--close] text-3xl text-white' />
         </div>
 
         <section class='flex size-full flex-col items-center justify-center overflow-hidden' role='dialog' aria-modal='true' onClick={close}>

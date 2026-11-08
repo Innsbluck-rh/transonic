@@ -3,8 +3,8 @@ export type TransonicColorTheme = 'light' | 'dark' | 'trans';
 export const DEFAULT_COLOR_THEME: TransonicColorTheme = 'trans';
 
 export type ThemeVariableName =
-  | '--theme-color-primary-bg'
   | '--theme-color-primary-plane'
+  | '--theme-color-primary-bg'
   | '--theme-color-primary-surface'
   | '--theme-color-primary-selected'
   | '--theme-color-primary-on-playing'
@@ -26,26 +26,26 @@ export interface ColorTheme {
 export const lightTheme: ColorTheme = {
   colorScheme: 'light',
   variables: {
-    '--theme-color-primary-bg': 'var(--color-zinc-200)',
-    '--theme-color-primary-plane': 'var(--color-zinc-100)',
-    '--theme-color-primary-surface': 'var(--color-gray-100)',
-    '--theme-color-primary-selected': 'var(--color-zinc-200)',
-    '--theme-color-primary-on-playing': 'var(--color-zinc-800)',
-    '--theme-color-primary-hover': 'var(--color-gray-200)',
-    '--theme-color-primary-border': 'rgb(0 0 0 / 0.25)',
-    '--theme-color-secondary-border': 'rgb(0 0 0 / 0.1)',
-    '--theme-color-primary-text': 'var(--color-gray-600)',
-    '--theme-color-secondary-text': 'var(--color-gray-500)',
-    '--theme-color-sp-nav-space': 'var(--color-zinc-400)',
-    '--theme-color-accent': 'var(--color-cyan-600)',
+    '--theme-color-primary-plane': 'oklch(97% 0.001 286.375)',
+    '--theme-color-primary-bg': 'oklch(91% 0.002 286.32)',
+    '--theme-color-primary-surface': 'oklch(95.7% 0.003 264.542)',
+    '--theme-color-primary-selected': 'oklch(90% 0.02 236.32)',
+    '--theme-color-primary-on-playing': 'oklch(34.6% 0.007 256.802)',
+    '--theme-color-primary-hover': 'oklch(90.5% 0.008 236.32)',
+    '--theme-color-primary-border': 'oklch(79% 0.01 286.32)',
+    '--theme-color-secondary-border': 'oklch(84.5% 0.005 286.32)',
+    '--theme-color-primary-text': 'oklch(33.6% 0.03 256.802)',
+    '--theme-color-secondary-text': 'oklch(56.1% 0.04 264.364)',
+    '--theme-color-sp-nav-space': 'oklch(70.5% 0.015 286.067)',
+    '--theme-color-accent': 'oklch(62.9% 0.15 211.723)',
   },
 };
 
 export const darkTheme: ColorTheme = {
   colorScheme: 'dark',
   variables: {
-    '--theme-color-primary-bg': 'var(--color-zinc-800)',
     '--theme-color-primary-plane': 'var(--color-zinc-900)',
+    '--theme-color-primary-bg': 'var(--color-zinc-800)',
     '--theme-color-primary-surface': 'var(--color-zinc-700)',
     '--theme-color-primary-selected': 'var(--color-zinc-800)',
     '--theme-color-primary-on-playing': 'var(--color-zinc-100)',
@@ -62,8 +62,8 @@ export const darkTheme: ColorTheme = {
 export const transonicTheme: ColorTheme = {
   colorScheme: 'dark',
   variables: {
-    '--theme-color-primary-bg': 'var(--color-gray-900)',
     '--theme-color-primary-plane': 'var(--color-zinc-800)',
+    '--theme-color-primary-bg': 'var(--color-gray-900)',
     '--theme-color-primary-surface': 'var(--color-gray-800)',
     '--theme-color-primary-selected': 'var(--color-gray-700)',
     '--theme-color-primary-on-playing': 'var(--color-gray-100)',

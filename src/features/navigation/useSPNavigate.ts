@@ -3,6 +3,8 @@ import { closeSPExpandablePlayerBar } from '~/components/sp/player/service';
 import { isSP } from '~/utils/isSP';
 import { resolveSPBrowseRoute } from './routes';
 
+import './useSPNavigate.css';
+
 type NavDirection = 'forward' | 'backward';
 
 function setNavDirection(direction: NavDirection) {

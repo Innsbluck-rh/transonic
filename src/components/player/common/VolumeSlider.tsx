@@ -226,7 +226,7 @@ const VolumeSlider: Component<VolumeSliderProps> = (props) => {
       >
         <div
           ref={sliderRef}
-          class={`absolute flex h-5 w-[56px] cursor-pointer touch-none flex-row items-end gap-[4px]`}
+          class='absolute flex h-5 w-[56px] cursor-pointer touch-none flex-row items-end gap-[4px]'
           role='slider'
           aria-label='Volume'
           aria-valuemin={0}

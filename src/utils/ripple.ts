@@ -1,3 +1,5 @@
+import './ripple.css';
+
 const TARGET_SELECTOR = '.ripple, button';
 const CANCEL_EVENT = 'transonic:ripple-cancel';
 const MINIMUM_PRESS_MS = 180;

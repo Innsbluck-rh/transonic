@@ -1,56 +1,8 @@
 @import 'tailwindcss';
 @plugin '@iconify/tailwind4';
+
 /* Smartphone platform, not viewport width: index.tsx sets data-platform on <html> from isSP(). */
 @custom-variant sp (&:where([data-platform=sp], [data-platform=sp] *));
-.ripple {
-  position: relative;
-}
-
-/* Only an interacting target gets a layer; idle rows have no ripple boxes. */
-.ripple-layer {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 1;
-  opacity: 0.16;
-}
-
-.ripple-wave {
-  position: absolute;
-  border-radius: 50%;
-  background: var(--ripple-color, var(--color-primary-text));
-  animation: ripple-grow 450ms ease-out both;
-}
-
-.ripple-releasing {
-  animation: ripple-fade 160ms ease-out forwards;
-}
-
-@keyframes ripple-grow {
-  from {
-    transform: scale(0);
-  }
-  to {
-    transform: scale(1);
-  }
-}
-
-@keyframes ripple-fade {
-  to {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ripple-wave {
-    animation: none;
-  }
-  .ripple-releasing {
-    animation-duration: 1ms;
-  }
-}
 
 .archivo-black {
   font-family: 'Archivo Black', var(--cjk-fonts), sans-serif;
@@ -63,8 +15,8 @@
 }
 
 @theme {
-  --color-primary-bg: var(--theme-color-primary-bg);
   --color-primary-plane: var(--theme-color-primary-plane);
+  --color-primary-bg: var(--theme-color-primary-bg);
   --color-primary-surface: var(--theme-color-primary-surface);
   --color-primary-selected: var(--theme-color-primary-selected);
   --color-primary-on-playing: var(--theme-color-primary-on-playing);
@@ -158,6 +110,10 @@
     @apply text-primary-text text-sm;
   }
 
+  i {
+    @apply text-primary-text;
+  }
+
   select {
     @apply border-primary-border bg-primary-plane text-primary-text rounded-sm border px-0 py-0 text-sm;
     color-scheme: inherit;
@@ -203,134 +159,8 @@
     @apply hover:text-accent active:text-accent overflow-hidden rounded-md border-none bg-transparent;
   }
 
-  .song-item {
-    --song-item-leading-color: var(--color-primary-text);
-    --song-item-title-color: var(--color-primary-text);
-    --song-item-meta-color: var(--color-secondary-text);
-  }
-
-  /* A selected row keeps its own background (hover, playing) under an accent tint,
-     with a bar in the title color at the left edge drawn above the tint. */
-  .song-item[data-selected='true']::after {
-    @apply bg-accent/30 pointer-events-none absolute inset-0 content-[''];
-  }
-
-  .song-item[data-selected='true']::before {
-    @apply pointer-events-none absolute inset-y-0 left-0 z-2 w-[3px] content-[''];
-    background: var(--song-item-title-color);
-  }
-
-  .song-item[data-current='true'] {
-    @apply bg-accent/60;
-    --song-item-leading-color: var(--color-primary-on-playing);
-    --song-item-title-color: var(--color-primary-on-playing);
-    --song-item-meta-color: var(--color-primary-on-playing);
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .song-item:hover {
-      @apply bg-primary-hover;
-    }
-
-    .song-item[data-current='true']:hover {
-      @apply bg-accent/75;
-    }
-  }
-
-  .song-item-leading {
-    color: var(--song-item-leading-color);
-  }
-
-  .song-item-title {
-    color: var(--song-item-title-color);
-  }
-
-  .song-item-meta {
-    color: var(--song-item-meta-color);
-  }
-
   .home-surface-root {
     @apply bg-primary-bg flex min-h-0 w-full flex-1 flex-col gap-2 overflow-x-hidden overflow-y-auto;
     overscroll-behavior: none;
-  }
-}
-
-/* SP screen page transitions via View Transitions API */
-/* The transition overlay, the root snapshot and every named element swallow taps while a transition runs (adr/26).
-   Drop the root snapshot and let taps pass through the overlay, so unnamed elements (e.g. the bottom navigation) stay tappable. */
-:root {
-  view-transition-name: none;
-}
-
-::view-transition {
-  pointer-events: none;
-}
-
-::view-transition-group(sp-screen) {
-  z-index: 0;
-}
-
-::view-transition-image-pair(sp-screen) {
-  overflow: clip;
-}
-
-::view-transition-old(sp-screen) {
-  opacity: 0;
-  animation: none;
-}
-
-::view-transition-new(sp-screen) {
-  animation: none;
-}
-
-::view-transition-group(sp-header) {
-  z-index: 2;
-}
-
-::view-transition-old(sp-header) {
-  opacity: 0;
-  animation: none;
-}
-
-::view-transition-new(sp-header) {
-  animation: none;
-}
-
-:root[data-nav-direction]::view-transition-old(sp-screen) {
-  animation: sp-fade-out 180ms ease-out both;
-}
-:root[data-nav-direction]::view-transition-new(sp-screen) {
-  animation: sp-fade-in 180ms ease-out both;
-}
-
-::view-transition-group(sp-player-bar) {
-  z-index: 1;
-}
-
-::view-transition-old(sp-player-bar) {
-  opacity: 0;
-  animation: none;
-}
-
-::view-transition-new(sp-player-bar) {
-  animation: none;
-}
-
-@keyframes sp-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
-@keyframes sp-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(sp-screen),
-  ::view-transition-new(sp-screen) {
-    animation-duration: 0.01ms !important;
   }
 }

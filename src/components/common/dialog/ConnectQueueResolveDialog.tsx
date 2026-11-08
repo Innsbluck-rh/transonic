@@ -9,6 +9,8 @@ import { formatCompactDuration } from '~/utils/duration';
 import { orUnknown } from '~/utils/unknownValue';
 import Heading3 from '../text/Heading3';
 
+import '~/components/common/list/song/SongItem.css';
+
 // Shown while the Rust side holds the local queue back because it conflicts with
 // the Connect server's queue on connect. Cancel turns Connect off again.
 export default function ConnectQueueResolveDialog() {

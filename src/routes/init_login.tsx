@@ -94,7 +94,7 @@ function InitLogin() {
       <Show when={!isSP()} fallback={<SPHeader />}>
         <Header title='Login to server' shouldShowProfiles={false} />
       </Show>
-      <RouteHeader title={'Login'} />
+      <RouteHeader title='Login' />
       <div class='bg-primary-surface flex size-full flex-col gap-3 p-4'>
         <AuthForm onSubmit={(data) => submitConnection(data)} busy={submitting()} />
 

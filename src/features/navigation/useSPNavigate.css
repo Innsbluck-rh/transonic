@@ -1,0 +1,79 @@
+/* SP screen page transitions via View Transitions API */
+/* The transition overlay, the root snapshot and every named element swallow taps while a transition runs (adr/26).
+   Drop the root snapshot and let taps pass through the overlay, so unnamed elements (e.g. the bottom navigation) stay tappable. */
+:root {
+  view-transition-name: none;
+}
+
+::view-transition {
+  pointer-events: none;
+}
+
+::view-transition-group(sp-screen) {
+  z-index: 0;
+}
+
+::view-transition-image-pair(sp-screen) {
+  overflow: clip;
+}
+
+::view-transition-old(sp-screen) {
+  opacity: 0;
+  animation: none;
+}
+
+::view-transition-new(sp-screen) {
+  animation: none;
+}
+
+::view-transition-group(sp-header) {
+  z-index: 2;
+}
+
+::view-transition-old(sp-header) {
+  opacity: 0;
+  animation: none;
+}
+
+::view-transition-new(sp-header) {
+  animation: none;
+}
+
+:root[data-nav-direction]::view-transition-old(sp-screen) {
+  animation: sp-fade-out 180ms ease-out both;
+}
+:root[data-nav-direction]::view-transition-new(sp-screen) {
+  animation: sp-fade-in 180ms ease-out both;
+}
+
+::view-transition-group(sp-player-bar) {
+  z-index: 1;
+}
+
+::view-transition-old(sp-player-bar) {
+  opacity: 0;
+  animation: none;
+}
+
+::view-transition-new(sp-player-bar) {
+  animation: none;
+}
+
+@keyframes sp-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes sp-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(sp-screen),
+  ::view-transition-new(sp-screen) {
+    animation-duration: 0.01ms !important;
+  }
+}

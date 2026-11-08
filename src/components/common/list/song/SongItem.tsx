@@ -5,6 +5,8 @@ import useContextMenu from '~/features/menu/useContextMenu';
 import { formatCompactDuration } from '~/utils/duration';
 import { orUnknown } from '~/utils/unknownValue';
 
+import './SongItem.css';
+
 export interface SongItemProps {
   song: SongResponse;
   /**
@@ -40,9 +42,9 @@ const SongItem: Component<SongItemProps> = (props) => {
 
   return (
     <div
-      class={`song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2`}
+      class='song-item ripple relative flex w-full cursor-pointer flex-row items-center overflow-x-hidden py-2'
       onClick={() => props.onClick?.()}
-      // styles.css draws the playing and selected looks from these.
+      // SongItem.css draws the playing and selected looks from these.
       data-current={props.playing ? 'true' : undefined}
       data-selected={props.selected ? 'true' : undefined}
       {...menuHandlers}
@@ -54,9 +56,9 @@ const SongItem: Component<SongItemProps> = (props) => {
               {/* relative z-1: drawn in front of the selection tint (.song-item[data-selected]::after). */}
               <Show
                 when={props.selected}
-                fallback={<i class={'icon-[material-symbols--check-box-outline-blank] song-item-leading relative z-1 text-xl'} />}
+                fallback={<i class='icon-[material-symbols--check-box-outline-blank] song-item-leading relative z-1 text-xl' />}
               >
-                <i class={'icon-[material-symbols--check-box] song-item-leading relative z-1 text-xl'} />
+                <i class='icon-[material-symbols--check-box] song-item-leading relative z-1 text-xl' />
               </Show>
             </Match>
             <Match when={props.playing}>
@@ -89,7 +91,7 @@ const SongItem: Component<SongItemProps> = (props) => {
         </p>
       </div>
 
-      <p class={`song-item-meta ml-3 text-xs`}>{formatCompactDuration(props.song.duration ?? 0)}</p>
+      <p class='song-item-meta ml-3 text-xs'>{formatCompactDuration(props.song.duration ?? 0)}</p>
 
       <Show when={props.withMenuButton} fallback={<div class='mr-4' />}>
         {/* Its presses stay with the button: they neither click the row nor start a press on it. */}
