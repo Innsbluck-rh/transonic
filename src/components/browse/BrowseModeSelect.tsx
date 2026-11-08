@@ -43,9 +43,9 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
 
   return (
     <div ref={rootRef} class='relative w-full'>
-      <div class='bg-primary-surface border-secondary-border flex w-full flex-col overflow-hidden rounded-lg border shadow'>
+      <div class='bg-primary-surface border-secondary-border flex w-full flex-col overflow-hidden rounded-lg border shadow-xs'>
         <div
-          class='hover:bg-primary-hover ripple flex w-full cursor-pointer flex-row items-center gap-2 px-3 py-2'
+          class='hover:bg-primary-hover ripple flex h-8 w-full cursor-pointer flex-row items-center gap-2 px-3'
           onClick={() => setOpen((current) => !current)}
         >
           {/* 全モードを同じセルに重ね、幅を最長のモード名に固定する（選択中以外は invisible） */}
@@ -57,7 +57,7 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
                   classList={{ invisible: mode !== browseMode() }}
                   aria-hidden={mode !== browseMode()}
                 >
-                  <i class={`${getIconForMode(mode)} text-base`} />
+                  <i class={`${getIconForMode(mode)} w-4 text-center text-base`} />
                   <p class='archivo truncate text-sm font-bold'>{mode}</p>
                 </div>
               )}
@@ -70,20 +70,20 @@ const BrowseModeSelect: Component<BrowseModeSelectProps> = (props) => {
       </div>
 
       <div
-        class={`bg-primary-surface border-secondary-border absolute top-full right-0 left-0 mt-1 flex flex-col overflow-hidden rounded-lg border shadow-lg ${styles.panel}`}
+        class={`bg-primary-surface border-secondary-border absolute top-full right-0 left-0 mt-1 flex flex-col overflow-hidden rounded-lg border shadow-sm ${styles.panel}`}
         classList={{ [styles['is-open']]: open() }}
       >
         <For each={otherModes()}>
           {(mode) => (
             <div
-              class='hover:bg-primary-hover ripple flex w-full cursor-pointer items-center gap-2 px-3 py-2'
+              class='hover:bg-primary-hover ripple flex h-8 w-full cursor-pointer items-center gap-2 px-3'
               onClick={() => {
                 props.onSelect?.(mode);
                 setOpen(false);
               }}
             >
-              <i class={`${getIconForMode(mode)} text-secondary-text text-base`} />
-              <p class='archivo truncate text-sm'>{mode}</p>
+              <i class={`${getIconForMode(mode)} text-secondary-text w-4 text-center text-sm`} />
+              <p class='archivo truncate text-xs'>{mode}</p>
             </div>
           )}
         </For>

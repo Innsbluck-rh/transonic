@@ -34,7 +34,7 @@ const LeftSideBar: Component = () => {
   return (
     <div class='bg-primary-plane browse-sidebar border-primary-border flex w-60 max-w-96 min-w-40 flex-col border-r'>
       <div class='relative flex size-full flex-col overflow-y-auto'>
-        <div class='sticky top-0 z-1 box-border flex px-1 py-1.5'>
+        <div class='from-primary-plane via-primary-plane pointer-events-auto sticky top-0 z-2 box-border flex bg-linear-to-b via-75% to-transparent px-1 pt-1.5'>
           <BrowseModeSelect
             defaultMode={browseMode()}
             onSelect={(mode) => {
@@ -42,7 +42,7 @@ const LeftSideBar: Component = () => {
             }}
           />
         </div>
-        <div class='flex flex-col'>
+        <div class='flex flex-col pt-1.5'>
           <BrowseItemList mode={browseMode()} />
         </div>
       </div>

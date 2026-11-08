@@ -8,7 +8,7 @@ import { loadBootstrapToStore } from '~/features/session/service';
 function BootstrapLoading() {
   return (
     <div class='bg-primary-surface flex h-dvh w-dvw flex-col items-center justify-center gap-12'>
-      <p class='archivo-black origin-centert w-fit scale-x-150 text-2xl font-black tracking-tighter italic'>Transonic</p>
+      <p class='archivo-black w-fit origin-center scale-x-150 text-2xl font-black tracking-tighter italic'>Transonic</p>
       <LoadCircle />
     </div>
   );
