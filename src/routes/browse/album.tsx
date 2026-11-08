@@ -119,7 +119,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
               <Show
                 when={coverArt()}
                 fallback={
-                  <div class='sp:w-52 flex aspect-square w-48 items-center justify-center hover:brightness-75'>
+                  <div class='sp:w-52 flex aspect-square w-48 items-center justify-center bg-black/5 hover:brightness-75'>
                     <p class='text-secondary-text text-base font-bold'>no image</p>
                   </div>
                 }
@@ -138,7 +138,7 @@ function BrowseAlbum(props: Partial<RouteSectionProps<unknown>>) {
           </div>
         </div>
 
-        <div class='sp:mt-6 sp:h-auto sp:min-w-auto sp:flex-initial sp:px-0 flex h-full w-full min-w-0 flex-1 flex-col items-start px-5'>
+        <div class='sp:mt-6 sp:h-auto sp:min-w-auto sp:flex-initial sp:pr-0 sp:pl-0 flex h-full w-full min-w-0 flex-1 flex-col items-start pr-3 pl-5.5'>
           <MarqueeParagraph
             onClick={() => {
               const albumId = album()?.id;

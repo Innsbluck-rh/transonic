@@ -37,7 +37,7 @@ const HorizontalAlbumItem: Component<HorizontalAlbumItemProps> = (props) => {
           <Show
             when={src()}
             fallback={
-              <div class='flex size-full items-center justify-center'>
+              <div class='flex size-full items-center justify-center bg-black/5'>
                 <p class='text-secondary-text text-center text-[10px] font-bold'>no img</p>
               </div>
             }

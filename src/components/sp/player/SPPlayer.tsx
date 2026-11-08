@@ -91,7 +91,7 @@ const SPPlayer: Component<SPPlayerProps> = (props) => {
                 <Show
                   when={coverArt()}
                   fallback={
-                    <div class='border-secondary-border bg-primary-surface flex aspect-square h-full items-center justify-center border'>
+                    <div class='border-secondary-border flex aspect-square h-full items-center justify-center border bg-black/5'>
                       <p class='text-secondary-text text-base font-bold'>no image</p>
                     </div>
                   }
