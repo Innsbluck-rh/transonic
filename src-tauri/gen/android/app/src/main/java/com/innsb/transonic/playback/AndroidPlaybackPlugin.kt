@@ -31,6 +31,7 @@ internal const val COMMAND_PREPARE_NEXT_MEDIA = "com.innsb.transonic.playback.PR
 internal const val COMMAND_ACTIVATE_PREPARED_MEDIA = "com.innsb.transonic.playback.ACTIVATE_PREPARED_MEDIA"
 internal const val COMMAND_CLEAR_PREPARED_MEDIA = "com.innsb.transonic.playback.CLEAR_PREPARED_MEDIA"
 internal const val COMMAND_UPDATE_MEDIA_ARTWORK = "com.innsb.transonic.playback.UPDATE_MEDIA_ARTWORK"
+internal const val COMMAND_STOP_MEDIA = "com.innsb.transonic.playback.STOP_MEDIA"
 
 private const val KEY_MEDIA_ID = "mediaId"
 private const val KEY_STREAM_URL = "streamUrl"
@@ -800,11 +801,34 @@ class AndroidPlaybackPlugin(private val activity: Activity) : Plugin(activity) {
   @Command
   @Keep
   fun stop(invoke: Invoke) {
+    val applicationContext = activity.applicationContext
+    // A custom command, not controller.stop(): Player.stop() on the session is
+    // reserved for external controllers and is routed back to Rust.
     if (!PlaybackControllerHost.withExistingController { controller ->
-      controller.stop()
-      controller.clearMediaItems()
-      PlaybackControllerHost.releaseCurrentController()
-      invoke.resolve()
+      val future =
+        controller.sendCustomCommand(
+          SessionCommand(COMMAND_STOP_MEDIA, Bundle.EMPTY),
+          Bundle.EMPTY,
+        )
+      future.addListener(
+        {
+          try {
+            val result = future.get()
+            if (result.resultCode == SessionResult.RESULT_SUCCESS) {
+              PlaybackControllerHost.releaseCurrentController()
+              invoke.resolve()
+            } else {
+              invoke.reject("Failed to stop Android playback media. resultCode=${result.resultCode}")
+            }
+          } catch (error: Throwable) {
+            if (error is InterruptedException) {
+              Thread.currentThread().interrupt()
+            }
+            invoke.reject(error.userMessage("Failed to stop Android playback media."))
+          }
+        },
+        ContextCompat.getMainExecutor(applicationContext),
+      )
     }) {
       invoke.resolve()
     }

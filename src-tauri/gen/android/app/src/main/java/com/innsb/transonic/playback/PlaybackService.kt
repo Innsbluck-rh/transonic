@@ -124,6 +124,22 @@ private class QueueCommandForwardingPlayer(
   override fun seekToPreviousMediaItem() {
     rustBridge.dispatchControllerAction("prev")
   }
+
+  // Only external controllers reach this: Rust stops the inner player through
+  // COMMAND_STOP_MEDIA, so routing it back to Rust cannot loop.
+  override fun stop() {
+    rustBridge.dispatchControllerAction("stop")
+  }
+
+  // External commands that external devices can send but that still go straight
+  // to ExoPlayer without reaching Rust:
+  // TODO: seekTo(positionMs) (COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM) - sent by the
+  //   system notification / lock screen seek bar.
+  // TODO: seekForward() / seekBack() (COMMAND_SEEK_FORWARD / COMMAND_SEEK_BACK) -
+  //   AVRCP fast forward / rewind pass-through.
+  // TODO: setRepeatMode() / setShuffleModeEnabled() (COMMAND_SET_REPEAT_MODE /
+  //   COMMAND_SET_SHUFFLE_MODE) - AVRCP Player Application Settings; Rust has no
+  //   repeat/shuffle state yet.
 }
 
 @UnstableApi
@@ -262,6 +278,12 @@ class PlaybackService : MediaSessionService(), Player.Listener {
     manualTransitionPendingMediaId = prepared.mediaId
     player.playWhenReady = request.autoplay
     player.seekToNextMediaItem()
+    return Result.success(Unit)
+  }
+
+  fun stopMedia(): Result<Unit> {
+    player.stop()
+    player.clearMediaItems()
     return Result.success(Unit)
   }
 
@@ -583,6 +605,7 @@ private class PlaybackSessionCallback(
       sessionCommands.add(SessionCommand(COMMAND_ACTIVATE_PREPARED_MEDIA, Bundle.EMPTY))
       sessionCommands.add(SessionCommand(COMMAND_CLEAR_PREPARED_MEDIA, Bundle.EMPTY))
       sessionCommands.add(SessionCommand(COMMAND_UPDATE_MEDIA_ARTWORK, Bundle.EMPTY))
+      sessionCommands.add(SessionCommand(COMMAND_STOP_MEDIA, Bundle.EMPTY))
     }
 
     return ConnectionResult.AcceptedResultBuilder(session)
@@ -609,6 +632,7 @@ private class PlaybackSessionCallback(
 
       COMMAND_ACTIVATE_PREPARED_MEDIA -> handleImmediateResult(service.activatePreparedMedia(args.toActivatePreparedMediaArgs()))
       COMMAND_CLEAR_PREPARED_MEDIA -> handleImmediateResult(service.clearPreparedMedia())
+      COMMAND_STOP_MEDIA -> handleImmediateResult(service.stopMedia())
       COMMAND_UPDATE_MEDIA_ARTWORK -> {
         val request =
           args.toUpdateMediaArtworkArgs()

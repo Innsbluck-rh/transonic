@@ -41,6 +41,7 @@ pub fn install_android_app_handle(app: AppHandle<Wry>) {
 enum AndroidControllerAction {
     Next,
     Prev,
+    Stop,
     ProcessNativeEvents,
 }
 
@@ -182,6 +183,9 @@ fn execute_controller_action(
                     return Err("No active playback session is available.".to_string());
                 };
                 controller.prev(runtime_context)?;
+            }
+            AndroidControllerAction::Stop => {
+                controller.stop_with_context(runtime_context_ref.as_ref())?;
             }
             AndroidControllerAction::ProcessNativeEvents => {}
         }
@@ -391,6 +395,7 @@ pub extern "system" fn Java_com_innsb_transonic_playback_RustPlaybackBridge_disp
     let action = match action.as_str() {
         "next" => AndroidControllerAction::Next,
         "prev" => AndroidControllerAction::Prev,
+        "stop" => AndroidControllerAction::Stop,
         _ => return,
     };
 
