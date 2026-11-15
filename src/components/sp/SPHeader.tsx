@@ -10,9 +10,12 @@ const SPHeader: Component = () => {
 
   return (
     <div class='bg-primary-plane z-50 flex h-12 flex-row items-center pr-2.5 pl-1.5 shadow-md' style={{ 'view-transition-name': 'sp-header' }}>
-      <Title class='cursor-pointer' onClick={() => navigate(resolveSPBrowseRoute())}>
+      <Title class='mr-14 cursor-pointer' onClick={() => navigate(resolveSPBrowseRoute())}>
         Transonic
       </Title>
+      <Show when={import.meta.env.DEV}>
+        <p class='archivo-black -mt-1.5 text-[7px] italic'>[dev]</p>
+      </Show>
 
       <div class='flex-1' />
 
