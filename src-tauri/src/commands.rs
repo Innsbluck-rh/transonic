@@ -41,42 +41,56 @@ pub use session::{bootstrap_app_state, connect_server_profile, delete_server_pro
 pub use settings::{get_default_device_name, settings_update};
 
 #[doc(hidden)]
-pub use albums::{__cmd__get_album_list, __specta__fn__get_album_list};
+pub use albums::{
+    __cmd__get_album_list, __specta__fn__get_album_list, __tauri_command_name_get_album_list,
+};
 #[doc(hidden)]
-pub use artist_image::{__cmd__get_artist_image, __specta__fn__get_artist_image};
+pub use artist_image::{
+    __cmd__get_artist_image, __specta__fn__get_artist_image, __tauri_command_name_get_artist_image,
+};
 #[doc(hidden)]
 pub use backup::{
     __cmd__export_server_backup, __cmd__import_server_backup, __specta__fn__export_server_backup,
-    __specta__fn__import_server_backup,
+    __specta__fn__import_server_backup, __tauri_command_name_export_server_backup,
+    __tauri_command_name_import_server_backup,
 };
 #[doc(hidden)]
 pub use browse::album::{
     __cmd__get_album_info, __cmd__get_album_songs, __specta__fn__get_album_info,
-    __specta__fn__get_album_songs,
+    __specta__fn__get_album_songs, __tauri_command_name_get_album_info,
+    __tauri_command_name_get_album_songs,
 };
 #[doc(hidden)]
 pub use browse::artist::{
     __cmd__get_artist, __cmd__get_artist_info2, __cmd__get_artists, __cmd__get_music_directory,
     __specta__fn__get_artist, __specta__fn__get_artist_info2, __specta__fn__get_artists,
-    __specta__fn__get_music_directory,
+    __specta__fn__get_music_directory, __tauri_command_name_get_artist,
+    __tauri_command_name_get_artist_info2, __tauri_command_name_get_artists,
+    __tauri_command_name_get_music_directory,
 };
 #[doc(hidden)]
-pub use browse::artist_indexes::{__cmd__get_artist_indexes, __specta__fn__get_artist_indexes};
+pub use browse::artist_indexes::{
+    __cmd__get_artist_indexes, __specta__fn__get_artist_indexes,
+    __tauri_command_name_get_artist_indexes,
+};
 #[doc(hidden)]
 pub use browse::folder_structure::{
     __cmd__get_folder_structure_albums, __specta__fn__get_folder_structure_albums,
+    __tauri_command_name_get_folder_structure_albums,
 };
 #[doc(hidden)]
 pub use browse::folder_structure_album_songs::{
     __cmd__get_folder_structure_album_songs, __specta__fn__get_folder_structure_album_songs,
+    __tauri_command_name_get_folder_structure_album_songs,
 };
 #[doc(hidden)]
 pub use browse::folder_structure_roots::{
     __cmd__get_folder_structure_roots, __cmd__get_music_folders,
     __specta__fn__get_folder_structure_roots, __specta__fn__get_music_folders,
+    __tauri_command_name_get_folder_structure_roots, __tauri_command_name_get_music_folders,
 };
 #[doc(hidden)]
-pub use browse::song::{__cmd__get_song, __specta__fn__get_song};
+pub use browse::song::{__cmd__get_song, __specta__fn__get_song, __tauri_command_name_get_song};
 #[doc(hidden)]
 pub use connect::{
     __cmd__connect_get_devices, __cmd__connect_get_runtime_status,
@@ -85,12 +99,18 @@ pub use connect::{
     __specta__fn__connect_get_devices, __specta__fn__connect_get_runtime_status,
     __specta__fn__connect_get_shared_playback, __specta__fn__connect_get_state_snapshot,
     __specta__fn__connect_resolve_queue, __specta__fn__connect_transfer_playback,
+    __tauri_command_name_connect_get_devices, __tauri_command_name_connect_get_runtime_status,
+    __tauri_command_name_connect_get_shared_playback,
+    __tauri_command_name_connect_get_state_snapshot, __tauri_command_name_connect_resolve_queue,
+    __tauri_command_name_connect_transfer_playback,
 };
 #[doc(hidden)]
 pub use cover_art::{
     __cmd__clear_cover_art_cache, __cmd__get_cover_art, __cmd__get_cover_art_cache_status,
     __cmd__get_cover_art_cached, __specta__fn__clear_cover_art_cache, __specta__fn__get_cover_art,
     __specta__fn__get_cover_art_cache_status, __specta__fn__get_cover_art_cached,
+    __tauri_command_name_clear_cover_art_cache, __tauri_command_name_get_cover_art,
+    __tauri_command_name_get_cover_art_cache_status, __tauri_command_name_get_cover_art_cached,
 };
 #[doc(hidden)]
 pub use playback::{
@@ -110,18 +130,30 @@ pub use playback::{
     __specta__fn__playback_remove_queue_index, __specta__fn__playback_remove_queue_indices,
     __specta__fn__playback_seek, __specta__fn__playback_set_position,
     __specta__fn__playback_set_queue, __specta__fn__playback_set_volume,
-    __specta__fn__playback_stop,
+    __specta__fn__playback_stop, __tauri_command_name_consume_pending_notification_tap,
+    __tauri_command_name_playback_append_to_queue, __tauri_command_name_playback_clear_queue,
+    __tauri_command_name_playback_get_output_devices, __tauri_command_name_playback_get_state,
+    __tauri_command_name_playback_insert_after_current,
+    __tauri_command_name_playback_move_queue_indices, __tauri_command_name_playback_next,
+    __tauri_command_name_playback_pause, __tauri_command_name_playback_play,
+    __tauri_command_name_playback_play_queue_index, __tauri_command_name_playback_prev,
+    __tauri_command_name_playback_remove_queue_index,
+    __tauri_command_name_playback_remove_queue_indices, __tauri_command_name_playback_seek,
+    __tauri_command_name_playback_set_position, __tauri_command_name_playback_set_queue,
+    __tauri_command_name_playback_set_volume, __tauri_command_name_playback_stop,
 };
 #[doc(hidden)]
-pub use search::{__cmd__search, __specta__fn__search};
+pub use search::{__cmd__search, __specta__fn__search, __tauri_command_name_search};
 #[doc(hidden)]
 pub use session::{
     __cmd__bootstrap_app_state, __cmd__connect_server_profile, __cmd__delete_server_profile,
     __specta__fn__bootstrap_app_state, __specta__fn__connect_server_profile,
-    __specta__fn__delete_server_profile,
+    __specta__fn__delete_server_profile, __tauri_command_name_bootstrap_app_state,
+    __tauri_command_name_connect_server_profile, __tauri_command_name_delete_server_profile,
 };
 #[doc(hidden)]
 pub use settings::{
     __cmd__get_default_device_name, __cmd__settings_update, __specta__fn__get_default_device_name,
-    __specta__fn__settings_update,
+    __specta__fn__settings_update, __tauri_command_name_get_default_device_name,
+    __tauri_command_name_settings_update,
 };

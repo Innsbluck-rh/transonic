@@ -30,7 +30,7 @@ Rust backend (prefer these pnpm wrappers over raw `cargo` so paths/manifest reso
 - Do **not** run a full `tauri build`/`tauri android build` unless truly needed — it is slow. `cargo check` + `cargo test` + `tsc` catch most issues.
 
 Platform-gated Rust code (`#[cfg(target_os = "...")]` for `android`/`ios`) is **not** exercised by `pnpm cargo:check` on Windows:
-- For Android Rust changes, verify with `pnpm tauri android android-studio-script --target aarch64` (target names: `aarch64`, `armv7`, `i686`, `x86_64` — not Rust triples). Do not use raw `cargo check --target aarch64-linux-android`; it bypasses Tauri's Android build setup and NDK wiring and can fail for unrelated reasons.
+- For Android Rust changes, verify with `pnpm tauri android build --debug --apk --target aarch64` (target names: `aarch64`, `armv7`, `i686`, `x86_64` — not Rust triples). It builds the debug APK (`com.innsb.transonic.dev`), so it is slower than a check but also covers the Gradle side. `pnpm tauri android android-studio-script` no longer works on its own: since Tauri CLI 2.12 it only runs while `tauri android dev`/`build` is running. Do not use raw `cargo check --target aarch64-linux-android`; it bypasses Tauri's Android build setup and NDK wiring and can fail for unrelated reasons.
 - For other non-Android platform-specific Rust code, try `cargo check --target <triple>` where appropriate.
 - If a platform check can't run (missing toolchain/NDK/target), say so explicitly and state the exact command that should be run instead of silently treating a host-only `cargo check` as full verification.
 
